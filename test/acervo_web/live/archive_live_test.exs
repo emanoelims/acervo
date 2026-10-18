@@ -47,6 +47,28 @@ defmodule AcervoWeb.ArchiveLiveTest do
       assert has_element?(view, "#column-all")
     end
 
+    test "/guide opens the guide next to column 1", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/guide")
+      assert has_element?(view, "#column-root")
+      assert has_element?(view, "#column-guide #guide-shortcuts kbd", "?")
+      assert page_title(view) =~ "Guide"
+    end
+
+    test "the dock settings open the guide", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/inbox")
+      view |> element("#dock-guide") |> render_click()
+      assert_patch(view, ~p"/guide")
+      assert has_element?(view, "#column-guide")
+      refute has_element?(view, "#column-inbox")
+    end
+
+    test "? opens the guide", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/all")
+      view |> element("#columns") |> render_hook("open_guide", %{})
+      assert_patch(view, ~p"/guide")
+      assert has_element?(view, "#column-guide")
+    end
+
     test "settings exposes appearance, language and log out", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/")
       assert has_element?(view, "#appearance-panel #theme-option-studio")

@@ -149,6 +149,9 @@ defmodule AcervoWeb.ArchiveComponents do
         <:trigger><.icon name="lucide-settings-2" class="size-[19px]" /></:trigger>
         <.appearance_panel locale={@locale} return_to={@return_to} />
         <div class="dock-panel-divider"></div>
+        <.link id="dock-guide" patch={~p"/guide"} class="dock-panel-row">
+          <.icon name="lucide-keyboard" class="size-4" /><span>{gettext("Shortcuts and features")}</span>
+        </.link>
         <.link id="dock-log-out" href={~p"/users/log-out"} method="delete" class="dock-panel-row">
           <.icon name="lucide-log-out" class="size-4" /><span>{gettext("Log out")}</span>
         </.link>

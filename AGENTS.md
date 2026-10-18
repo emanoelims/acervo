@@ -5,6 +5,7 @@ This is a web application written using the Phoenix web framework.
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
 - Follow `CONTRIBUTING.md`: Conventional Commits for commit subjects and PR titles, user-facing changes recorded under `[Unreleased]` in `CHANGELOG.md`, and new environment variables added to `mise.local.toml.example`. Never commit secrets or `mise.local.toml`
 - Keep workflow Actions pinned to full commit SHAs and use least required permissions. Preserve the required check names `Conventions` and `Elixir checks` unless the repository's branch rules are updated alongside them
+- When adding or changing a user-facing feature or keyboard shortcut, update both the in-app guide (`ArchiveLive` :guide) and `guides/features.md` in the same PR
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
 
 ### Tidewave MCP workflow

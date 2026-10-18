@@ -128,7 +128,7 @@ msgstr ""
 msgid "must contain letters or numbers"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:351
+#: lib/acervo_web/live/archive_live.ex:356
 #, elixir-autogen, elixir-format
 msgid "That doesn't look like a link."
 msgstr ""

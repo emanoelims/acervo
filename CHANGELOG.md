@@ -8,6 +8,7 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Notes save with ⌘/Ctrl+Enter and confirm when saved.
+- A guide to features and shortcuts, opened with ? or from the dock settings.
 
 ## [0.3.0] - 2026-10-18
 
