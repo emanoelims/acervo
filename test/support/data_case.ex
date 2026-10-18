@@ -16,14 +16,16 @@ defmodule Acervo.DataCase do
 
   use ExUnit.CaseTemplate
 
+  alias Ecto.Adapters.SQL.Sandbox
+
   using do
     quote do
-      alias Acervo.Repo
-
+      import Acervo.DataCase
       import Ecto
       import Ecto.Changeset
       import Ecto.Query
-      import Acervo.DataCase
+
+      alias Acervo.Repo
     end
   end
 
@@ -36,8 +38,8 @@ defmodule Acervo.DataCase do
   Sets up the sandbox based on the test tags.
   """
   def setup_sandbox(tags) do
-    pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Acervo.Repo, shared: not tags[:async])
-    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+    pid = Sandbox.start_owner!(Acervo.Repo, shared: not tags[:async])
+    on_exit(fn -> Sandbox.stop_owner(pid) end)
   end
 
   @doc """

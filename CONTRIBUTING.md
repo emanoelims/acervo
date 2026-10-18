@@ -117,8 +117,9 @@ Follow `AGENTS.md`, the formatter configured in `.formatter.exs`, and official
 conventions: `CamelCase` modules, `snake_case` functions and variables, predicates
 ending in `?`, and functions ending in `!` for raising variants where applicable.
 Use Phoenix contexts for business logic and keep it separate from the web layer.
-CI requires formatting, compilation without warnings, a locked and unused-free
-dependency lockfile, dependency auditing, asset builds, and passing tests.
+CI requires formatting (Styler and the HEEx formatter), compilation without
+warnings, strict Credo analysis, a locked and unused-free dependency lockfile,
+dependency auditing, asset builds, and passing tests.
 
 The CI audit uses `mix hex.audit`, which fails when a locked Hex dependency has
 a security advisory or was retired by its maintainers. Run
