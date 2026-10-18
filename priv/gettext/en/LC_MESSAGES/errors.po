@@ -130,3 +130,8 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "must contain letters or numbers"
 msgstr ""
+
+#: lib/acervo_web/live/archive_live.ex:146
+#, elixir-autogen, elixir-format
+msgid "That doesn't look like a link."
+msgstr ""

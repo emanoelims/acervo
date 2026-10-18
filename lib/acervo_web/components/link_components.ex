@@ -8,6 +8,10 @@ defmodule AcervoWeb.LinkComponents do
 
   import AcervoWeb.CoreComponents
 
+  alias Acervo.Collections
+  alias Phoenix.HTML.Form
+  alias Phoenix.LiveView.JS
+
   @months_en ~w(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec)
   @months_pt ~w(jan fev mar abr mai jun jul ago set out nov dez)
 
@@ -80,7 +84,9 @@ defmodule AcervoWeb.LinkComponents do
   glow treatment), meta line, collections, description, note and actions.
   """
   attr :link, :map, required: true
-  attr :note_form, Phoenix.HTML.Form, required: true
+  attr :note_form, Form, required: true
+  attr :collections, :list, required: true, doc: "every collection of the user, for the picker"
+  attr :collection_filter, Form, required: true
 
   def link_detail(assigns) do
     images = assigns.link.images
@@ -137,14 +143,22 @@ defmodule AcervoWeb.LinkComponents do
       <p class="meta">{@meta}</p>
 
       <div :if={@link.collections != []} class="chips">
-        <.link
-          :for={collection <- @link.collections}
-          id={"link-chip-#{collection.id}"}
-          patch={~p"/c/#{collection.slug}"}
-          class="chip"
-        >
-          <.icon name="lucide-folder" class="size-[13px]" />{collection.name}
-        </.link>
+        <span :for={collection <- @link.collections} id={"link-chip-#{collection.id}"} class="chip">
+          <.link patch={~p"/c/#{collection.slug}"} class="chip-link">
+            <.icon name="lucide-folder" class="size-[13px]" />{collection.name}
+          </.link>
+          <button
+            id={"chip-remove-#{collection.id}"}
+            type="button"
+            class="chip-x"
+            phx-click="remove_from_collection"
+            phx-value-id={collection.id}
+            title={gettext("Remove from collection")}
+            aria-label={gettext("Remove from collection")}
+          >
+            <.icon name="lucide-x" class="size-3" />
+          </button>
+        </span>
       </div>
 
       <div class="link-notes">
@@ -176,6 +190,11 @@ defmodule AcervoWeb.LinkComponents do
         >
           <.icon name="lucide-external-link" class="size-4" />
         </a>
+        <.collection_picker
+          link={@link}
+          collections={@collections}
+          filter={@collection_filter}
+        />
         <button
           :if={is_nil(@link.triaged_at)}
           id="link-done"
@@ -201,6 +220,113 @@ defmodule AcervoWeb.LinkComponents do
       </div>
     </div>
     """
+  end
+
+  attr :link, :map, required: true
+  attr :collections, :list, required: true
+  attr :filter, Form, required: true
+
+  # The "add to collection" popover: a filter, the matching collections (the
+  # link's own ones checked, a click toggles) and a row creating the query.
+  defp collection_picker(assigns) do
+    query = assigns.filter[:query].value || ""
+    member_ids = MapSet.new(assigns.link.collections, & &1.id)
+
+    existing = Collections.find_by_name_or_slug(assigns.collections, query)
+    matches = Enum.filter(assigns.collections, &matches_query?(&1, query))
+    # "C++" matches nothing by name but would take the slug of "C": offer that one.
+    options = if existing && String.trim(query) != "" && existing not in matches, do: matches ++ [existing], else: matches
+
+    assigns =
+      assign(assigns,
+        query: String.trim(query),
+        options: options,
+        member_ids: member_ids,
+        errors: Enum.map(assigns.filter.errors, fn {_field, {message, _opts}} -> message end),
+        create?: String.trim(query) != "" and is_nil(existing)
+      )
+
+    ~H"""
+    <.popover
+      id="link-collections"
+      trigger_id="link-add-collection"
+      label={gettext("Add to collection")}
+      placement="bottom-start"
+      trigger_class="round"
+      panel_class="pick"
+    >
+      <:trigger><.icon name="lucide-folder-plus" class="size-4" /></:trigger>
+      <.form
+        for={@filter}
+        id="collection-filter-form"
+        phx-change="filter_collections"
+        phx-submit={JS.push("pick_collection") |> close_picker()}
+      >
+        <.input
+          field={@filter[:query]}
+          id="collection-filter"
+          class="pick-filter"
+          placeholder={gettext("Find or create")}
+          aria-label={gettext("Find or create")}
+          autocomplete="off"
+          maxlength="80"
+          phx-debounce="150"
+          data-autofocus
+        />
+      </.form>
+      <div id="collection-options" class="pick-list">
+        <button
+          :for={collection <- @options}
+          id={"collection-option-#{collection.id}"}
+          type="button"
+          class="pick-row"
+          aria-pressed={to_string(MapSet.member?(@member_ids, collection.id))}
+          phx-click={
+            if MapSet.member?(@member_ids, collection.id),
+              do: JS.push("remove_from_collection", value: %{id: collection.id}),
+              else: JS.push("add_to_collection", value: %{id: collection.id}) |> close_picker()
+          }
+        >
+          <.icon name="lucide-folder" class="size-[15px]" />
+          <span class="pick-name">{collection.name}</span>
+          <.icon
+            :if={MapSet.member?(@member_ids, collection.id)}
+            name="lucide-check"
+            class="size-[15px]"
+          />
+        </button>
+        <button
+          :if={@create?}
+          id="collection-create"
+          type="button"
+          class="pick-row pick-create"
+          title={gettext("New collection")}
+          phx-click={JS.push("create_collection_for_link", value: %{name: @query}) |> close_picker()}
+        >
+          <.icon name="lucide-plus" class="size-[15px]" />
+          <span class="pick-name">“{@query}”</span>
+        </button>
+        <p :if={@options == [] and not @create?} class="pick-empty">
+          {gettext("No collections yet.")}
+        </p>
+        <p :for={message <- @errors} id="collection-error" class="pick-error" role="alert">
+          {message}
+        </p>
+      </div>
+    </.popover>
+    """
+  end
+
+  defp close_picker(js), do: JS.remove_attribute(js, "open", to: "#link-collections")
+
+  defp matches_query?(collection, query), do: String.contains?(fold(collection.name), fold(query))
+
+  defp fold(text) do
+    text
+    |> String.trim()
+    |> String.downcase()
+    |> :unicode.characters_to_nfd_binary()
+    |> String.replace(~r/\p{Mn}/u, "")
   end
 
   attr :image, :map, required: true

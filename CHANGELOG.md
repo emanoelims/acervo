@@ -9,6 +9,8 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Links appear as cards and open in their own column with note, done and
   delete, updating live while previews are captured.
+- Save links by pasting them anywhere or with the + in the dock, and organize
+  them into collections you create, rename and describe.
 
 ### Changed
 

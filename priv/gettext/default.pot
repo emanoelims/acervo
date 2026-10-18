@@ -73,7 +73,7 @@ msgstr ""
 msgid "Log in"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:150
+#: lib/acervo_web/components/archive_components.ex:153
 #: lib/acervo_web/live/user_live/settings.ex:30
 #, elixir-autogen, elixir-format
 msgid "Log out"
@@ -137,138 +137,138 @@ msgstr ""
 msgid "You must re-authenticate to access this page."
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:203
+#: lib/acervo_web/components/archive_components.ex:306
 #, elixir-autogen, elixir-format
 msgid "Accent"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:250
-#: lib/acervo_web/live/archive_live.ex:317
+#: lib/acervo_web/live/archive_live.ex:431
+#: lib/acervo_web/live/archive_live.ex:613
 #, elixir-autogen, elixir-format
 msgid "All"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:165
+#: lib/acervo_web/components/archive_components.ex:268
 #, elixir-autogen, elixir-format
 msgid "Auto"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:175
+#: lib/acervo_web/components/archive_components.ex:278
 #, elixir-autogen, elixir-format
 msgid "Cobalt"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:217
+#: lib/acervo_web/components/archive_components.ex:320
 #, elixir-autogen, elixir-format
 msgid "Font"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:236
+#: lib/acervo_web/live/archive_live.ex:417
 #, elixir-autogen, elixir-format
 msgid "Good things I find on the internet."
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:177
+#: lib/acervo_web/components/archive_components.ex:280
 #, elixir-autogen, elixir-format
 msgid "Graphite"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:132
-#: lib/acervo_web/components/archive_components.ex:134
-#: lib/acervo_web/live/archive_live.ex:247
-#: lib/acervo_web/live/archive_live.ex:318
+#: lib/acervo_web/components/archive_components.ex:135
+#: lib/acervo_web/components/archive_components.ex:137
+#: lib/acervo_web/live/archive_live.ex:428
+#: lib/acervo_web/live/archive_live.ex:614
 #, elixir-autogen, elixir-format
 msgid "Inbox"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:171
+#: lib/acervo_web/components/archive_components.ex:274
 #, elixir-autogen, elixir-format
 msgid "Ink"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:233
+#: lib/acervo_web/components/archive_components.ex:336
 #, elixir-autogen, elixir-format
 msgid "Language"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:176
+#: lib/acervo_web/components/archive_components.ex:279
 #, elixir-autogen, elixir-format
 msgid "Moss"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:117
+#: lib/acervo_web/components/archive_components.ex:120
 #, elixir-autogen, elixir-format
 msgid "Navigation"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:170
+#: lib/acervo_web/components/archive_components.ex:273
 #, elixir-autogen, elixir-format
 msgid "Night"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:347
+#: lib/acervo_web/live/archive_live.ex:643
 #, elixir-autogen, elixir-format
 msgid "No links"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:327
+#: lib/acervo_web/live/archive_live.ex:623
 #, elixir-autogen, elixir-format
 msgid "Nothing saved yet."
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:326
+#: lib/acervo_web/live/archive_live.ex:622
 #, elixir-autogen, elixir-format
 msgid "Nothing waiting."
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:348
+#: lib/acervo_web/live/archive_live.ex:644
 #, elixir-autogen, elixir-format
 msgid "One link"
 msgid_plural "%{count} links"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/acervo_web/components/archive_components.ex:167
+#: lib/acervo_web/components/archive_components.ex:270
 #, elixir-autogen, elixir-format
 msgid "Paper"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:168
+#: lib/acervo_web/components/archive_components.ex:271
 #, elixir-autogen, elixir-format
 msgid "Sepia"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:139
+#: lib/acervo_web/components/archive_components.ex:142
 #, elixir-autogen, elixir-format
 msgid "Settings"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:169
+#: lib/acervo_web/components/archive_components.ex:272
 #, elixir-autogen, elixir-format
 msgid "Snow"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:166
+#: lib/acervo_web/components/archive_components.ex:269
 #, elixir-autogen, elixir-format
 msgid "Studio"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:189
+#: lib/acervo_web/components/archive_components.ex:292
 #, elixir-autogen, elixir-format
 msgid "Theme"
 msgstr ""
 
-#: lib/acervo_web/components/archive_components.ex:174
+#: lib/acervo_web/components/archive_components.ex:277
 #, elixir-autogen, elixir-format
 msgid "Vermilion"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:350
+#: lib/acervo_web/live/archive_live.ex:646
 #, elixir-autogen, elixir-format
 msgid "no collections"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:351
+#: lib/acervo_web/live/archive_live.ex:647
 #, elixir-autogen, elixir-format
 msgid "one collection"
 msgid_plural "%{count} collections"
@@ -305,69 +305,161 @@ msgstr ""
 msgid "Your sign-in link"
 msgstr ""
 
-#: lib/acervo_web/components/link_components.ex:160
+#: lib/acervo_web/components/link_components.ex:174
 #, elixir-autogen, elixir-format
 msgid "Add a note"
 msgstr ""
 
-#: lib/acervo_web/components/link_components.ex:67
-#: lib/acervo_web/components/link_components.ex:68
+#: lib/acervo_web/components/link_components.ex:71
+#: lib/acervo_web/components/link_components.ex:72
 #, elixir-autogen, elixir-format
 msgid "Add a screenshot"
 msgstr ""
 
-#: lib/acervo_web/components/link_components.ex:196
-#: lib/acervo_web/components/link_components.ex:197
+#: lib/acervo_web/components/archive_components.ex:252
+#: lib/acervo_web/components/link_components.ex:215
+#: lib/acervo_web/components/link_components.ex:216
 #, elixir-autogen, elixir-format
 msgid "Delete"
 msgstr ""
 
-#: lib/acervo_web/components/link_components.ex:195
+#: lib/acervo_web/components/link_components.ex:214
 #, elixir-autogen, elixir-format
 msgid "Delete this link?"
 msgstr ""
 
-#: lib/acervo_web/components/link_components.ex:185
-#: lib/acervo_web/components/link_components.ex:186
+#: lib/acervo_web/components/link_components.ex:204
+#: lib/acervo_web/components/link_components.ex:205
 #, elixir-autogen, elixir-format
 msgid "Done"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:322
+#: lib/acervo_web/live/archive_live.ex:618
 #, elixir-autogen, elixir-format
 msgid "Everything you saved, newest first."
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:323
+#: lib/acervo_web/live/archive_live.ex:619
 #, elixir-autogen, elixir-format
 msgid "Links waiting for a place."
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:38
-#: lib/acervo_web/live/archive_live.ex:142
+#: lib/acervo_web/live/archive_live.ex:45
+#: lib/acervo_web/live/archive_live.ex:223
+#: lib/acervo_web/live/archive_live.ex:305
+#: lib/acervo_web/live/archive_live.ex:323
 #, elixir-autogen, elixir-format
 msgid "Not found."
 msgstr ""
 
-#: lib/acervo_web/components/link_components.ex:161
+#: lib/acervo_web/components/link_components.ex:175
 #, elixir-autogen, elixir-format
 msgid "Note"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:328
+#: lib/acervo_web/live/archive_live.ex:624
 #, elixir-autogen, elixir-format
 msgid "Nothing here yet."
 msgstr ""
 
-#: lib/acervo_web/components/link_components.ex:174
-#: lib/acervo_web/components/link_components.ex:175
+#: lib/acervo_web/components/link_components.ex:188
+#: lib/acervo_web/components/link_components.ex:189
 #, elixir-autogen, elixir-format
 msgid "Open original"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:353
+#: lib/acervo_web/live/archive_live.ex:649
 #, elixir-autogen, elixir-format
 msgid "one in the inbox"
 msgid_plural "%{count} in the inbox"
 msgstr[0] ""
 msgstr[1] ""
+
+#: lib/acervo_web/components/archive_components.ex:161
+#: lib/acervo_web/components/archive_components.ex:162
+#, elixir-autogen, elixir-format
+msgid "Add"
+msgstr ""
+
+#: lib/acervo_web/live/archive_live.ex:520
+#, elixir-autogen, elixir-format
+msgid "Add a description"
+msgstr ""
+
+#: lib/acervo_web/components/link_components.ex:247
+#, elixir-autogen, elixir-format
+msgid "Add to collection"
+msgstr ""
+
+#: lib/acervo_web/live/archive_live.ex:142
+#, elixir-autogen, elixir-format
+msgid "Already in your archive."
+msgstr ""
+
+#: lib/acervo_web/live/archive_live.ex:286
+#, elixir-autogen, elixir-format
+msgid "Couldn't create that collection."
+msgstr ""
+
+#: lib/acervo_web/components/archive_components.ex:249
+#, elixir-autogen, elixir-format
+msgid "Delete this collection? Its links stay in your archive."
+msgstr ""
+
+#: lib/acervo_web/components/archive_components.ex:239
+#: lib/acervo_web/live/archive_live.ex:521
+#, elixir-autogen, elixir-format
+msgid "Description"
+msgstr ""
+
+#: lib/acervo_web/components/link_components.ex:263
+#: lib/acervo_web/components/link_components.ex:264
+#, elixir-autogen, elixir-format
+msgid "Find or create"
+msgstr ""
+
+#: lib/acervo_web/components/archive_components.ex:212
+#, elixir-autogen, elixir-format
+msgid "More"
+msgstr ""
+
+#: lib/acervo_web/live/archive_live.ex:494
+#, elixir-autogen, elixir-format
+msgid "Name"
+msgstr ""
+
+#: lib/acervo_web/components/link_components.ex:297
+#: lib/acervo_web/live/archive_live.ex:449
+#: lib/acervo_web/live/archive_live.ex:450
+#: lib/acervo_web/live/archive_live.ex:467
+#: lib/acervo_web/live/archive_live.ex:468
+#, elixir-autogen, elixir-format
+msgid "New collection"
+msgstr ""
+
+#: lib/acervo_web/components/link_components.ex:304
+#, elixir-autogen, elixir-format
+msgid "No collections yet."
+msgstr ""
+
+#: lib/acervo_web/components/archive_components.ex:193
+#: lib/acervo_web/components/archive_components.ex:194
+#, elixir-autogen, elixir-format
+msgid "Paste a link"
+msgstr ""
+
+#: lib/acervo_web/components/link_components.ex:156
+#: lib/acervo_web/components/link_components.ex:157
+#, elixir-autogen, elixir-format
+msgid "Remove from collection"
+msgstr ""
+
+#: lib/acervo_web/components/archive_components.ex:228
+#, elixir-autogen, elixir-format
+msgid "Rename"
+msgstr ""
+
+#: lib/acervo_web/live/archive_live.ex:135
+#, elixir-autogen, elixir-format
+msgid "Saved."
+msgstr ""
