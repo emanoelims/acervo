@@ -2,28 +2,10 @@ defmodule AcervoWeb.CoreComponents do
   @moduledoc """
   Provides core UI components.
 
-  At first glance, this module may seem daunting, but its goal is to provide
-  core building blocks for your application, such as tables, forms, and
-  inputs. The components consist mostly of markup and are well-documented
-  with doc strings and declarative assigns. You may customize and style
-  them in any way you want, based on your application growth and needs.
-
-  The foundation for styling is Tailwind CSS, a utility-first CSS framework,
-  augmented with daisyUI, a Tailwind CSS plugin that provides UI components
-  and themes. Here are useful references:
-
-    * [daisyUI](https://daisyui.com/docs/intro/) - a good place to get
-      started and see the available components.
-
-    * [Tailwind CSS](https://tailwindcss.com) - the foundational framework
-      we build on. You will use it for layout, sizing, flexbox, grid, and
-      spacing.
-
-    * [Heroicons](https://heroicons.com) - see `icon/1` for usage.
-
-    * [Phoenix.Component](https://phoenix-live-view.hexdocs.pm/Phoenix.Component.html) -
-      the component system used by Phoenix. Some components, such as `<.link>`
-      and `<.form>`, are defined there.
+  Application-owned function components built with Phoenix.Component, Tailwind
+  utilities, and the studio design tokens. Buttons, form controls,
+  validation, notices, and popovers share the same palette and interaction rules.
+  No external component framework is required.
 
   """
   use Phoenix.Component
@@ -32,6 +14,106 @@ defmodule AcervoWeb.CoreComponents do
   alias Phoenix.HTML.Form
   alias Phoenix.HTML.FormField
   alias Phoenix.LiveView.JS
+
+  @doc """
+  Renders a non-modal popover anchored to its trigger with Floating UI.
+
+  The browser owns disclosure state and placement, while LiveView continues
+  updating the panel content. Popovers share entrance motion, outside-click
+  dismissal, Escape dismissal with focus restoration, and exclusive opening.
+  Supply unique IDs and an accessible label; use the trigger slot for its icon.
+  Set `menu` for navigation popups containing `dropdown_item/1` rows; these add
+  arrow-key navigation, Home/End, activation, and focus restoration on Escape.
+  """
+  attr :id, :string, required: true
+  attr :label, :string, required: true
+  attr :title, :string, default: nil
+  attr :trigger_id, :string, default: nil
+  attr :trigger_class, :any, default: "icon-button"
+  attr :class, :any, default: nil
+  attr :panel_class, :any, default: nil
+  attr :placement, :string, default: "bottom-end"
+  attr :offset, :integer, default: 8
+  attr :menu, :boolean, default: false
+  slot :trigger, required: true
+  slot :inner_block, required: true
+
+  def popover(assigns) do
+    assigns =
+      assign(assigns,
+        trigger_id: assigns.trigger_id || "#{assigns.id}-trigger",
+        title: assigns.title || assigns.label
+      )
+
+    ~H"""
+    <details
+      id={@id}
+      class={["popover", @class]}
+      data-popover
+      phx-mounted={JS.ignore_attributes("open")}
+    >
+      <summary
+        id={@trigger_id}
+        class={@trigger_class}
+        aria-label={@label}
+        title={@title}
+        aria-haspopup={if @menu, do: "menu", else: "dialog"}
+        aria-controls={"#{@id}-panel"}
+        aria-expanded="false"
+        phx-mounted={JS.ignore_attributes("aria-expanded")}
+      >
+        {render_slot(@trigger)}
+      </summary>
+      <span
+        id={"#{@id}-positioner"}
+        phx-hook="Floating"
+        phx-update="ignore"
+        data-panel={"#{@id}-panel"}
+        data-placement={@placement}
+        data-offset={@offset}
+        hidden
+      ></span>
+      <div
+        id={"#{@id}-panel"}
+        class={["floating-panel popover-panel", @panel_class]}
+        role={if @menu, do: "menu", else: "dialog"}
+        aria-label={@label}
+        phx-mounted={JS.ignore_attributes(["style", "data-placement", "data-positioned"])}
+      >
+        {render_slot(@inner_block)}
+      </div>
+    </details>
+    """
+  end
+
+  @doc "Renders an icon and label navigation item in a shared dropdown popup."
+  attr :label, :string, required: true
+  attr :icon, :string, required: true
+  attr :navigate, :string, default: nil
+  attr :href, :any, default: nil
+  attr :method, :string, default: "get"
+  attr :current, :boolean, default: false
+  attr :danger, :boolean, default: false
+  attr :rest, :global
+
+  def dropdown_item(assigns) do
+    ~H"""
+    <.link
+      navigate={@navigate}
+      href={@href}
+      method={@method}
+      role="menuitem"
+      tabindex="-1"
+      class={["dropdown-item", @danger && "dropdown-item-danger"]}
+      aria-current={@current && "page"}
+      {@rest}
+    >
+      <.icon name={@icon} class="size-4" />
+      <span class="dropdown-item-label">{@label}</span>
+      <.icon :if={@current} name="lucide-thin-check" class="size-3.5" />
+    </.link>
+    """
+  end
 
   @doc """
   Renders flash notices.
@@ -65,23 +147,23 @@ defmodule AcervoWeb.CoreComponents do
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
       role="alert"
-      class="toast toast-top toast-end z-50"
+      class="flash-stack"
       {@rest}
     >
       <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
+        "flash-message w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
+        @kind == :info && "flash-info",
+        @kind == :error && "flash-error"
       ]}>
-        <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
-        <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
+        <.icon :if={@kind == :info} name="lucide-thin-info" class="size-5 shrink-0" />
+        <.icon :if={@kind == :error} name="lucide-thin-info" class="size-5 shrink-0" />
         <div>
           <p :if={@title} class="font-semibold">{@title}</p>
           <p>{msg}</p>
         </div>
         <div class="flex-1" />
-        <button type="button" class="group self-start cursor-pointer" aria-label={gettext("close")}>
-          <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
+        <button type="button" class="icon-button self-start" aria-label={gettext("Close")}>
+          <.icon name="lucide-thin-x" class="size-4" />
         </button>
       </div>
     </div>
@@ -97,17 +179,17 @@ defmodule AcervoWeb.CoreComponents do
       <.button phx-click="go" variant="primary">Send!</.button>
       <.button navigate={~p"/"}>Home</.button>
   """
-  attr :rest, :global, include: ~w(href navigate patch method download name value disabled)
+  attr :rest, :global, include: ~w(href navigate patch method download name value disabled form type)
   attr :class, :any
   attr :variant, :string, values: ~w(primary)
   slot :inner_block, required: true
 
   def button(%{rest: rest} = assigns) do
-    variants = %{"primary" => "btn-primary", nil => "btn-primary btn-soft"}
+    variants = %{"primary" => "action action-primary", nil => "action"}
 
     assigns =
       assign_new(assigns, :class, fn ->
-        ["btn", Map.fetch!(variants, assigns[:variant])]
+        [Map.fetch!(variants, assigns[:variant])]
       end)
 
     if rest[:href] || rest[:navigate] || rest[:patch] do
@@ -173,7 +255,7 @@ defmodule AcervoWeb.CoreComponents do
   attr :type, :string,
     default: "text",
     values: ~w(checkbox color date datetime-local email file month number password
-               search select tel text textarea time url week hidden)
+               search select tel text textarea time url week hidden range)
 
   attr :field, FormField, doc: "a form field struct retrieved from the form, for example: @form[:email]"
 
@@ -206,13 +288,15 @@ defmodule AcervoWeb.CoreComponents do
   end
 
   def input(%{type: "checkbox"} = assigns) do
+    assigns = field_state(assigns)
+
     assigns =
       assign_new(assigns, :checked, fn ->
         Form.normalize_value("checkbox", assigns[:value])
       end)
 
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="form-field">
       <label for={@id}>
         <input
           type="hidden"
@@ -221,214 +305,150 @@ defmodule AcervoWeb.CoreComponents do
           disabled={@rest[:disabled]}
           form={@rest[:form]}
         />
-        <span class="label">
+        <span class="field-check-label">
           <input
             type="checkbox"
             id={@id}
             name={@name}
             value="true"
             checked={@checked}
-            class={@class || "checkbox checkbox-sm"}
+            aria-invalid={@invalid? && "true"}
+            aria-describedby={@described_by}
+            class={@class || "field-check"}
             {@rest}
           />{@label}
         </span>
       </label>
-      <.error :for={msg <- @errors}>{msg}</.error>
+      <div :if={@errors != []} id={@error_id} class="field-errors">
+        <.error :for={msg <- @errors}>{msg}</.error>
+      </div>
     </div>
     """
   end
 
   def input(%{type: "select"} = assigns) do
+    assigns = field_state(assigns)
+
     ~H"""
-    <div class="fieldset mb-2">
-      <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+    <div class="form-field">
+      <label :if={@label} for={@id} id={@id && "#{@id}-label"} class="field-label">{@label}</label>
+      <div class="field-select-control">
         <select
           id={@id}
           name={@name}
-          class={[@class || "w-full select", @errors != [] && (@error_class || "select-error")]}
+          class={[@class || "field", @errors != [] && (@error_class || "field-invalid")]}
           multiple={@multiple}
+          aria-invalid={@invalid? && "true"}
+          aria-describedby={@described_by}
           {@rest}
         >
           <option :if={@prompt} value="">{@prompt}</option>
           {Phoenix.HTML.Form.options_for_select(@options, @value)}
         </select>
-      </label>
-      <.error :for={msg <- @errors}>{msg}</.error>
+        <div
+          :if={@id && !@multiple}
+          id={"#{@id}-picker"}
+          phx-hook="Select"
+          phx-update="ignore"
+          data-native-select={@id}
+          class="field-select-picker"
+        >
+        </div>
+      </div>
+      <div :if={@errors != []} id={@error_id} class="field-errors">
+        <.error :for={msg <- @errors}>{msg}</.error>
+      </div>
     </div>
     """
   end
 
   def input(%{type: "textarea"} = assigns) do
+    assigns = field_state(assigns)
+
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="form-field">
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class="field-label">{@label}</span>
         <textarea
           id={@id}
           name={@name}
+          aria-invalid={@invalid? && "true"}
+          aria-describedby={@described_by}
           class={[
-            @class || "w-full textarea",
-            @errors != [] && (@error_class || "textarea-error")
+            @class || "field textarea",
+            @errors != [] && (@error_class || "field-invalid")
           ]}
           {@rest}
-        >{Form.normalize_value("textarea", @value)}</textarea>
+        >{Phoenix.HTML.Form.normalize_value("textarea", @value)}</textarea>
       </label>
-      <.error :for={msg <- @errors}>{msg}</.error>
+      <div :if={@errors != []} id={@error_id} class="field-errors">
+        <.error :for={msg <- @errors}>{msg}</.error>
+      </div>
     </div>
     """
   end
 
   # All other inputs text, datetime-local, url, password, etc. are handled here...
   def input(assigns) do
+    assigns = field_state(assigns)
+
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="form-field">
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class="field-label">{@label}</span>
         <input
           type={@type}
           name={@name}
           id={@id}
-          value={Form.normalize_value(@type, @value)}
+          value={Phoenix.HTML.Form.normalize_value(@type, @value)}
+          aria-invalid={@invalid? && "true"}
+          aria-describedby={@described_by}
           class={[
-            @class || "w-full input",
-            @errors != [] && (@error_class || "input-error")
+            @class || "field",
+            @errors != [] && (@error_class || "field-invalid")
           ]}
           {@rest}
         />
       </label>
-      <.error :for={msg <- @errors}>{msg}</.error>
+      <div :if={@errors != []} id={@error_id} class="field-errors">
+        <.error :for={msg <- @errors}>{msg}</.error>
+      </div>
     </div>
     """
+  end
+
+  defp field_state(assigns) do
+    error_id = if assigns.id && assigns.errors != [], do: "#{assigns.id}-errors"
+
+    described_by =
+      [assigns.rest[:"aria-describedby"], error_id]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.join(" ")
+
+    assign(assigns,
+      invalid?: assigns.errors != [],
+      error_id: error_id,
+      described_by: if(described_by == "", do: nil, else: described_by),
+      rest: Map.delete(assigns.rest, :"aria-describedby")
+    )
   end
 
   # Helper used by inputs to generate form errors
   defp error(assigns) do
     ~H"""
-    <p class="mt-1.5 flex gap-2 items-center text-sm text-error">
-      <.icon name="hero-exclamation-circle" class="size-5" />
+    <p class="field-error">
+      <.icon name="lucide-thin-info" class="size-4 shrink-0" />
       {render_slot(@inner_block)}
     </p>
     """
   end
 
   @doc """
-  Renders a header with title.
-  """
-  slot :inner_block, required: true
-  slot :subtitle
-  slot :actions
+  Renders the Acervo brand mark, a bundled Heroicon, or a Lucide icon.
 
-  def header(assigns) do
-    ~H"""
-    <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4"]}>
-      <div>
-        <h1 class="text-lg font-semibold leading-8">
-          {render_slot(@inner_block)}
-        </h1>
-        <p :if={@subtitle != []} class="text-sm text-base-content/70">
-          {render_slot(@subtitle)}
-        </p>
-      </div>
-      <div class="flex-none">{render_slot(@actions)}</div>
-    </header>
-    """
-  end
-
-  @doc """
-  Renders a table with generic styling.
-
-  ## Examples
-
-      <.table id="users" rows={@users}>
-        <:col :let={user} label="id">{user.id}</:col>
-        <:col :let={user} label="username">{user.username}</:col>
-      </.table>
-  """
-  attr :id, :string, required: true
-  attr :rows, :list, required: true
-  attr :row_id, :any, default: nil, doc: "the function for generating the row id"
-  attr :row_click, :any, default: nil, doc: "the function for handling phx-click on each row"
-
-  attr :row_item, :any,
-    default: &Function.identity/1,
-    doc: "the function for mapping each row before calling the :col and :action slots"
-
-  slot :col, required: true do
-    attr :label, :string
-  end
-
-  slot :action, doc: "the slot for showing user actions in the last table column"
-
-  def table(assigns) do
-    assigns =
-      with %{rows: %Phoenix.LiveView.LiveStream{}} <- assigns do
-        assign(assigns, row_id: assigns.row_id || fn {id, _item} -> id end)
-      end
-
-    ~H"""
-    <table class="table table-zebra">
-      <thead>
-        <tr>
-          <th :for={col <- @col}>{col[:label]}</th>
-          <th :if={@action != []}>
-            <span class="sr-only">{gettext("Actions")}</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
-        <tr :for={row <- @rows} id={@row_id && @row_id.(row)}>
-          <td
-            :for={col <- @col}
-            phx-click={@row_click && @row_click.(row)}
-            class={@row_click && "hover:cursor-pointer"}
-          >
-            {render_slot(col, @row_item.(row))}
-          </td>
-          <td :if={@action != []} class="w-0 font-semibold">
-            <div class="flex gap-4">
-              <%= for action <- @action do %>
-                {render_slot(action, @row_item.(row))}
-              <% end %>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    """
-  end
-
-  ## JS Commands
-
-  @doc """
-  Renders a data list.
-
-  ## Examples
-
-      <.list>
-        <:item title="Title">{@post.title}</:item>
-        <:item title="Views">{@post.views}</:item>
-      </.list>
-  """
-  slot :item, required: true do
-    attr :title, :string, required: true
-  end
-
-  def list(assigns) do
-    ~H"""
-    <ul class="list">
-      <li :for={item <- @item} class="list-row">
-        <div class="list-col-grow">
-          <div class="font-bold">{item.title}</div>
-          <div>{render_slot(item)}</div>
-        </div>
-      </li>
-    </ul>
-    """
-  end
-
-  @doc """
-  Renders a [Heroicon](https://heroicons.com).
+  The `lucide-` prefix selects the vendored Lucide icons.
+  Their SVGs and ISC license are kept in `assets/vendor/lucide` and bundled
+  into app.css, using the same mask approach as Heroicons.
 
   Heroicons come in three styles – outline, solid, and mini.
   By default, the outline style is used, but solid and mini may
@@ -448,9 +468,34 @@ defmodule AcervoWeb.CoreComponents do
   attr :name, :string, required: true
   attr :class, :any, default: "size-4"
 
+  def icon(%{name: "acervo-mark"} = assigns) do
+    ~H"""
+    <svg class={["acervo-mark", @class]} viewBox="0 0 32 32" aria-hidden="true">
+      <rect
+        x="9"
+        y="5"
+        width="18"
+        height="18"
+        rx="5"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.4"
+        opacity=".45"
+      />
+      <rect x="5" y="9" width="18" height="18" rx="5" fill="currentColor" />
+    </svg>
+    """
+  end
+
   def icon(%{name: "hero-" <> _} = assigns) do
     ~H"""
     <span class={[@name, @class]} />
+    """
+  end
+
+  def icon(%{name: "lucide-" <> _} = assigns) do
+    ~H"""
+    <span class={[@name, @class]} aria-hidden="true" />
     """
   end
 

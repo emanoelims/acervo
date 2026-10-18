@@ -79,6 +79,7 @@ jobs:
       - run: mix compile --warnings-as-errors
       - run: mix credo --strict
       - run: mix deps.unlock --check-unused
+      - run: npm ci --prefix assets --ignore-scripts
       - run: mix assets.setup
       - run: mix assets.build
       - run: mix test --warnings-as-errors
