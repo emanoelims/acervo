@@ -142,7 +142,8 @@ defmodule AcervoWeb.ArchiveLive do
   # Re-streams only when the list changes, so opening a link keeps the cards.
   defp apply_filter(socket, _filter, false), do: socket
 
-  defp apply_filter(socket, nil, true), do: socket |> assign(:filter, nil) |> stream(:links, [], reset: true)
+  defp apply_filter(socket, nil, true),
+    do: socket |> assign(:filter, nil) |> reset_search() |> stream(:links, [], reset: true)
 
   defp apply_filter(socket, {:search, q, collection_id} = filter, true) do
     scope = socket.assigns.current_scope
@@ -166,8 +167,12 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp apply_filter(socket, filter, true) do
     links = Library.list_links(socket.assigns.current_scope, filter: filter)
-    socket |> assign(:filter, filter) |> stream(:links, links, reset: true)
+    socket |> assign(:filter, filter) |> reset_search() |> stream(:links, links, reset: true)
   end
+
+  # A search still in flight is dropped as stale when it ends, so the state it
+  # would have cleared is cleared here.
+  defp reset_search(socket), do: assign(socket, search_loading: false, search_partial: false, search_count: nil)
 
   # A reset stream renders every card with the new selection already; otherwise
   # the previously and newly selected cards are re-rendered in place. (Inserting
@@ -752,7 +757,13 @@ defmodule AcervoWeb.ArchiveLive do
      |> stream(:links, links, reset: true)}
   end
 
-  def handle_async(:search, {:ok, _stale}, socket), do: {:noreply, socket}
+  # The page left the search (or moved to another query) before this result
+  # arrived: it is dropped, and the spinner stops unless a newer search runs.
+  def handle_async(:search, {:ok, _stale}, socket) do
+    if match?({:search, _q, _id}, socket.assigns.filter),
+      do: {:noreply, socket},
+      else: {:noreply, reset_search(socket)}
+  end
 
   # A crash keeps the cards, flagged like a partial result.
   def handle_async(:search, {:exit, _reason}, socket),

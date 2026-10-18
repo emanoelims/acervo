@@ -71,9 +71,9 @@ defmodule Acervo.Library.ExtractContent do
     end
   end
 
-  # A pending enrichment embeds the link when it finishes.
-  defp enrich({:ok, %Link{enrichment_status: :pending}} = result), do: result
-
+  # The `Link` was loaded when the job started, so a pending enrichment may
+  # have finished since: always embed. The job is unique and digest-guarded,
+  # so an unchanged document costs nothing.
   defp enrich({:ok, %Link{} = link}) do
     case EmbedLink.enqueue(link) do
       {:ok, _job} -> {:ok, link}

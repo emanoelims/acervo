@@ -103,6 +103,68 @@ defmodule AcervoWeb.SearchTest do
       refute has_element?(view, "#search-empty")
     end
 
+    # Holds the embedding of each query until the test releases it.
+    defp gate_embeddings do
+      test = self()
+
+      FakeEmbedder.stub(fn _model, text, _opts ->
+        send(test, {:embedding, text, self()})
+
+        receive do
+          {:release, ^text} -> {:ok, FakeEmbedder.axis(1)}
+        after
+          5_000 -> {:error, :gate}
+        end
+      end)
+    end
+
+    test "a result that arrives after the query changed is not shown", %{conn: conn, scope: scope} do
+      gate_embeddings()
+      beach = link(scope, "Praia do Forte")
+      fort = link(scope, "Forte de Copacabana")
+      {:ok, view, _html} = live(conn, ~p"/all")
+
+      view |> element("#dock-search") |> render_click()
+      search(view, "praia")
+      assert_receive {:embedding, "praia", old}
+      search(view, "copacabana")
+      assert_receive {:embedding, "copacabana", new}
+
+      send(new, {:release, "copacabana"})
+      render_async(view)
+      assert has_element?(view, "#links #link-#{fort.id}")
+
+      send(old, {:release, "praia"})
+      render_async(view)
+      assert has_element?(view, "#links #link-#{fort.id}")
+      refute has_element?(view, "#links #link-#{beach.id}")
+    end
+
+    test "leaving a search mid-flight stops the spinner", %{conn: conn, scope: scope} do
+      gate_embeddings()
+      link(scope, "Praia do Forte")
+      {:ok, view, _html} = live(conn, ~p"/all")
+
+      view |> element("#dock-search") |> render_click()
+      search(view, "praia")
+      assert_receive {:embedding, "praia", task}
+      assert has_element?(view, "#search-pill .is-loading")
+
+      view |> element("#dock-home") |> render_click()
+      assert_patch(view, ~p"/")
+      render_patch(view, ~p"/all")
+      view |> element("#dock-search") |> render_click()
+      view |> element("#dock-search") |> render_click()
+      assert has_element?(view, "#search-pill")
+      refute has_element?(view, "#search-pill .is-loading")
+
+      # The old result arrives later and is dropped.
+      send(task, {:release, "praia"})
+      render_async(view)
+      refute has_element?(view, "#search-pill .is-loading")
+      refute has_element?(view, "#search-empty")
+    end
+
     test "refining replaces the URL and the results", %{conn: conn, scope: scope} do
       beach = link(scope, "Praia do Forte")
       fort = link(scope, "Forte de Copacabana")

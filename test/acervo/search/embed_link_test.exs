@@ -349,6 +349,19 @@ defmodule Acervo.Search.EmbedLinkTest do
       end
     end
 
+    test "works through chunks in the order given, so the newest links are scheduled first", %{scope: scope} do
+      links = for _ <- 1..5, do: ready_link(scope)
+      # Newest first, as `Release.stale_embeddings/2` returns them.
+      ids = links |> Enum.map(& &1.id) |> Enum.reverse()
+
+      assert {:ok, 5} = EmbedLink.enqueue_many(ids, chunk_size: 2)
+
+      job_ids = Enum.map(ids, fn id -> hd(all_enqueued(worker: EmbedLink, args: %{"link_id" => id})).id end)
+      assert [first_chunk, second_chunk, last_chunk] = Enum.chunk_every(job_ids, 2)
+      assert Enum.max(first_chunk) < Enum.min(second_chunk)
+      assert Enum.max(second_chunk) < Enum.min(last_chunk)
+    end
+
     test "skips ids of links that are gone", %{scope: scope} do
       link = ready_link(scope)
 

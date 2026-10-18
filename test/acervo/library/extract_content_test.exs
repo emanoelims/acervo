@@ -157,14 +157,14 @@ defmodule Acervo.Library.ExtractContentTest do
       refute_enqueued(worker: EmbedLink)
     end
 
-    test "a pending enrichment embeds it when done", %{scope: scope} do
+    test "embeds it even when the loaded link looks mid-enrichment", %{scope: scope} do
       link = captured_link(scope)
       clear_jobs(link)
       Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [enrichment_status: :pending])
       stub_page("/img/a.png", png(40))
 
       assert :ok = perform_job(ExtractContent, %{"link_id" => link.id})
-      refute_enqueued(worker: EmbedLink)
+      assert_enqueued(worker: EmbedLink, args: %{"link_id" => link.id})
     end
 
     test "a transient failure does not", %{scope: scope} do

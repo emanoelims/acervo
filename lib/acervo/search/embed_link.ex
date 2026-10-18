@@ -57,6 +57,7 @@ defmodule Acervo.Search.EmbedLink do
   require Logger
 
   @max_snoozes 5
+  @chunk_size 200
   @min_snooze 15
   @max_snooze 600
   @default_snooze 60
@@ -86,17 +87,36 @@ defmodule Acervo.Search.EmbedLink do
   end
 
   @doc """
-  `enqueue/2` for many links in one transaction: their rows are locked in id
-  order (so concurrent bulk enqueues cannot deadlock), marked `:pending`, and
-  one job is inserted per link. Returns how many links were enqueued.
+  `enqueue/2` for many links, in transactions of 200 ids walked in
+  the order given (callers pass newest first, so the newest links are marked
+  and scheduled first). Inside a chunk the rows are locked in id order, so
+  concurrent bulk enqueues cannot deadlock; each is marked `:pending` and gets
+  one job. A failure rolls back its own chunk only, earlier chunks stay
+  enqueued. Returns how many links were enqueued.
+
+  ## Options
+
+  Those of `enqueue/2`, and `:chunk_size` (200 by default).
   """
   @spec enqueue_many([Ecto.UUID.t()], keyword()) :: {:ok, non_neg_integer()} | {:error, term()}
   def enqueue_many(link_ids, opts \\ []) when is_list(link_ids) do
+    link_ids
+    |> Enum.uniq()
+    |> Enum.chunk_every(Keyword.get(opts, :chunk_size, @chunk_size))
+    |> Enum.reduce_while({:ok, 0}, fn chunk, {:ok, total} ->
+      case enqueue_chunk(chunk, opts) do
+        {:ok, count} -> {:cont, {:ok, total + count}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp enqueue_chunk(chunk, opts) do
     Repo.transact(fn ->
       ids =
         Repo.all(
           from l in Link,
-            where: l.id in ^Enum.uniq(link_ids),
+            where: l.id in ^chunk,
             order_by: l.id,
             lock: "FOR NO KEY UPDATE",
             select: l.id

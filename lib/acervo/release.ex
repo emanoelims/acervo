@@ -139,7 +139,8 @@ defmodule Acervo.Release do
   @doc """
   Enqueues `Acervo.Search.EmbedLink` for every ready link whose embedding
   was never made or was made with another model than the configured one,
-  newest first, marks them `:pending` and returns how many were enqueued.
+  newest first (in transactions of 200 links, so the newest are scheduled
+  first), marks them `:pending` and returns how many were enqueued.
   The running app's `embed` queue works through them. Run it after deploying
   search and after changing `ACERVO_EMBEDDING_MODEL`; meanwhile text search
   keeps working and the vector side sees only links already on the new model.
