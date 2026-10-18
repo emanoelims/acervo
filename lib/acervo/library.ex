@@ -5,8 +5,8 @@ defmodule Acervo.Library do
   Saving a link enqueues `Acervo.Library.CaptureLink`, which fetches its
   preview in the background. Mutations broadcast on the `"links:<user_id>"`
   topic of `Acervo.PubSub`: `{:link_created, link}`, `{:link_updated, link}`
-  and `{:link_deleted, link}`. Broadcast links carry their images and
-  collections preloaded.
+  and `{:link_deleted, link}`. Broadcast links carry their images,
+  collections and pending collection suggestions preloaded.
 
   Preloaded images never carry their bytes, which are served separately
   through `Acervo.Storage.fetch/2`, and are only the card's: previews and
@@ -18,6 +18,7 @@ defmodule Acervo.Library do
 
   alias Acervo.Accounts.Scope
   alias Acervo.Collections.CollectionLink
+  alias Acervo.Collections.Suggestion
   alias Acervo.Library.CaptureLink
   alias Acervo.Library.Embed
   alias Acervo.Library.FramePolicy
@@ -108,7 +109,8 @@ defmodule Acervo.Library do
       `{:collection, collection_id}`
     * `:limit` - defaults to #{@default_limit}
 
-  Each link carries its collections and only its first image (position 0).
+  Each link carries its collections, its pending collection suggestions and
+  only its first image (position 0).
   """
   @spec list_links(Scope.t(), keyword()) :: [Link.t()]
   def list_links(%Scope{user: user}, opts \\ []) do
@@ -119,7 +121,7 @@ defmodule Acervo.Library do
       where: l.user_id == ^user.id,
       order_by: [desc: l.inserted_at, desc: l.id],
       limit: ^opts[:limit],
-      preload: [:collections, images: ^first_image]
+      preload: [:collections, images: ^first_image, suggestions: ^pending_suggestions_query()]
     )
     |> filter(opts[:filter])
     |> Repo.all()
@@ -136,7 +138,7 @@ defmodule Acervo.Library do
     )
   end
 
-  @doc "Gets one of the scope's links with its images and collections. Raises if not found."
+  @doc "Gets one of the scope's links with its images, collections and pending suggestions. Raises if not found."
   @spec get_link!(Scope.t(), Ecto.UUID.t()) :: Link.t()
   def get_link!(%Scope{user: user}, id) do
     Link |> Repo.get_by!(id: id, user_id: user.id) |> preload_link()
@@ -277,7 +279,13 @@ defmodule Acervo.Library do
   defp updated({:error, _} = error, _scope), do: error
 
   defp preload_link(%Link{} = link) do
-    Repo.preload(link, [:collections, images: images_query()], force: true)
+    Repo.preload(link, [:collections, images: images_query(), suggestions: pending_suggestions_query()], force: true)
+  end
+
+  # Only pending suggestions reach the interface, oldest first, with their
+  # collection (nil for a new name).
+  defp pending_suggestions_query do
+    from s in Suggestion, where: s.status == :pending, order_by: [asc: s.inserted_at, asc: s.id], preload: :collection
   end
 
   defp images_query, do: from(i in LinkImage, where: i.kind != :content, select: struct(i, ^@image_fields))

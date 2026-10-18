@@ -7,6 +7,8 @@ defmodule Acervo.LibraryTest do
   import Acervo.LibraryFixtures
 
   alias Acervo.Collections
+  alias Acervo.Collections.Collection
+  alias Acervo.Collections.Suggestion
   alias Acervo.Library
   alias Acervo.Library.CaptureLink
   alias Acervo.Library.Link
@@ -145,6 +147,39 @@ defmodule Acervo.LibraryTest do
     end
   end
 
+  describe "pending suggestions" do
+    setup %{scope: scope} do
+      link = link_fixture(scope)
+      collection = collection_fixture(scope)
+
+      pending = insert_suggestion(scope, link, %{collection_id: collection.id}, :pending, ~U[2026-01-02 00:00:00Z])
+      newest = insert_suggestion(scope, link, %{proposed_name: "Receitas"}, :pending, ~U[2026-01-03 00:00:00Z])
+      insert_suggestion(scope, link, %{proposed_name: "Pães"}, :dismissed, ~U[2026-01-01 00:00:00Z])
+      insert_suggestion(scope, link, %{proposed_name: "Bolos"}, :accepted, ~U[2026-01-01 00:00:00Z])
+
+      %{link: link, collection: collection, pending: pending, newest: newest}
+    end
+
+    test "list_links/2 preloads only pending suggestions, oldest first, with their collection",
+         %{scope: scope, collection: collection, pending: pending, newest: newest} do
+      assert [%Link{suggestions: [first, second]}] = Library.list_links(scope)
+
+      assert first.id == pending.id
+      assert first.collection.id == collection.id
+      assert second.id == newest.id
+      assert second.collection == nil
+    end
+
+    test "get_link!/2 and broadcasts carry the same suggestions",
+         %{scope: scope, link: link, pending: pending, newest: newest} do
+      assert [%{id: a, collection: %Collection{}}, %{id: b}] = Library.get_link!(scope, link.id).suggestions
+      assert [a, b] == [pending.id, newest.id]
+
+      Library.broadcast_updated(scope, link.id)
+      assert_receive {:link_updated, %Link{suggestions: [_, _]}}
+    end
+  end
+
   describe "update_note/3 and mark_triaged/2" do
     test "update_note saves the note and broadcasts", %{scope: scope} do
       link = link_fixture(scope)
@@ -244,6 +279,12 @@ defmodule Acervo.LibraryTest do
       height: 1,
       sha256: String.duplicate(char, 64)
     })
+    |> Repo.insert!()
+  end
+
+  defp insert_suggestion(scope, link, attrs, status, inserted_at) do
+    %Suggestion{user_id: scope.user.id, link_id: link.id, status: status, inserted_at: inserted_at}
+    |> Suggestion.changeset(attrs)
     |> Repo.insert!()
   end
 end
