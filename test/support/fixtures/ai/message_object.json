@@ -1,0 +1,18 @@
+{
+  "id": "msg_01TestFixture",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-haiku-5-5",
+  "content": [
+    {"type": "thinking", "thinking": "A red square.", "signature": "sig-fixture"},
+    {"type": "text", "text": "{\"language\":\"pt\",\"image_description\":\"Um quadrado vermelho. Receita secreta de pão\"}"}
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 412,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 57
+  }
+}

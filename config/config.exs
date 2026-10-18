@@ -43,6 +43,9 @@ config :acervo, Oban,
     {Oban.Plugins.Cron, crontab: [{"*/10 * * * *", Acervo.Library.ReapStuckCaptures}]}
   ]
 
+# The model client; tests use `Acervo.FakeAIClient` (see config/test.exs).
+config :acervo, :ai_client, Acervo.AI.Claude
+
 # Registration is open in dev and test; production restricts it to
 # ACERVO_ALLOWED_EMAILS (see config/runtime.exs).
 config :acervo, :allowed_emails, :all
