@@ -8,6 +8,7 @@ defmodule AcervoWeb.ArchiveComponents do
 
   import AcervoWeb.CoreComponents
 
+  alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
 
   @doc """
@@ -109,10 +110,11 @@ defmodule AcervoWeb.ArchiveComponents do
     """
   end
 
-  @doc "Renders the floating glass dock with home, inbox, settings and add."
-  attr :active, :atom, values: [:home, :inbox], required: true
+  @doc "Renders the floating glass dock with home, search, inbox, settings and add."
+  attr :active, :atom, values: [:home, :search, :inbox], required: true
   attr :inbox_count, :integer, default: 0
   attr :adding, :boolean, default: false
+  attr :searching, :boolean, default: false
   attr :locale, :string, required: true
   attr :return_to, :string, required: true
 
@@ -128,6 +130,18 @@ defmodule AcervoWeb.ArchiveComponents do
       >
         <.icon name="lucide-house" class="size-[19px]" /><span class="dock-label">Acervo</span>
       </.link>
+      <button
+        id="dock-search"
+        type="button"
+        class={["dock-item", @active == :search && "is-active", @searching && "is-open"]}
+        phx-click="toggle_search"
+        title={gettext("Search")}
+        aria-label={gettext("Search")}
+        aria-controls="search-pill"
+        aria-expanded={to_string(@searching)}
+      >
+        <.icon name="lucide-search" class="size-[19px]" /><span class="dock-label">{gettext("Search")}</span>
+      </button>
       <.link
         id="dock-inbox"
         patch={~p"/inbox"}
@@ -177,7 +191,7 @@ defmodule AcervoWeb.ArchiveComponents do
   Renders the floating pill above the dock where a link is pasted and saved
   with Enter. Escape closes it.
   """
-  attr :form, Phoenix.HTML.Form, required: true
+  attr :form, Form, required: true
 
   def add_pill(assigns) do
     ~H"""
@@ -204,6 +218,63 @@ defmodule AcervoWeb.ArchiveComponents do
         />
       </.form>
       <kbd class="float-kbd" aria-hidden="true">↵</kbd>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders the floating search pill, in the add pill's place. Typing searches
+  after a short pause and Enter at once; Escape closes it and keeps the
+  results. A search scoped to a collection shows it as a chip whose ✕
+  searches everything.
+  """
+  attr :form, Form, required: true
+  attr :scope, :any, default: nil, doc: "the collection the search is scoped to, if any"
+  attr :loading, :boolean, default: false
+
+  def search_pill(assigns) do
+    ~H"""
+    <div
+      id="search-pill"
+      class="float search-float"
+      role="search"
+      phx-window-keydown="close_search"
+      phx-key="Escape"
+      phx-remove={JS.transition("is-leaving", time: 200)}
+    >
+      <.icon name="lucide-search" class={["float-icon size-[18px]", @loading && "is-loading"]} />
+      <span :if={@scope} id="search-scope" class="chip chip-sm search-scope" title={@scope.name}>
+        <.icon name="lucide-folder" class="size-3.5 flex-none" />
+        <span class="search-scope-name">{@scope.name}</span>
+        <button
+          id="search-scope-clear"
+          type="button"
+          class="chip-x"
+          phx-click="clear_search_scope"
+          title={gettext("Search everything")}
+          aria-label={gettext("Search everything")}
+        >
+          <.icon name="lucide-x" class="size-3" />
+        </button>
+      </span>
+      <.form for={@form} id="search-form" class="float-form" phx-change="search" phx-submit="search">
+        <.input
+          field={@form[:q]}
+          id="search-query"
+          class="float-input"
+          placeholder={gettext("Describe a link")}
+          aria-label={gettext("Search")}
+          maxlength="200"
+          autocomplete="off"
+          inputmode="search"
+          enterkeyhint="search"
+          spellcheck="false"
+          phx-debounce="250"
+          autofocus
+          phx-mounted={JS.focus()}
+        />
+      </.form>
+      <kbd class="float-kbd" aria-hidden="true"><.mod_key />K</kbd>
     </div>
     """
   end

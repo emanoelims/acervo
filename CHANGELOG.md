@@ -7,12 +7,13 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Search everything you saved in your own words: by title, text, notes, collections or what an image shows. Open it with / or ⌘K.
 - Each link's text, image description, note and collections are embedded for search, and embedded again whenever they change.
 
 ### Migration
 
 - Production now requires the `OPENROUTER_API_KEY` secret, used for search embeddings. `ACERVO_EMBEDDING_MODEL` optionally picks another model that returns 1024 dimensions.
-- After deploying, embed the existing links for search (one small embedding call each): `fly ssh console -a acervo-app -C "/app/bin/acervo eval 'Acervo.Release.reindex()'"`. Run it again after changing `ACERVO_EMBEDDING_MODEL`; `mix acervo.reindex` does the same in development.
+- After deploying, embed the existing links for search (one small embedding call each): `fly ssh console -a acervo-app -C "/app/bin/acervo eval 'Acervo.Release.reindex()'"`. Run it again after changing `ACERVO_EMBEDDING_MODEL`; `mix acervo.reindex` does the same in development. See "Search reindex" in `guides/deployment.md`.
 
 ## [0.8.0] - 2026-10-18
 

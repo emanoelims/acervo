@@ -28,6 +28,18 @@ defmodule AcervoWeb.GuideComponents do
         </:row>
       </.guide_section>
 
+      <.guide_section id="guide-search" title={gettext("Search")}>
+        <:row icon="lucide-search">
+          {gettext("Describe what you remember: words, what the image shows, your note.")}
+        </:row>
+        <:row icon="lucide-folder">
+          {gettext("Inside a collection, search looks only there. ✕ widens it.")}
+        </:row>
+        <:row icon="lucide-zap-off">
+          {gettext("This icon means only matching words were found this time.")}
+        </:row>
+      </.guide_section>
+
       <.guide_section id="guide-previews" title={gettext("Previews and screenshots")}>
         <:row icon="lucide-layout-grid">
           {gettext("Cards for web pages, YouTube, X and Instagram.")}
@@ -111,13 +123,21 @@ defmodule AcervoWeb.GuideComponents do
               <td><kbd><.mod_key /></kbd><kbd>V</kbd></td>
               <td>{gettext("With a link open: add a copied image")}</td>
             </tr>
+            <tr id="guide-key-search">
+              <td><kbd>/</kbd></td>
+              <td>{gettext("Search")}</td>
+            </tr>
+            <tr id="guide-key-search-anywhere">
+              <td><kbd><.mod_key /></kbd><kbd>K</kbd></td>
+              <td>{gettext("Search, from anywhere")}</td>
+            </tr>
             <tr>
               <td><kbd>↩</kbd></td>
               <td>{gettext("In the add field: save")}</td>
             </tr>
             <tr>
               <td><kbd>Esc</kbd></td>
-              <td>{gettext("Close the add field or a menu")}</td>
+              <td>{gettext("Close the add field, the search field or a menu")}</td>
             </tr>
             <tr>
               <td><kbd>Esc</kbd></td>

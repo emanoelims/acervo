@@ -14,6 +14,11 @@ defmodule AcervoWeb.ArchiveLive do
   otherwise. A framed page with an article toggles to the reader view with
   `?view=reader`. Links captured before capture recorded whether their page
   may be framed are checked once, in the background, when this column opens.
+
+  `/search?q=…` lists the links matching the query (`Acervo.Search`), run
+  with `start_async` so the current cards stay until the results arrive. `in`
+  scopes it to one collection. Results open under `/search/l/:id`, keeping
+  `q` and `in`. The dock's search pill drives it; `/` and ⌘K open the pill.
   """
   use AcervoWeb, :live_view
 
@@ -24,19 +29,26 @@ defmodule AcervoWeb.ArchiveLive do
   alias Acervo.Collections.Collection
   alias Acervo.Library
   alias Acervo.Library.Embed
+  alias Acervo.Search
   alias Ecto.Query.CastError
 
   @max_screenshot_bytes 15_000_000
   @note_saved_ms 1500
-  @web_actions [:all_link_web, :inbox_link_web, :collection_link_web]
+  @web_actions [:all_link_web, :inbox_link_web, :collection_link_web, :search_link_web]
+  @search_actions [:search, :search_link, :search_link_web]
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
     if connected?(socket), do: Library.subscribe(socket.assigns.current_scope)
+
+    # The search list opens with its pill, ready to refine the query.
+    search_form = if socket.assigns.live_action == :search, do: search_form(params["q"])
 
     {:ok,
      socket
      |> assign(filter: nil, collection: nil, link: nil, screenshot_link_id: nil)
+     |> assign(search_form: search_form, search_scope: nil, search_loading: false)
+     |> assign(search_partial: false, search_count: nil)
      |> assign(note_form: nil, note_saved: nil, description_form: nil, description_saved: nil)
      |> assign(add_form: nil, new_collection_form: nil, editing: nil, collection_form: nil)
      |> assign(web?: false, web_check: nil, reader_view?: false, reader: nil)
@@ -57,10 +69,17 @@ defmodule AcervoWeb.ArchiveLive do
   def handle_params(params, uri, socket) do
     socket = assign(socket, :return_to, return_to(uri))
 
-    with {:ok, collection} <- fetch_collection(socket, params),
-         filter = filter(socket.assigns.live_action, collection),
+    action = socket.assigns.live_action
+
+    with {:ok, collection} <- fetch_collection(socket, action, params),
+         filter = filter(action, collection, params),
          reset? = filter != socket.assigns.filter or renamed?(socket.assigns.collection, collection),
-         socket = socket |> stop_editing(collection) |> assign(:collection, collection) |> apply_filter(filter, reset?),
+         socket =
+           socket
+           |> stop_editing(filter, collection)
+           |> assign(:collection, collection)
+           |> apply_filter(filter, reset?)
+           |> sync_search(filter, collection),
          {:ok, link} <- fetch_link(socket, params) do
       {:noreply,
        socket
@@ -74,17 +93,25 @@ defmodule AcervoWeb.ArchiveLive do
     end
   end
 
-  defp fetch_collection(socket, %{"slug" => slug}) do
+  # A search's `in` names the collection it is scoped to; an unknown one
+  # drops the scope.
+  defp fetch_collection(socket, action, %{"in" => slug} = params) when action in @search_actions and is_binary(slug) do
+    {:ok, Collections.get_collection_by_slug!(socket.assigns.current_scope, slug)}
+  rescue
+    Ecto.NoResultsError -> {:error, :not_found, search_path(search_query(params), nil)}
+  end
+
+  defp fetch_collection(socket, action, %{"slug" => slug}) when action not in @search_actions do
     {:ok, Collections.get_collection_by_slug!(socket.assigns.current_scope, slug)}
   rescue
     Ecto.NoResultsError -> {:error, :not_found, ~p"/"}
   end
 
-  defp fetch_collection(_socket, _params), do: {:ok, nil}
+  defp fetch_collection(_socket, _action, _params), do: {:ok, nil}
 
-  # Leaving a collection drops its rename or description form.
-  defp stop_editing(%{assigns: %{collection: %{id: id}}} = socket, %{id: id}), do: socket
-  defp stop_editing(socket, _collection), do: assign(socket, editing: nil, collection_form: nil)
+  # Leaving a collection, or searching, drops its rename or description form.
+  defp stop_editing(socket, {:collection, id}, %{id: id}), do: socket
+  defp stop_editing(socket, _filter, _collection), do: assign(socket, editing: nil, collection_form: nil)
 
   defp fetch_link(socket, %{"id" => id}) do
     {:ok, Library.get_link!(socket.assigns.current_scope, id)}
@@ -94,13 +121,19 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp fetch_link(_socket, _params), do: {:ok, nil}
 
-  defp filter(action, _collection) when action in [:all, :all_link, :all_link_web], do: :all
-  defp filter(action, _collection) when action in [:inbox, :inbox_link, :inbox_link_web], do: :inbox
+  defp filter(action, _collection, _params) when action in [:all, :all_link, :all_link_web], do: :all
+  defp filter(action, _collection, _params) when action in [:inbox, :inbox_link, :inbox_link_web], do: :inbox
 
-  defp filter(action, collection) when action in [:collection, :collection_link, :collection_link_web],
+  defp filter(action, collection, _params) when action in [:collection, :collection_link, :collection_link_web],
     do: {:collection, collection.id}
 
-  defp filter(action, _collection) when action in [:home, :guide], do: nil
+  defp filter(action, collection, params) when action in @search_actions,
+    do: {:search, search_query(params), collection && collection.id}
+
+  defp filter(action, _collection, _params) when action in [:home, :guide], do: nil
+
+  defp search_query(%{"q" => q}) when is_binary(q), do: q |> String.trim() |> String.slice(0, 200)
+  defp search_query(_params), do: ""
 
   # A renamed collection changes the cards' hrefs, so it re-streams too.
   defp renamed?(%{id: id, slug: old}, %{id: id, slug: new}), do: old != new
@@ -110,6 +143,26 @@ defmodule AcervoWeb.ArchiveLive do
   defp apply_filter(socket, _filter, false), do: socket
 
   defp apply_filter(socket, nil, true), do: socket |> assign(:filter, nil) |> stream(:links, [], reset: true)
+
+  defp apply_filter(socket, {:search, q, collection_id} = filter, true) do
+    scope = socket.assigns.current_scope
+    searching? = match?({:search, _q, _id}, socket.assigns.filter)
+    socket = assign(socket, filter: filter, search_partial: false)
+
+    cond do
+      # Too short to search: the recent links, newest first.
+      short_query?(q) ->
+        links = Library.list_links(scope, filter: if(collection_id, do: {:collection, collection_id}, else: :all))
+        socket |> assign(search_loading: false, search_count: nil) |> stream(:links, links, reset: true)
+
+      # Refining a search keeps its cards until the new results replace them.
+      searching? ->
+        start_search(socket, filter)
+
+      true ->
+        socket |> assign(:search_count, nil) |> stream(:links, [], reset: true) |> start_search(filter)
+    end
+  end
 
   defp apply_filter(socket, filter, true) do
     links = Library.list_links(socket.assigns.current_scope, filter: filter)
@@ -197,6 +250,30 @@ defmodule AcervoWeb.ArchiveLive do
     |> start_async(:embeddable, fn -> Library.check_embeddable(scope, link) end)
   end
 
+  # The result names its filter, so one that arrives after the query or scope
+  # changed is dropped.
+  defp start_search(socket, {:search, q, collection_id} = filter) do
+    scope = socket.assigns.current_scope
+
+    socket
+    |> assign(:search_loading, true)
+    |> start_async(:search, fn -> {filter, Search.search(scope, q, collection_id: collection_id)} end)
+  end
+
+  defp short_query?(q), do: String.length(Search.normalize_query(q)) < 2
+
+  # The pill follows the route: on a search it holds the query and its scope;
+  # in a collection it offers that collection as the scope.
+  defp sync_search(socket, {:search, q, _id}, collection) do
+    form = socket.assigns.search_form && search_form(q)
+    assign(socket, search_form: form, search_scope: collection)
+  end
+
+  defp sync_search(socket, {:collection, _id}, collection), do: assign(socket, :search_scope, collection)
+  defp sync_search(socket, _filter, _collection), do: assign(socket, :search_scope, nil)
+
+  defp search_form(q), do: to_form(%{"q" => q || ""})
+
   defp restream_existing(socket, nil), do: socket
   defp restream_existing(socket, link), do: stream_insert(socket, :links, link, update_only: true)
 
@@ -220,6 +297,10 @@ defmodule AcervoWeb.ArchiveLive do
   def handle_event(event, _params, %{assigns: %{collection: nil}} = socket) when event in @collection_events,
     do: {:noreply, socket}
 
+  # On a search, `collection` is only its scope.
+  def handle_event(event, _params, %{assigns: %{filter: {:search, _q, _id}}} = socket) when event in @collection_events,
+    do: {:noreply, socket}
+
   # The screenshot upload starts on its own; a new pick replaces a failed one.
   def handle_event("validate_screenshot", _params, socket) do
     socket =
@@ -233,7 +314,7 @@ defmodule AcervoWeb.ArchiveLive do
 
   # Adding a link: the dock's pill and pasting anywhere share "add_link".
   def handle_event("toggle_add", _params, %{assigns: %{add_form: nil}} = socket),
-    do: {:noreply, assign(socket, :add_form, to_form(%{"url" => ""}))}
+    do: {:noreply, assign(socket, add_form: to_form(%{"url" => ""}), search_form: nil)}
 
   def handle_event(event, _params, socket) when event in ~w(toggle_add close_add),
     do: {:noreply, assign(socket, :add_form, nil)}
@@ -273,6 +354,38 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   def handle_event("add_link", _params, socket), do: {:noreply, socket}
+
+  # Searching: the dock's search item and ⌘K toggle the pill, `/` opens it.
+  # Typing patches the URL, replacing the entry while already searching, so
+  # the history keeps where the search started and not every keystroke.
+  def handle_event("toggle_search", _params, %{assigns: %{search_form: nil}} = socket),
+    do: {:noreply, open_search(socket)}
+
+  def handle_event("toggle_search", _params, socket), do: {:noreply, assign(socket, :search_form, nil)}
+  def handle_event("open_search", _params, %{assigns: %{search_form: nil}} = socket), do: {:noreply, open_search(socket)}
+  def handle_event("open_search", _params, socket), do: {:noreply, socket}
+
+  # Esc hides the pill and keeps the results.
+  def handle_event("close_search", _params, socket), do: {:noreply, assign(socket, :search_form, nil)}
+
+  def handle_event("search", %{"q" => q}, socket) when is_binary(q) do
+    q = search_query(%{"q" => q})
+    to = search_path(q, socket.assigns.search_scope)
+
+    case {socket.assigns.filter, socket.assigns.live_action} do
+      {{:search, ^q, _id}, :search} -> {:noreply, socket}
+      {{:search, _q, _id}, _action} -> {:noreply, push_patch(socket, to: to, replace: true)}
+      _other -> {:noreply, push_patch(socket, to: to)}
+    end
+  end
+
+  def handle_event("search", _params, socket), do: {:noreply, socket}
+
+  # ✕ on the scope chip: search everything.
+  def handle_event("clear_search_scope", _params, %{assigns: %{filter: {:search, q, _id}}} = socket),
+    do: {:noreply, push_patch(socket, to: search_path(q, nil), replace: true)}
+
+  def handle_event("clear_search_scope", _params, socket), do: {:noreply, assign(socket, :search_scope, nil)}
 
   # The `?` key, outside fields.
   def handle_event("open_guide", _params, socket), do: {:noreply, push_patch(socket, to: ~p"/guide")}
@@ -450,6 +563,16 @@ defmodule AcervoWeb.ArchiveLive do
     end
   end
 
+  defp open_search(socket) do
+    q =
+      case socket.assigns.filter do
+        {:search, q, _id} -> q
+        _other -> ""
+      end
+
+    assign(socket, search_form: search_form(q), add_form: nil)
+  end
+
   defp invalid_link_error, do: {dgettext_noop("errors", "That doesn't look like a link."), []}
 
   defp add_error(socket, url, error), do: assign(socket, :add_form, to_form(%{"url" => url}, errors: [url: error]))
@@ -610,7 +733,7 @@ defmodule AcervoWeb.ArchiveLive do
 
       current ->
         case Enum.find(socket.assigns.collections, &(&1.id == current.id)) do
-          nil -> {:noreply, push_patch(socket, to: ~p"/")}
+          nil -> {:noreply, push_patch(socket, to: collection_gone_path(socket.assigns))}
           %{slug: slug} = collection when slug == current.slug -> {:noreply, assign(socket, :collection, collection)}
           collection -> {:noreply, push_patch(socket, to: renamed_path(socket.assigns, collection))}
         end
@@ -622,6 +745,19 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   @impl true
+  def handle_async(:search, {:ok, {filter, %{links: links, partial: partial}}}, %{assigns: %{filter: filter}} = socket) do
+    {:noreply,
+     socket
+     |> assign(search_loading: false, search_partial: partial, search_count: length(links))
+     |> stream(:links, links, reset: true)}
+  end
+
+  def handle_async(:search, {:ok, _stale}, socket), do: {:noreply, socket}
+
+  # A crash keeps the cards, flagged like a partial result.
+  def handle_async(:search, {:exit, _reason}, socket),
+    do: {:noreply, assign(socket, search_loading: false, search_partial: true)}
+
   def handle_async(:embeddable, {:ok, {:ok, link}}, socket),
     do: {:noreply, socket |> assign(:web_check, nil) |> refresh_open(link)}
 
@@ -630,11 +766,19 @@ defmodule AcervoWeb.ArchiveLive do
 
   def handle_async(:embeddable, _failed, socket), do: {:noreply, socket}
 
+  defp collection_gone_path(%{filter: {:search, q, _id}}), do: search_path(q, nil)
+  defp collection_gone_path(_assigns), do: ~p"/"
+
   defp renamed_path(%{link: nil} = assigns, collection), do: list_path(%{assigns | collection: collection})
 
   defp renamed_path(%{link: link, web?: true} = assigns, collection), do: web_path(assigns.filter, collection, link)
 
   defp renamed_path(%{link: link} = assigns, collection), do: link_path(assigns.filter, collection, link)
+
+  # Search results only change by searching again: updates refresh the cards
+  # already listed.
+  defp restream(%{assigns: %{filter: {:search, _q, _id}}} = socket, link),
+    do: stream_insert(socket, :links, link, update_only: true)
 
   defp restream(socket, link) do
     if matches?(socket.assigns.filter, link),
@@ -661,6 +805,7 @@ defmodule AcervoWeb.ArchiveLive do
   defp matches?(:all, _link), do: true
   defp matches?(:inbox, link), do: is_nil(link.triaged_at)
   defp matches?({:collection, id}, link), do: Enum.any?(link.collections, &(&1.id == id))
+  defp matches?({:search, _q, _id}, _link), do: false
 
   defp refresh_counts(socket) do
     scope = socket.assigns.current_scope
@@ -777,7 +922,18 @@ defmodule AcervoWeb.ArchiveLive do
               />
             </.form>
           </:heading>
-          <:actions :if={@collection}><.collection_menu /></:actions>
+          <:actions :if={match?({:collection, _id}, @filter)}><.collection_menu /></:actions>
+          <:actions :if={@search_partial and match?({:search, _q, _id}, @filter)}>
+            <span
+              id="search-partial"
+              class="search-partial"
+              role="img"
+              title={gettext("Only matching words")}
+              aria-label={gettext("Only matching words")}
+            >
+              <.icon name="lucide-zap-off" class="size-4" />
+            </span>
+          </:actions>
           <.form
             :if={@editing == :description}
             for={@collection_form}
@@ -804,6 +960,18 @@ defmodule AcervoWeb.ArchiveLive do
           <p :if={@editing != :description and list_desc(@filter, @collection)} class="desc">
             {list_desc(@filter, @collection)}
           </p>
+          <div
+            :if={match?({:search, _q, _id}, @filter)}
+            id="search-status"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <.empty :if={@search_count == 0} id="search-empty">{gettext("Nothing found.")}</.empty>
+            <span :if={@search_count && @search_count > 0} class="sr-only">
+              {results_count(@search_count)}
+            </span>
+          </div>
           <div id="links" class="cards" phx-update="stream">
             <.empty id="links-empty" class="hidden only:block">{empty_text(@filter)}</.empty>
             <%= for {id, link} <- @streams.links do %>
@@ -903,10 +1071,17 @@ defmodule AcervoWeb.ArchiveLive do
         </.column>
       </div>
       <.add_pill :if={@add_form} form={@add_form} />
+      <.search_pill
+        :if={@search_form}
+        form={@search_form}
+        scope={@search_scope}
+        loading={@search_loading}
+      />
       <.dock
-        active={if @filter == :inbox, do: :inbox, else: :home}
+        active={dock_active(@filter)}
         inbox_count={@inbox_count}
         adding={!!@add_form}
+        searching={!!@search_form}
         locale={@locale}
         return_to={@return_to}
       />
@@ -917,23 +1092,46 @@ defmodule AcervoWeb.ArchiveLive do
       //   stray pasted words are never saved; the dock's add field still takes
       //   bare hosts. Pasted images are handled by the link column's own hook.
       // - `?` opens the guide.
-      // - Esc closes the web view column, unless a menu or the add field is
-      //   open: those close first, on their own.
+      // - `/` opens the search pill, or focuses it.
+      // - Esc closes the web view column, unless a menu or a pill is open:
+      //   those close first, on their own.
+      // And one key that works in fields too: ⌘K (Ctrl+K) toggles the search
+      // pill, or focuses it when it is open but not focused.
       const URL_LIKE = /^(https?:\/\/|www\.)[^\s]+\.[^\s]{2,}$/i
       const typing = target => target instanceof Element &&
         (target.closest('input, textarea, select, [contenteditable]') || target.isContentEditable)
+      const plain = event => !(event.ctrlKey || event.metaKey || event.altKey)
       export default {
         mounted() {
           this.onKeydown = event => {
-            if (event.defaultPrevented || event.isComposing || typing(event.target)) return
+            if (event.defaultPrevented || event.isComposing) return
+            if (this.searchShortcut(event)) return this.toggleSearch(event)
+            if (typing(event.target)) return
             if (event.key === 'Escape') return this.closeWeb(event)
-            if (event.key !== '?' || event.ctrlKey || event.metaKey || event.altKey) return
+            if (event.key === '/' && plain(event) && !document.querySelector('.popover[open]')) return this.openSearch(event)
+            if (event.key !== '?' || !plain(event)) return
             event.preventDefault()
             this.pushEvent('open_guide', {})
           }
+          this.searchShortcut = event => {
+            if (event.key.toLowerCase() !== 'k' || event.altKey || event.shiftKey) return false
+            const mac = document.documentElement.dataset.platform === 'mac'
+            return mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
+          }
+          this.focusSearch = () => document.getElementById('search-query')?.focus()
+          this.openSearch = event => {
+            event.preventDefault()
+            this.pushEvent('open_search', {}, this.focusSearch)
+          }
+          this.toggleSearch = event => {
+            const input = document.getElementById('search-query')
+            if (input && document.activeElement !== input) return this.openSearch(event)
+            event.preventDefault()
+            this.pushEvent('toggle_search', {}, this.focusSearch)
+          }
           this.closeWeb = event => {
             if (!document.getElementById('column-web')) return
-            if (document.querySelector('#add-pill, .popover[open]')) return
+            if (document.querySelector('#add-pill, #search-pill, .popover[open]')) return
             event.preventDefault()
             this.pushEvent('close_web', {})
           }
@@ -976,31 +1174,64 @@ defmodule AcervoWeb.ArchiveLive do
   defp list_column_id(:all), do: "column-all"
   defp list_column_id(:inbox), do: "column-inbox"
   defp list_column_id({:collection, _id}), do: "column-collection"
+  defp list_column_id({:search, _q, _id}), do: "column-search"
 
   defp list_title(:all, _collection), do: gettext("All")
   defp list_title(:inbox, _collection), do: gettext("Inbox")
   defp list_title({:collection, _id}, collection), do: collection.name
+  defp list_title({:search, q, _id}, _collection), do: if(short_query?(q), do: gettext("Search"), else: q)
   defp list_title(nil, _collection), do: nil
 
   defp list_desc(:all, _collection), do: gettext("Everything you saved, newest first.")
   defp list_desc(:inbox, _collection), do: gettext("Links waiting for a place.")
   defp list_desc({:collection, _id}, collection), do: collection.description
+  defp list_desc({:search, _q, _id}, _collection), do: nil
 
   defp empty_text(:inbox), do: gettext("Nothing waiting.")
   defp empty_text(:all), do: gettext("Nothing saved yet.")
   defp empty_text({:collection, _id}), do: gettext("Nothing here yet.")
+  # A search says "Nothing found." itself, once its results arrive.
+  defp empty_text({:search, _q, _id}), do: nil
 
   defp list_path(%{filter: :inbox}), do: ~p"/inbox"
   defp list_path(%{filter: {:collection, _id}, collection: collection}), do: ~p"/c/#{collection.slug}"
+  defp list_path(%{filter: {:search, q, _id}, collection: collection}), do: search_path(q, collection)
   defp list_path(_assigns), do: ~p"/all"
 
   defp link_path(:inbox, _collection, link), do: ~p"/inbox/l/#{link.id}"
   defp link_path({:collection, _id}, collection, link), do: ~p"/c/#{collection.slug}/l/#{link.id}"
+
+  defp link_path({:search, q, _id}, collection, link),
+    do: with_query(~p"/search/l/#{link.id}", search_params(q, collection))
+
   defp link_path(_filter, _collection, link), do: ~p"/all/l/#{link.id}"
 
-  defp web_path(:inbox, _collection, link), do: ~p"/inbox/l/#{link.id}/web"
-  defp web_path({:collection, _id}, collection, link), do: ~p"/c/#{collection.slug}/l/#{link.id}/web"
-  defp web_path(_filter, _collection, link), do: ~p"/all/l/#{link.id}/web"
+  defp web_path(filter, collection, link, extra \\ [])
+  defp web_path(:inbox, _collection, link, extra), do: with_query(~p"/inbox/l/#{link.id}/web", extra)
+
+  defp web_path({:collection, _id}, collection, link, extra),
+    do: with_query(~p"/c/#{collection.slug}/l/#{link.id}/web", extra)
+
+  defp web_path({:search, q, _id}, collection, link, extra),
+    do: with_query(~p"/search/l/#{link.id}/web", search_params(q, collection) ++ extra)
+
+  defp web_path(_filter, _collection, link, extra), do: with_query(~p"/all/l/#{link.id}/web", extra)
+
+  defp search_path(q, collection), do: with_query(~p"/search", search_params(q, collection))
+
+  defp search_params(q, collection) do
+    Enum.reject([q: q, in: collection && collection.slug], fn {_key, value} -> value in [nil, ""] end)
+  end
+
+  defp with_query(path, []), do: path
+  defp with_query(path, params), do: path <> "?" <> URI.encode_query(params)
+
+  defp dock_active({:search, _q, _id}), do: :search
+  defp dock_active(:inbox), do: :inbox
+  defp dock_active(_filter), do: :home
+
+  # pt_BR treats 0 as singular; no results say "Nothing found." instead.
+  defp results_count(count), do: ngettext("One result", "%{count} results", count)
 
   # The link column's image opens the web view column, and closes it again.
   defp web_toggle_path(%{web?: true} = assigns, link), do: link_path(assigns.filter, assigns.collection, link)
@@ -1012,8 +1243,7 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp reader_toggle_path(%{reader_view?: true} = assigns, link), do: web_path(assigns.filter, assigns.collection, link)
 
-  defp reader_toggle_path(assigns, link),
-    do: web_path(assigns.filter, assigns.collection, link) <> "?" <> URI.encode_query(view: "reader")
+  defp reader_toggle_path(assigns, link), do: web_path(assigns.filter, assigns.collection, link, view: "reader")
 
   defp reader_toggle_label(true = _reader_view?), do: gettext("Show page")
   defp reader_toggle_label(false), do: gettext("Show reader view")

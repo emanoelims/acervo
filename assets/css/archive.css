@@ -78,6 +78,21 @@
 .float-form .field-errors { margin-top: 4px; }
 .float-kbd { flex: none; margin-top: 1px; padding: 3px 7px; border-radius: 6px; color: var(--muted); font: 12px var(--font-ui); box-shadow: 0 0 0 1px var(--line); }
 
+/* The search pill: the add pill's shell, centered on one line, with the
+   scope chip before the field. The chip gives way first, so the field keeps
+   room for about 8 characters at phone width. The glass loses its ✕ hover
+   trick: the scope can always be dropped. */
+.search-float { align-items: center; }
+.search-float .float-icon, .search-float .float-kbd { margin-top: 0; }
+.float-icon.is-loading { animation: search-pulse 1.2s ease-in-out infinite; }
+@keyframes search-pulse { 50% { opacity: .35; } }
+.chip.search-scope { flex: 0 1 auto; min-width: 0; max-width: 45%; box-shadow: 0 0 0 1px var(--line); background: var(--soft); }
+.chip.search-scope:hover { transform: none; }
+.search-scope-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-float .chip-x { flex: none; opacity: 1; }
+.search-float .float-form { min-width: 8ch; }
+.search-partial { display: grid; flex: none; place-items: center; width: 32px; height: 32px; color: var(--faint); }
+
 /* Column 1: the quiet + after the collections and its inline name field. */
 .nav-add { display: flex; align-items: center; padding: 4px 12px; border: 0; background: none; color: var(--faint); cursor: pointer; transition: color .2s; }
 .nav-add:hover, .nav-add:focus-visible { color: var(--ink); }
@@ -119,9 +134,10 @@
   .columns { scroll-snap-type: x mandatory; }
   .column, .column-root { flex-basis: 100vw; scroll-snap-align: start; }
   .column-scroll { padding-inline: 24px; }
+  .search-float .float-kbd { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .column-scroll, .float, .float.is-leaving { animation: none; }
+  .column-scroll, .float, .float.is-leaving, .float-icon.is-loading { animation: none; }
   .column-up, .dock-item, .swatch, .dot, .font-chip, .lang-chip, .nav-add, .nav-item, .head-button { transition: none; }
 }
