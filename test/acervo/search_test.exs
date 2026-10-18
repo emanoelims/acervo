@@ -180,12 +180,12 @@ defmodule Acervo.SearchTest do
     end
 
     test "builds a prefix OR tsquery from words of three letters or more" do
-      assert Search.text_query("Aquele post sobre interop de JS") == "interop:*"
-      assert Search.text_query("queda do github") == "queda:* | github:*"
+      assert Search.text_terms("Aquele post sobre interop de JS") == ["interop"]
+      assert Search.text_terms("queda do github") == ["queda", "github"]
 
-      assert Search.text_query("a & | ! :* <-> é") == nil
-      assert Search.text_query("foo:* & !bar") == "foo:* | bar:*"
-      assert 1..20 |> Enum.map_join(" ", &"word#{&1}") |> Search.text_query() |> String.split(" | ") |> length() == 8
+      assert Search.text_terms("a & | ! :* <-> é") == []
+      assert Search.text_terms("foo:* & !bar") == ["foo", "bar"]
+      assert 1..20 |> Enum.map_join(" ", &"word#{&1}") |> Search.text_terms() |> length() == 8
     end
 
     test "matches accents and case either way", %{scope: scope} do
@@ -366,7 +366,13 @@ defmodule Acervo.SearchTest do
       "\"unterminated",
       "🐝🍯 abelhas",
       "مرحبا بالعالم",
-      String.duplicate("x", 10_000)
+      String.duplicate("x", 10_000),
+      # unaccent turns these into tsquery syntax (":", "'", "(1)")
+      "abcːxyz",
+      "ŉabc",
+      "⑴abc",
+      "ʹʹʹ elixir",
+      "dontʼ stop"
     ]
 
     test "never raises and only returns the scope's links", %{scope: scope} do
