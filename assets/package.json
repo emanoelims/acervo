@@ -1,0 +1,7 @@
+{
+  "name": "acervo-assets",
+  "private": true,
+  "dependencies": {
+    "@floating-ui/dom": "1.8.0"
+  }
+}
