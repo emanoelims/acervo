@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-18
+
+Read every saved page in Acervo, even when its site blocks embedding.
+
 ### Added
 
 - Reader mode keeps each page's article, with images, so it can be read in Acervo even when the site blocks embedding or goes offline. Pages that publish a Markdown version are read from it.
