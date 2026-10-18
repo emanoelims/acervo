@@ -39,7 +39,10 @@ CI cancels obsolete runs, limits job runtime, pins Actions to immutable commits,
 and uses caches keyed by the BEAM versions, test environment, and lockfile.
 Dependabot proposes weekly Mix and GitHub Actions updates using allowed
 Conventional Commit prefixes. Updates are grouped: one PR for compatible Mix
-updates, one for GitHub Actions, and separate PRs for major Mix updates. Review its PRs and let the same required checks
+updates, one for GitHub Actions, and separate PRs for major Mix updates.
+A seven-day cooldown keeps brand-new releases out of version updates until they
+have had time to be noticed if broken or compromised; security updates are not
+delayed. Review its PRs and let the same required checks
 validate them; updates are not merged automatically.
 
 ## Conventional Commits
