@@ -52,6 +52,11 @@ defmodule Acervo.Collections.CollectionTest do
       assert %Collection{position: 0} = %Collection{}
     end
 
+    test "does not cast position" do
+      changeset = Collection.changeset(%Collection{}, %{name: "Design", position: 5})
+      refute Map.has_key?(changeset.changes, :position)
+    end
+
     test "reports a slug clash for the same user" do
       user = user_fixture()
       assert {:ok, _} = %Collection{user_id: user.id} |> Collection.changeset(%{name: "Design"}) |> Repo.insert()

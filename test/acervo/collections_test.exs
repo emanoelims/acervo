@@ -91,15 +91,20 @@ defmodule Acervo.CollectionsTest do
       assert :ok = Collections.add_link(scope, c, link)
       assert Repo.aggregate(CollectionLink, :count) == 1
       link_id = link.id
-      assert_receive {:link_updated, %Link{id: ^link_id}}
+      c_id = c.id
+      assert_receive {:link_updated, %Link{id: ^link_id, collections: [%{id: ^c_id}], images: []}}
     end
 
     test "remove_link", %{scope: scope} do
       c = collection_fixture(scope)
       link = collection_link_fixture(scope)
       :ok = Collections.add_link(scope, c, link)
+      link_id = link.id
+      assert_receive {:link_updated, %Link{id: ^link_id, collections: [_]}}
+
       assert :ok = Collections.remove_link(scope, c, link)
       assert Repo.aggregate(CollectionLink, :count) == 0
+      assert_receive {:link_updated, %Link{id: ^link_id, collections: [], images: []}}
       assert :ok = Collections.remove_link(scope, c, link)
     end
 
@@ -128,35 +133,19 @@ defmodule Acervo.CollectionsTest do
       assert Enum.map(Collections.list_collections(scope), & &1.id) == [z.id, a.id, b.id]
     end
 
-    test "counts links and returns up to 4 recent cover ids", %{scope: scope} do
+    test "counts links", %{scope: scope} do
       c = collection_fixture(scope, %{name: "Full", position: 0})
       empty = collection_fixture(scope, %{name: "Empty", position: 1})
 
       links = for _ <- 1..7, do: collection_link_fixture(scope)
       Enum.each(links, &Collections.add_link(scope, c, &1))
 
-      # first link: no image; second: only a non-cover (position 1) image
-      [_no_image, second | rest] = links
-      collection_link_image_fixture(second, %{position: 1})
-
-      images =
-        for {link, i} <- Enum.with_index(rest) do
-          Repo.update_all(from(l in Link, where: l.id == ^link.id),
-            set: [inserted_at: DateTime.shift(~U[2026-01-01 00:00:00Z], hour: i)]
-          )
-
-          collection_link_image_fixture(link)
-        end
-
       [full, empty_listed] = Collections.list_collections(scope)
 
       assert full.id == c.id
       assert full.link_count == 7
-      assert full.cover_image_ids == images |> Enum.reverse() |> Enum.take(4) |> Enum.map(& &1.id)
-
       assert empty_listed.id == empty.id
       assert empty_listed.link_count == 0
-      assert empty_listed.cover_image_ids == []
     end
 
     test "counts do not leak across users", %{scope: scope} do

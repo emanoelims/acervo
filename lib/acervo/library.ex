@@ -203,7 +203,8 @@ defmodule Acervo.Library do
 
   @doc false
   # Re-reads a link with its preloads and broadcasts `{:link_updated, link}`.
-  # Used by `Acervo.Library.CaptureLink`; returns `:error` if the link is gone.
+  # Used by `Acervo.Library.CaptureLink` and `Acervo.Collections`; returns
+  # `:error` if the link is gone.
   @spec broadcast_updated(Scope.t(), Ecto.UUID.t()) :: :ok | :error
   def broadcast_updated(%Scope{user: user} = scope, link_id) do
     case Repo.get_by(Link, id: link_id, user_id: user.id) do

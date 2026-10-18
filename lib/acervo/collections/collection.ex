@@ -15,7 +15,6 @@ defmodule Acervo.Collections.Collection do
     field :description, :string
     field :position, :integer, default: 0
     field :link_count, :integer, virtual: true
-    field :cover_image_ids, {:array, :binary_id}, virtual: true
 
     belongs_to :user, User
     many_to_many :links, Link, join_through: CollectionLink
@@ -25,7 +24,7 @@ defmodule Acervo.Collections.Collection do
 
   def changeset(collection, attrs) do
     collection
-    |> cast(attrs, [:name, :description, :position])
+    |> cast(attrs, [:name, :description])
     |> validate_required([:name])
     |> validate_length(:name, min: 1, max: 80)
     |> validate_length(:description, max: 280)

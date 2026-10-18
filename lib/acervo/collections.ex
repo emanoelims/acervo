@@ -3,8 +3,9 @@ defmodule Acervo.Collections do
   Manual collections and link membership, isolated per user.
 
   Mutations broadcast on the `"links:<user_id>"` topic of `Acervo.PubSub`:
-  `{:collections_changed}` when collections change and `{:link_updated, link}`
-  when a link's membership changes.
+  `{:collections_changed}` when collections change and `{:link_updated, link}`,
+  with the link's images and collections preloaded, when a link's membership
+  changes.
   """
 
   import Ecto.Query
@@ -12,15 +13,13 @@ defmodule Acervo.Collections do
   alias Acervo.Accounts.Scope
   alias Acervo.Collections.Collection
   alias Acervo.Collections.CollectionLink
+  alias Acervo.Library
   alias Acervo.Library.Link
   alias Acervo.Repo
 
-  @cover_limit 4
-
   @doc """
   Lists the user's collections ordered by position then name. Each one carries
-  a virtual `link_count` and `cover_image_ids` (up to #{@cover_limit} ids of the
-  position 0 images of the most recent member links), computed in one query.
+  a virtual `link_count`, computed in the same query.
   """
   def list_collections(%Scope{user: user}) do
     Repo.all(
@@ -32,24 +31,6 @@ defmodule Acervo.Collections do
             fragment(
               "(SELECT count(*) FROM collection_links cl WHERE cl.collection_id = ?)",
               c.id
-            ),
-          cover_image_ids:
-            type(
-              fragment(
-                """
-                ARRAY(
-                  SELECT li.id FROM collection_links cl
-                  JOIN links l ON l.id = cl.link_id
-                  JOIN link_images li ON li.link_id = l.id AND li.position = 0
-                  WHERE cl.collection_id = ?
-                  ORDER BY l.inserted_at DESC, l.id DESC
-                  LIMIT ?
-                )
-                """,
-                c.id,
-                ^@cover_limit
-              ),
-              {:array, Ecto.UUID}
             )
         }
     )
@@ -141,8 +122,9 @@ defmodule Acervo.Collections do
 
   defp broadcast_collections_changed(result, _scope), do: result
 
+  # A link deleted concurrently has nothing left to broadcast.
   defp broadcast_link_updated(scope, link) do
-    broadcast(scope, {:link_updated, link})
+    _ = Library.broadcast_updated(scope, link.id)
     :ok
   end
 

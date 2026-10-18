@@ -11,13 +11,16 @@ defmodule Acervo.CollectionsFixtures do
 
   def unique_collection_name, do: "Collection #{System.unique_integer([:positive])}"
 
+  # `position` is not user-editable, so it is set directly when given.
   def collection_fixture(scope, attrs \\ %{}) do
+    {position, attrs} = attrs |> Map.new() |> Map.pop(:position)
+
     {:ok, collection} =
       attrs
       |> Enum.into(%{name: unique_collection_name()})
       |> then(&Collections.create_collection(scope, &1))
 
-    collection
+    if position, do: collection |> Ecto.Changeset.change(position: position) |> Repo.update!(), else: collection
   end
 
   def collection_link_fixture(scope, attrs \\ %{}) do
