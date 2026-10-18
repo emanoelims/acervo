@@ -39,7 +39,8 @@ defmodule AcervoWeb.ArchiveComponents do
       <div class="column-scroll" id={"#{@id}-scroll"} data-key={@key} phx-hook=".ColumnScroll">
         <header :if={@title} class="column-head">
           <h2 :if={@heading == []}>
-            <span class="column-title">{@title}</span><span class="chev" aria-hidden="true">›</span>
+            <span class="column-title">{@title}</span>
+            <.icon name="lucide-chevron-right" class="chev" />
           </h2>
           {render_slot(@heading)}
           {render_slot(@actions)}
@@ -215,7 +216,7 @@ defmodule AcervoWeb.ArchiveComponents do
       label={gettext("More")}
       menu
       placement="bottom-end"
-      trigger_class="round"
+      trigger_class="head-button"
       panel_class="dropdown-menu"
     >
       <:trigger><.icon name="lucide-ellipsis" class="size-4" /></:trigger>

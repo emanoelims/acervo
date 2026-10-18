@@ -1,12 +1,14 @@
 /* Sign-in, registration and account pages: one centered card. */
 .auth-main { display:grid; place-items:center; min-height:100svh; padding:32px 24px; background:var(--paper); color:var(--ink); }
-.auth-card { display:flex; flex-direction:column; align-items:stretch; gap:20px; width:100%; max-width:340px; }
+.auth-card { display:flex; flex-direction:column; align-items:stretch; gap:24px; width:100%; max-width:360px; }
 .auth-card form { display:flex; flex-direction:column; gap:16px; }
 .auth-card .form-field { margin-bottom:0; }
+.auth-card .field-label { margin-bottom:6px; color:var(--muted); font-size:12px; font-weight:500; line-height:16px; }
+.auth-card .field { height:44px; min-height:44px; padding:0 16px; border-radius:12px; background:var(--card); font-size:16px; line-height:24px; }
 .auth-mark { display:inline-flex; align-items:center; justify-content:center; align-self:center; width:48px; height:48px; margin-bottom:12px; border-radius:12px; color:var(--ink); transition:background-color .15s; }
 .auth-mark:hover { background:var(--soft); }
-.auth-email { overflow:hidden; text-align:center; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:13px; }
-.auth-card .auth-submit { width:100%; justify-content:space-between; padding-inline:16px; border-radius:8px; }
-.auth-alternate { display:flex; align-items:center; justify-content:center; gap:6px; color:var(--muted); font-size:12px; line-height:1.7; }
+.auth-email { overflow:hidden; text-align:center; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:14px; line-height:20px; }
+.auth-card .auth-submit { width:100%; min-height:44px; justify-content:space-between; padding-inline:16px; border-radius:12px; font-size:14px; }
+.auth-alternate { display:flex; align-items:center; justify-content:center; gap:6px; color:var(--muted); font-size:12px; font-weight:500; line-height:16px; }
 .text-link { display:inline-flex; align-items:center; gap:6px; color:var(--muted); text-decoration:none; transition:color .15s; }
 .text-link:hover { color:var(--ink); }
