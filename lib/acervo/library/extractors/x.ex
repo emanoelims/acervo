@@ -7,6 +7,7 @@ defmodule Acervo.Library.Extractors.X do
 
   alias Acervo.Library.Capture
   alias Acervo.Library.Extractors.Generic
+  alias Acervo.Library.HtmlMeta
   alias Acervo.Library.SafeFetch
 
   @hosts ["x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"]
@@ -48,9 +49,9 @@ defmodule Acervo.Library.Extractors.X do
   end
 
   defp tweet_text(html) when is_binary(html) do
-    text = html |> LazyHTML.from_fragment() |> LazyHTML.query("blockquote p") |> LazyHTML.text()
+    text = html |> LazyHTML.from_fragment() |> LazyHTML.query("blockquote p") |> HtmlMeta.plain_text()
 
-    case text |> String.split() |> Enum.join(" ") do
+    case text do
       "" -> nil
       text -> text
     end

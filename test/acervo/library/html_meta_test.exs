@@ -78,4 +78,56 @@ defmodule Acervo.Library.HtmlMetaTest do
   test "returns nil text for an empty body" do
     assert HtmlMeta.parse("<html><body></body></html>", @base).text == nil
   end
+
+  test "keeps only http(s) images and they do not consume the cap" do
+    tags =
+      for u <- ["data:image/png;base64,AAAA", "javascript:alert(1)", "ftp://example.com/a.png", "/ok.png"],
+          do: ~s(<meta property="og:image" content="#{u}">)
+
+    capture = HtmlMeta.parse("<html><head>#{Enum.join(tags)}</head><body></body></html>", @base)
+    assert capture.image_urls == ["https://example.com/ok.png"]
+  end
+
+  test "decodes a Latin-1 body using the content-type charset" do
+    html = :unicode.characters_to_binary("<html><head><title>ação</title></head><body></body></html>", :utf8, :latin1)
+    assert HtmlMeta.parse(html, @base, "text/html; charset=iso-8859-1").title == "ação"
+  end
+
+  test "decodes a Latin-1 body using meta charset" do
+    html =
+      :unicode.characters_to_binary(
+        ~s(<html><head><meta charset="ISO-8859-1"><title>ação</title></head></html>),
+        :utf8,
+        :latin1
+      )
+
+    assert HtmlMeta.parse(html, @base).title == "ação"
+  end
+
+  test "never returns invalid UTF-8" do
+    capture = HtmlMeta.parse(<<"<html><head><title>a", 0xFF, "b</title></head><body>x", 0xFE, "y</body></html>">>, @base)
+    assert String.valid?(capture.title)
+    assert String.valid?(capture.text)
+  end
+
+  test "falls through an empty article to main" do
+    long = String.duplicate("main text ", 40)
+    capture = HtmlMeta.parse("<html><body><article></article><main>#{long}</main></body></html>", @base)
+    assert capture.text =~ "main text main text"
+  end
+
+  test "uses the longest candidate when none reaches the minimum" do
+    capture = HtmlMeta.parse("<html><body><article>short</article><main></main></body></html>", @base)
+    assert capture.text == "short"
+  end
+
+  test "block tags separate text and inline tags do not" do
+    capture = HtmlMeta.parse("<html><body><p>foo<b>bar</b></p><p>a</p><p>b<br>c</p></body></html>", @base)
+    assert capture.text == "foobar a b c"
+  end
+
+  test "plain_text/1 turns br into a separator" do
+    lazy = LazyHTML.from_fragment("<blockquote><p>line one<br>line two</p></blockquote>")
+    assert HtmlMeta.plain_text(LazyHTML.query(lazy, "blockquote p")) == "line one line two"
+  end
 end

@@ -31,7 +31,7 @@ defmodule Acervo.Library.Extractors.Generic do
   def fetch_page(%URI{} = uri, opts) do
     case SafeFetch.get(URI.to_string(uri), Keyword.put(opts, :accept, @accept)) do
       {:ok, %{body: body, url: url} = response} when is_binary(body) ->
-        if html?(response), do: {:ok, HtmlMeta.parse(body, url), url}, else: {:error, :not_html}
+        if html?(response), do: {:ok, HtmlMeta.parse(body, url, content_type(response)), url}, else: {:error, :not_html}
 
       {:ok, _response} ->
         {:error, :not_html}
@@ -44,10 +44,13 @@ defmodule Acervo.Library.Extractors.Generic do
     end
   end
 
-  defp html?(%{headers: headers}) do
-    headers
-    |> Map.get("content-type", [])
-    |> List.wrap()
+  defp content_types(%{headers: headers}), do: headers |> Map.get("content-type", []) |> List.wrap()
+
+  defp content_type(response), do: response |> content_types() |> List.first()
+
+  defp html?(response) do
+    response
+    |> content_types()
     |> Enum.any?(&(String.contains?(&1, "html") or String.contains?(&1, "xml")))
   end
 end
