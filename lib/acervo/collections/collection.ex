@@ -14,6 +14,8 @@ defmodule Acervo.Collections.Collection do
     field :slug, :string
     field :description, :string
     field :position, :integer, default: 0
+    field :link_count, :integer, virtual: true
+    field :cover_image_ids, {:array, :binary_id}, virtual: true
 
     belongs_to :user, User
     many_to_many :links, Link, join_through: CollectionLink
