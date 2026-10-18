@@ -29,6 +29,7 @@ defmodule Acervo.Library.CaptureLink do
   import Ecto.Query
 
   alias Acervo.Accounts.Scope
+  alias Acervo.AI.EnrichLink
   alias Acervo.Library
   alias Acervo.Library.Capture
   alias Acervo.Library.Extractor
@@ -138,8 +139,22 @@ defmodule Acervo.Library.CaptureLink do
     |> Link.capture_changeset(Map.merge(attrs, resolved_url(capture)))
     |> save()
     |> tap(&store_content(scope, &1, capture, run))
+    |> tap(&enrich/1)
     |> finish(:ok)
   end
+
+  ## Enrichment
+
+  # Once per link: a re-capture, or a retry after the link was saved, does
+  # not pay for the model again. A screenshot enqueues it on its own.
+  defp enrich({:ok, %Link{enriched_at: nil} = link}) do
+    case EnrichLink.enqueue(link) do
+      {:ok, _job} -> :ok
+      {:error, reason} -> Logger.error("could not enqueue enrichment of link #{link.id}: #{inspect(reason)}")
+    end
+  end
+
+  defp enrich(_saved), do: :ok
 
   ## Reader view
 

@@ -5,6 +5,15 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Claude describes each link's image, detects its language and suggests collections in the inbox. Opus 5.5 is the default model; set `ACERVO_CHAT_MODEL` to use another.
+- `Acervo.Release.ai_costs/0` reports the model calls and their estimated cost per day.
+
+### Migration
+
+- After deploying, enrich the links saved before this (one model call each): `fly ssh console -a acervo-app -C "/app/bin/acervo eval 'Acervo.Release.backfill_enrichment()'"`.
+
 ## [0.7.0] - 2026-10-18
 
 Read every saved page in Acervo, even when its site blocks embedding.

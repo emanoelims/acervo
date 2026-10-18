@@ -6,6 +6,7 @@ defmodule Acervo.LibraryTest do
   import Acervo.CollectionsFixtures, only: [collection_fixture: 1]
   import Acervo.LibraryFixtures
 
+  alias Acervo.AI.EnrichLink
   alias Acervo.Collections
   alias Acervo.Collections.Collection
   alias Acervo.Collections.Suggestion
@@ -254,6 +255,25 @@ defmodule Acervo.LibraryTest do
                updated.images
 
       assert_receive {:link_updated, %Link{status: :ready}}
+    end
+
+    test "enqueues enrichment, even for an enriched link", %{scope: scope} do
+      link = link_fixture(scope)
+
+      Repo.update_all(from(l in Link, where: l.id == ^link.id),
+        set: [enrichment_status: :ready, enriched_at: DateTime.utc_now(:second)]
+      )
+
+      assert {:ok, %Link{}} = Library.attach_screenshot(scope, link, image_fixture("photo.jpg"))
+
+      assert_enqueued(worker: EnrichLink, args: %{"link_id" => link.id})
+      assert %Link{enrichment_status: :pending} = Repo.get!(Link, link.id)
+    end
+
+    test "enqueues nothing when the image is rejected", %{scope: scope} do
+      link = link_fixture(scope)
+      assert {:error, :not_an_image} = Library.attach_screenshot(scope, link, image_fixture("not_image.txt"))
+      refute_enqueued(worker: EnrichLink)
     end
 
     @tag :capture_log

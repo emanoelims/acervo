@@ -17,6 +17,7 @@ defmodule Acervo.Library do
   import Ecto.Query
 
   alias Acervo.Accounts.Scope
+  alias Acervo.AI.EnrichLink
   alias Acervo.Collections.CollectionLink
   alias Acervo.Collections.Suggestion
   alias Acervo.Library.CaptureLink
@@ -230,7 +231,9 @@ defmodule Acervo.Library do
 
   @doc """
   Normalizes `binary` and stores it as the link's screenshot at position 0,
-  moving its other images down. The link becomes `:ready` without an error.
+  moving its other images down. The link becomes `:ready` without an error
+  and is enqueued for enrichment again, even when it was enriched: the image
+  changed.
   """
   @spec attach_screenshot(Scope.t(), Link.t(), binary()) ::
           {:ok, Link.t()} | {:error, :not_found | :not_an_image | :too_large | Ecto.Changeset.t()}
@@ -247,7 +250,10 @@ defmodule Acervo.Library do
     Repo.update_all(from(i in LinkImage, where: i.link_id == ^link.id and i.kind != :content), inc: [position: 1])
 
     with {:ok, _image} <- Storage.put(scope, link, Map.merge(image, %{kind: :screenshot, position: 0})) do
-      link |> Link.capture_changeset(%{status: :ready, capture_error: nil}) |> Repo.update()
+      with {:ok, link} <- link |> Link.capture_changeset(%{status: :ready, capture_error: nil}) |> Repo.update(),
+           {:ok, _job} <- EnrichLink.enqueue(link) do
+        {:ok, link}
+      end
     end
   end
 
