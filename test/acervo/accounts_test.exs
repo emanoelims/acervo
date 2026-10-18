@@ -317,6 +317,19 @@ defmodule Acervo.AccountsTest do
       assert Repo.aggregate(from(t in UserToken, where: t.user_id == ^user.id and t.context == "login"), :count) == 1
     end
 
+    test "a failed delivery does not throttle an immediate retry", %{user: user} do
+      original = Application.fetch_env!(:acervo, Acervo.Mailer)
+      Application.put_env(:acervo, Acervo.Mailer, adapter: Acervo.FailingMailAdapter)
+      on_exit(fn -> Application.put_env(:acervo, Acervo.Mailer, original) end)
+
+      assert {:error, _} = Accounts.deliver_login_instructions(user, &"[TOKEN]#{&1}[TOKEN]")
+      assert Repo.aggregate(from(t in UserToken, where: t.user_id == ^user.id and t.context == "login"), :count) == 0
+
+      Application.put_env(:acervo, Acervo.Mailer, original)
+      assert {:ok, %Swoosh.Email{}} = Accounts.deliver_login_instructions(user, &"[TOKEN]#{&1}[TOKEN]")
+      assert_received {:email, _}
+    end
+
     test "sends again once the previous token is older than 60 seconds", %{user: user} do
       {:ok, _} = Accounts.deliver_login_instructions(user, &"[TOKEN]#{&1}[TOKEN]")
       Repo.update_all(UserToken, set: [inserted_at: DateTime.shift(DateTime.utc_now(), second: -61)])

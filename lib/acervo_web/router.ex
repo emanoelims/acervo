@@ -29,6 +29,18 @@ defmodule AcervoWeb.Router do
     plug :fetch_current_scope_for_user
   end
 
+  # Dev tools (LiveDashboard, mailbox) ship inline scripts, so they skip the strict CSP.
+  pipeline :dev_browser do
+    plug :accepts, ["html"]
+    plug :fetch_session
+    plug :fetch_live_flash
+    plug AcervoWeb.Locale
+    plug :put_root_layout, html: {AcervoWeb.Layouts, :root}
+    plug :protect_from_forgery
+    plug :put_secure_browser_headers
+    plug :fetch_current_scope_for_user
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
   end
@@ -59,7 +71,7 @@ defmodule AcervoWeb.Router do
     import Phoenix.LiveDashboard.Router
 
     scope "/dev" do
-      pipe_through :browser
+      pipe_through :dev_browser
 
       live_dashboard "/dashboard", metrics: AcervoWeb.Telemetry
       forward "/mailbox", Plug.Swoosh.MailboxPreview

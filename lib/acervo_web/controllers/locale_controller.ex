@@ -3,11 +3,14 @@ defmodule AcervoWeb.LocaleController do
 
   alias AcervoWeb.Locale
 
+  @secure_cookies Application.compile_env(:acervo, :secure_cookies, false)
+
   def update(conn, %{"locale" => locale} = params) do
     conn
     |> put_resp_cookie(Locale.cookie(), Locale.normalize(locale),
       max_age: 60 * 60 * 24 * 365,
-      same_site: "Lax"
+      same_site: "Lax",
+      secure: @secure_cookies
     )
     |> redirect(to: safe_path(params["return_to"]))
   end

@@ -211,8 +211,17 @@ defmodule Acervo.Accounts do
       {:ok, :throttled}
     else
       {encoded_token, user_token} = UserToken.build_email_token(user, "login")
-      Repo.insert!(user_token)
-      UserNotifier.deliver_login_instructions(user, magic_link_url_fun.(encoded_token))
+      user_token = Repo.insert!(user_token)
+
+      case UserNotifier.deliver_login_instructions(user, magic_link_url_fun.(encoded_token)) do
+        {:error, _} = error ->
+          # A failed delivery must not throttle the next attempt.
+          Repo.delete(user_token)
+          error
+
+        ok ->
+          ok
+      end
     end
   end
 
