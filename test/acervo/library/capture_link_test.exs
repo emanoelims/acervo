@@ -81,7 +81,8 @@ defmodule Acervo.Library.CaptureLinkTest do
       assert link.author == "Jane Roe"
       assert link.published_at == ~U[2024-05-01 10:30:00Z]
       assert link.text_excerpt =~ "Bees pollinate crops."
-      assert link.canonical_url == "https://example.com/posts/bees-canonical"
+      assert link.canonical_url == "https://example.com/posts/bees"
+      assert link.resolved_url == "https://example.com/posts/bees-canonical"
 
       assert [%LinkImage{position: 0} = first, %LinkImage{position: 1}] = images_of(link)
       assert first.kind == :preview
@@ -109,30 +110,46 @@ defmodule Acervo.Library.CaptureLinkTest do
       assert [_] = images_of(link)
     end
 
-    test "keeps the canonical url when another link already has it", %{scope: scope} do
+    test "records the page's canonical url even when another link has it", %{scope: scope} do
       _taken = link_fixture(scope, "https://example.com/taken")
       link = link_fixture(scope, "https://example.com/posts/bees")
       stub_site(page_html([], "https://example.com/taken"), %{})
 
       assert :ok = perform(link)
-      assert %Link{status: :ready, canonical_url: "https://example.com/posts/bees"} = Repo.get!(Link, link.id)
+
+      assert %Link{
+               status: :ready,
+               canonical_url: "https://example.com/posts/bees",
+               resolved_url: "https://example.com/taken"
+             } =
+               Repo.get!(Link, link.id)
     end
 
-    test "keeps the canonical url when a concurrent save takes it before the update", %{scope: scope} do
-      link = link_fixture(scope, "https://example.com/posts/bees")
-      html = page_html([], "https://example.com/late")
+    test "records the final url after redirects when the page has no canonical url", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/old")
 
-      # The response callback runs after the link is loaded and before the
-      # update, like a save of the same URL from another request.
-      Req.Test.stub(SafeFetch, fn conn ->
-        link_fixture(scope, "https://example.com/late")
-        conn |> Plug.Conn.put_resp_content_type("text/html") |> Plug.Conn.send_resp(200, html)
+      Req.Test.stub(SafeFetch, fn
+        %{request_path: "/old"} = conn ->
+          conn |> Plug.Conn.put_resp_header("location", "/posts/bees") |> Plug.Conn.send_resp(301, "")
+
+        conn ->
+          conn |> Plug.Conn.put_resp_content_type("text/html") |> Plug.Conn.send_resp(200, page_html([]))
       end)
 
       assert :ok = perform(link)
 
-      assert %Link{status: :ready, title: "Bees", canonical_url: "https://example.com/posts/bees"} =
+      assert %Link{canonical_url: "https://example.com/old", resolved_url: "https://example.com/posts/bees"} =
                Repo.get!(Link, link.id)
+    end
+
+    test "ignores a canonical url that is not http(s) or too long", %{scope: scope} do
+      for canonical <- ["ftp://example.com/bees", "https://example.com/" <> String.duplicate("a", 2048)] do
+        link = link_fixture(scope, "https://example.com/posts/bees?v=#{System.unique_integer([:positive])}")
+        stub_site(page_html([], canonical), %{})
+
+        assert :ok = perform(link)
+        assert Repo.get!(Link, link.id).resolved_url == link.canonical_url
+      end
     end
 
     test "a link left processing by a killed run is captured on retry", %{scope: scope} do
@@ -215,6 +232,38 @@ defmodule Acervo.Library.CaptureLinkTest do
 
       assert %Link{status: :failed, capture_error: "crashed"} = Repo.get!(Link, link.id)
       assert_receive {:link_updated, %Link{status: :failed, capture_error: "crashed"}}
+    end
+  end
+
+  describe "dedupe" do
+    setup do
+      Req.Test.stub(SafeFetch, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.send_resp(200, page_html([], "https://x.test/a"))
+      end)
+
+      :ok
+    end
+
+    test "the canonical url is the immutable key and the resolved url also matches", %{scope: scope} do
+      assert {:ok, link, :created} = Library.save_link(scope, "http://x.test/a")
+      assert link.canonical_url == "http://x.test/a"
+
+      assert :ok = perform(link)
+
+      assert %Link{canonical_url: "http://x.test/a", resolved_url: "https://x.test/a"} = Repo.get!(Link, link.id)
+      assert {:ok, %Link{id: id}, :existing} = Library.save_link(scope, "http://x.test/a")
+      assert id == link.id
+      assert {:ok, %Link{id: ^id}, :existing} = Library.save_link(scope, "https://x.test/a")
+      assert Library.count_links(scope) == 1
+    end
+
+    test "a resolved url of another user does not match", %{scope: scope} do
+      {:ok, link, :created} = Library.save_link(scope, "http://x.test/a")
+      assert :ok = perform(link)
+
+      assert {:ok, _link, :created} = Library.save_link(user_scope_fixture(), "https://x.test/a")
     end
   end
 

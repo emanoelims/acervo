@@ -216,7 +216,7 @@ defmodule AcervoWeb.LinkComponents do
       <div class="acts">
         <a
           id="link-open"
-          href={@link.canonical_url}
+          href={@link.resolved_url || @link.canonical_url}
           target="_blank"
           rel="noopener noreferrer"
           class="round"

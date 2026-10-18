@@ -12,6 +12,7 @@ defmodule Acervo.Library.Link do
   schema "links" do
     field :url, :string
     field :canonical_url, :string
+    field :resolved_url, :string
     field :source, Ecto.Enum, values: [:generic, :youtube, :instagram, :x]
     field :status, Ecto.Enum, values: [:pending, :processing, :ready, :failed], default: :pending
     field :capture_error, :string
@@ -54,10 +55,11 @@ defmodule Acervo.Library.Link do
       :published_at,
       :text_excerpt,
       :status,
-      :capture_error
+      :capture_error,
+      :resolved_url
     ])
     |> validate_length(:text_excerpt, max: 8000)
-    |> unique_constraint(:canonical_url, name: :links_user_id_canonical_url_index)
+    |> validate_length(:resolved_url, max: 2048)
   end
 
   defp truncate_captured(attrs) do
