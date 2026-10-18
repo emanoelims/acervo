@@ -89,7 +89,11 @@ defmodule AcervoWeb.Router do
       on_mount: [AcervoWeb.Locale, {AcervoWeb.UserAuth, :require_authenticated}] do
       live "/", ArchiveLive, :home
       live "/inbox", ArchiveLive, :inbox
+      live "/inbox/l/:id", ArchiveLive, :inbox_link
       live "/all", ArchiveLive, :all
+      live "/all/l/:id", ArchiveLive, :all_link
+      live "/c/:slug", ArchiveLive, :collection
+      live "/c/:slug/l/:id", ArchiveLive, :collection_link
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end

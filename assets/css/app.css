@@ -5,6 +5,7 @@
 @import "./components.css";
 @import "./auth.css";
 @import "./archive.css";
+@import "./links.css";
 @import "phoenix-colocated/acervo/colocated.css";
 @source "../css";
 @source "../js";

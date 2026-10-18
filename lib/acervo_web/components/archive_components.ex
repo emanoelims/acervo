@@ -12,11 +12,13 @@ defmodule AcervoWeb.ArchiveComponents do
 
   @doc """
   Renders one Finder-style column. Titled columns get a heading and the ↑ pill
-  that appears once the column scrolls, returning it to the top.
+  that appears once the column scrolls, returning it to the top. A changed
+  `key` (the item the column shows) scrolls the column back to the top.
   """
   attr :id, :string, required: true
   attr :title, :string, default: nil
   attr :class, :string, default: nil
+  attr :key, :string, default: nil
   slot :actions
   slot :inner_block, required: true
 
@@ -33,7 +35,7 @@ defmodule AcervoWeb.ArchiveComponents do
       >
         <.icon name="lucide-arrow-up" class="size-3.5" /><span>{@title}</span>
       </button>
-      <div class="column-scroll" id={"#{@id}-scroll"} phx-hook=".ColumnScroll">
+      <div class="column-scroll" id={"#{@id}-scroll"} data-key={@key} phx-hook=".ColumnScroll">
         <header :if={@title} class="column-head">
           <h2>
             <span class="column-title">{@title}</span><span class="chev" aria-hidden="true">›</span>
@@ -52,6 +54,12 @@ defmodule AcervoWeb.ArchiveComponents do
           this.el.addEventListener('scroll', this.onScroll, {passive: true})
           this.pill?.addEventListener('click', this.onPill)
           this.el.closest('.columns')?.scrollTo({left: 1e6, behavior: 'smooth'})
+          this.key = this.el.dataset.key
+        },
+        updated() {
+          if (this.el.dataset.key === this.key) return
+          this.key = this.el.dataset.key
+          this.el.scrollTo({top: 0})
         },
         destroyed() {
           this.el.removeEventListener('scroll', this.onScroll)
@@ -88,11 +96,13 @@ defmodule AcervoWeb.ArchiveComponents do
   end
 
   @doc "Renders a quiet empty-state line."
+  attr :id, :string, default: nil
+  attr :class, :any, default: nil
   slot :inner_block, required: true
 
   def empty(assigns) do
     ~H"""
-    <p class="empty">{render_slot(@inner_block)}</p>
+    <p id={@id} class={["empty", @class]}>{render_slot(@inner_block)}</p>
     """
   end
 
