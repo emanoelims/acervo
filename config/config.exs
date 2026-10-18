@@ -15,9 +15,6 @@ import Config
 # For production it's recommended to configure a different adapter
 # at the `config/runtime.exs`.
 config :acervo, Acervo.Mailer, adapter: Swoosh.Adapters.Local
-
-# Import environment specific config. This must remain at the bottom
-# of this file so it overrides the configuration defined above.
 config :acervo, Acervo.Repo, types: Acervo.PostgrexTypes
 
 # Configure the endpoint
@@ -76,4 +73,6 @@ config :tailwind,
     env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
   ]
 
+# Import environment specific config. This must remain at the bottom
+# of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"
