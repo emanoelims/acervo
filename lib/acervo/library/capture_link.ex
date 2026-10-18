@@ -8,7 +8,15 @@ defmodule Acervo.Library.CaptureLink do
   4xx) leave the link `:ready` with a `capture_error` and do not retry.
   Anything else (timeouts, transport errors, 5xx, an oversized body or an
   unexpected response) puts the link back to `:pending` and retries, ending
-  `:failed` on the last attempt. Every run broadcasts `{:link_updated, link}`.
+  `:failed` on the last attempt. An exception during the capture is logged
+  and handled as a transient error coded `"crashed"`. Every run broadcasts
+  `{:link_updated, link}`.
+
+  A run never leaves the link `:processing` on its own. A job killed mid-run
+  (by its timeout or a node restart rescued by `Oban.Plugins.Lifeline`) is
+  retried, and every run starts over whatever the link's status. When the
+  killed run was the last attempt, `Acervo.Library.ReapStuckCaptures` marks
+  the link `:failed`.
   """
   use Oban.Worker, queue: :capture, max_attempts: 5, unique: [period: 60, keys: [:link_id]]
 
@@ -32,6 +40,11 @@ defmodule Acervo.Library.CaptureLink do
   @max_image_bytes 15_000_000
   @permanent_errors [:blocked, :not_found, :not_html, :blocked_address, :bad_port, :invalid_url, :too_many_redirects]
 
+  @impl Oban.Worker
+  def timeout(_job), do: to_timeout(minute: 3)
+
+  # No status check here: a link left `:processing` by a killed run is
+  # captured again, like any retry.
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"link_id" => link_id}, attempt: attempt, max_attempts: max_attempts}) do
     case load(link_id) do
@@ -58,9 +71,32 @@ defmodule Acervo.Library.CaptureLink do
   # when the user typed a bare host.
   defp capture(scope, link, final_attempt?) do
     case update_link(link, %{status: :processing}) do
-      {:ok, link} -> extract(scope, link, final_attempt?)
+      {:ok, link} -> safely_extract(scope, link, final_attempt?)
       gone_or_error -> finish(gone_or_error, :ok)
     end
+  end
+
+  defp safely_extract(scope, link, final_attempt?) do
+    extract(scope, link, final_attempt?)
+  rescue
+    exception ->
+      log_crash(link, exception, __STACKTRACE__)
+      handle_error(link, :crashed, final_attempt?)
+  end
+
+  # Logs the exception's type and stacktrace only: its message and the call
+  # arguments could carry page content.
+  defp log_crash(link, exception, stacktrace) do
+    stacktrace =
+      Enum.map(stacktrace, fn
+        {module, fun, args, location} when is_list(args) -> {module, fun, length(args), location}
+        entry -> entry
+      end)
+
+    Logger.error(
+      "capture of link #{link.id} crashed with #{inspect(exception.__struct__)}\n" <>
+        Exception.format_stacktrace(stacktrace)
+    )
   end
 
   defp extract(scope, link, final_attempt?) do
@@ -86,32 +122,38 @@ defmodule Acervo.Library.CaptureLink do
       capture_error: nil
     }
 
-    link
-    |> Link.capture_changeset(attrs)
+    changeset = Link.capture_changeset(link, attrs)
+
+    changeset
     |> put_canonical_url(link, capture.canonical_url)
     |> save()
+    |> keep_canonical_if_taken(changeset)
     |> finish(:ok)
   end
 
-  # The page's own canonical URL replaces ours only when it is valid and no
-  # other link of this user has it, so the unique index never trips.
+  # The page's own canonical URL replaces ours when it is valid.
   defp put_canonical_url(changeset, _link, nil), do: changeset
 
   defp put_canonical_url(changeset, %Link{} = link, url) do
     with {:ok, canonical_url} <- URL.normalize(url),
-         true <- canonical_url != link.canonical_url and byte_size(canonical_url) <= 2048,
-         false <- canonical_taken?(link, canonical_url) do
+         true <- canonical_url != link.canonical_url and byte_size(canonical_url) <= 2048 do
       Ecto.Changeset.put_change(changeset, :canonical_url, canonical_url)
     else
       _ -> changeset
     end
   end
 
-  defp canonical_taken?(link, canonical_url) do
-    Repo.exists?(
-      from l in Link, where: l.user_id == ^link.user_id and l.canonical_url == ^canonical_url and l.id != ^link.id
-    )
+  # Another link of this user already has that canonical URL, so the unique
+  # index refused it: save the capture and keep ours. Relying on the index
+  # instead of checking first leaves no window for a concurrent save.
+  defp keep_canonical_if_taken({:error, %Ecto.Changeset{errors: errors}} = result, changeset) do
+    case errors[:canonical_url] do
+      {_, [constraint: :unique, constraint_name: _]} -> save(changeset)
+      _ -> result
+    end
   end
+
+  defp keep_canonical_if_taken(result, _changeset), do: result
 
   ## Images
 

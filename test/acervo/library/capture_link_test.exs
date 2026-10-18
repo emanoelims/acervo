@@ -4,6 +4,7 @@ defmodule Acervo.Library.CaptureLinkTest do
 
   import Acervo.AccountsFixtures
   import Acervo.LibraryFixtures
+  import ExUnit.CaptureLog
 
   alias Acervo.Library
   alias Acervo.Library.CaptureLink
@@ -116,6 +117,32 @@ defmodule Acervo.Library.CaptureLinkTest do
       assert :ok = perform(link)
       assert %Link{status: :ready, canonical_url: "https://example.com/posts/bees"} = Repo.get!(Link, link.id)
     end
+
+    test "keeps the canonical url when a concurrent save takes it before the update", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+      html = page_html([], "https://example.com/late")
+
+      # The response callback runs after the link is loaded and before the
+      # update, like a save of the same URL from another request.
+      Req.Test.stub(SafeFetch, fn conn ->
+        link_fixture(scope, "https://example.com/late")
+        conn |> Plug.Conn.put_resp_content_type("text/html") |> Plug.Conn.send_resp(200, html)
+      end)
+
+      assert :ok = perform(link)
+
+      assert %Link{status: :ready, title: "Bees", canonical_url: "https://example.com/posts/bees"} =
+               Repo.get!(Link, link.id)
+    end
+
+    test "a link left processing by a killed run is captured on retry", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+      Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [status: :processing])
+      stub_site(page_html([]), %{})
+
+      assert :ok = perform(link, attempt: 2)
+      assert %Link{status: :ready, title: "Bees"} = Repo.get!(Link, link.id)
+    end
   end
 
   describe "permanent errors" do
@@ -161,6 +188,33 @@ defmodule Acervo.Library.CaptureLinkTest do
       assert {:error, {:transport, :econnrefused}} = perform(link, attempt: 5)
       assert %Link{status: :failed, capture_error: "transport_econnrefused"} = Repo.get!(Link, link.id)
       assert_receive {:link_updated, %Link{status: :failed}}
+    end
+  end
+
+  describe "crashes" do
+    setup do
+      Req.Test.stub(SafeFetch, fn _conn -> raise "<p>secret page content</p>" end)
+      :ok
+    end
+
+    test "retry while attempts remain and log no page content", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+
+      log = capture_log(fn -> assert {:error, :crashed} = perform(link, attempt: 1) end)
+
+      assert %Link{status: :pending, capture_error: nil} = Repo.get!(Link, link.id)
+      assert_receive {:link_updated, %Link{status: :pending}}
+      assert log =~ "capture of link #{link.id} crashed with RuntimeError"
+      refute log =~ "secret page content"
+    end
+
+    test "fail on the final attempt", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+
+      capture_log(fn -> assert {:error, :crashed} = perform(link, attempt: 5) end)
+
+      assert %Link{status: :failed, capture_error: "crashed"} = Repo.get!(Link, link.id)
+      assert_receive {:link_updated, %Link{status: :failed, capture_error: "crashed"}}
     end
   end
 

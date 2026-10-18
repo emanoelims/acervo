@@ -46,7 +46,12 @@ defmodule Acervo.Library do
     end
   end
 
-  defp insert_link(%Scope{user: user} = scope, url, canonical_url) do
+  @doc false
+  # Inserts a link for `canonical_url` with its capture job. Public only so
+  # tests can exercise the lost race against a concurrent save.
+  @spec insert_link(Scope.t(), String.t(), String.t()) ::
+          {:ok, Link.t(), :created | :existing} | {:error, Ecto.Changeset.t()}
+  def insert_link(%Scope{user: user} = scope, url, canonical_url) do
     changeset =
       Link.create_changeset(%Link{user_id: user.id}, %{
         url: url,
@@ -89,7 +94,7 @@ defmodule Acervo.Library do
   Each link carries its collections and only its first image (position 0).
   """
   @spec list_links(Scope.t(), keyword()) :: [Link.t()]
-  def list_links(%Scope{user: user}, opts) do
+  def list_links(%Scope{user: user}, opts \\ []) do
     opts = Keyword.validate!(opts, filter: :all, limit: @default_limit)
     first_image = from i in images_query(), where: i.position == 0
 
@@ -147,7 +152,7 @@ defmodule Acervo.Library do
   @spec delete_link(Scope.t(), Link.t()) :: {:ok, Link.t()} | {:error, :not_found}
   def delete_link(%Scope{} = scope, %Link{} = link) do
     with {:ok, link} <- owned(scope, link),
-         {:ok, deleted} <- Repo.delete(link) do
+         {:ok, deleted} <- link |> preload_link() |> Repo.delete() do
       broadcast(scope, {:link_deleted, deleted})
       {:ok, deleted}
     end

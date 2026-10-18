@@ -54,6 +54,19 @@ defmodule Acervo.LibraryTest do
       assert {:ok, b, :created} = Library.save_link(other, "https://example.com/shared")
       assert a.id != b.id
     end
+
+    test "returns the winner when a concurrent save inserts the same url first", %{scope: scope} do
+      assert {:ok, winner, :created} = Library.save_link(scope, "https://example.com/race")
+      assert_receive {:link_created, _}
+
+      # The insert path after a lookup that found nothing, losing to the winner.
+      assert {:ok, %Link{} = link, :existing} =
+               Library.insert_link(scope, "https://example.com/race?again", "https://example.com/race")
+
+      assert link.id == winner.id
+      assert [_] = all_enqueued(worker: CaptureLink)
+      refute_receive {:link_created, _}
+    end
   end
 
   describe "isolation" do
@@ -70,8 +83,8 @@ defmodule Acervo.LibraryTest do
       other = user_scope_fixture()
       other_link = link_fixture(other)
 
-      assert [%Link{}] = Library.list_links(scope, [])
-      assert [%Link{id: id}] = Library.list_links(other, [])
+      assert [%Link{}] = Library.list_links(scope)
+      assert [%Link{id: id}] = Library.list_links(other)
       assert id == other_link.id
       assert Library.count_links(scope) == 1
       assert Library.count_inbox(scope) == 1
@@ -159,7 +172,7 @@ defmodule Acervo.LibraryTest do
       link = link_fixture(scope)
 
       assert {:ok, _} = Library.delete_link(scope, link)
-      assert_receive {:link_deleted, %Link{id: id}}
+      assert_receive {:link_deleted, %Link{id: id, images: [], collections: []}}
       assert id == link.id
       refute Repo.get(Link, link.id)
     end

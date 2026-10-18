@@ -57,6 +57,7 @@ defmodule Acervo.Library.Link do
       :capture_error
     ])
     |> validate_length(:text_excerpt, max: 8000)
+    |> unique_constraint(:canonical_url, name: :links_user_id_canonical_url_index)
   end
 
   defp truncate_captured(attrs) do
