@@ -7,6 +7,47 @@ This is a web application written using the Phoenix web framework.
 - Keep workflow Actions pinned to full commit SHAs and use least required permissions. Preserve the required check names `Conventions` and `Elixir checks` unless the repository's branch rules are updated alongside them
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
 
+### Tidewave MCP workflow
+
+- Follow the [official Tidewave MCP guide](https://tidewave.hexdocs.pm/mcp.md). When connected to this project's development server, use Tidewave proactively for runtime evaluation, installed documentation, database inspection, and request debugging; do not wait for the user to request it explicitly.
+- Use the server and tool definitions exposed in the current session. Tidewave runs only in development. Start the app with `mise run dev` when needed, and use the port supplied by mise (`4200` by default, overridden by `mise.local.toml`). Confirm the connection targets this checkout before inspecting runtime state, especially with multiple projects or worktrees.
+- If Tidewave tools are unavailable or a connection fails, report that limitation briefly and continue useful work with repository files, installed dependency sources, and mise commands. Do not claim a runtime or browser check was performed when it was not. Do not change the user's MCP registration or port merely to bypass a missing connection.
+
+#### Runtime, documentation, and source
+
+- Use `project_eval` for ad hoc Elixir evaluation inside the running app instead of shell evaluation or starting another app with `mix run`. Keep calls self-contained and pass input values through `arguments` when appropriate. Use it to inspect changesets, Ecto schema metadata via `__schema__/1,2`, process state, supervision, and application behavior. Prefer existing context APIs when exercising business operations.
+- Use `get_docs` first for known module, function, and callback references so documentation matches installed versions. References include `Acervo.Accounts`, `Ecto.Changeset.cast/4`, and `c:Phoenix.LiveView.mount/3`. Consult official external guides for broader topics or information not exposed by runtime docs.
+- Use `get_source_location` when the module or function name is known, including dependencies. Use `dep:phoenix` to locate a package. Use `rg` for discovery, text searches, and files without a known runtime reference, then read the relevant source. Elixir standard library source locations are not supported by this tool.
+- Use `get_logs` after reproducing a request or LiveView failure. Start with a small `tail` and narrow results using `grep` or `level`. Correlate logs with the action that produced them rather than treating old entries as evidence of the current change. Tool-triggered evaluation logs are excluded from this tool's output.
+
+#### Database inspection
+
+- Use `execute_sql_query` against `Acervo.Repo` for database structure, counts, and targeted record inspection. Select only needed columns, use SQL placeholders and `arguments` for values, and set explicit limits. Output is capped at 50 rows; paginate when necessary. Cast UUIDs with `id::text` when a readable value is needed.
+- Runtime evaluations and SQL calls use the development database, not ExUnit's SQL sandbox. Keep investigations read-only unless a data change is part of the authorized task. Use contexts and changesets for business changes, preserve validation and ownership rules, and do not dump password hashes, authentication tokens, cookies, or unrelated personal data into tool output.
+- Generate migrations with `mix ecto.gen.migration`; direct SQL is not a replacement for versioned schema changes.
+
+#### Browser and design
+
+- Use `browser_eval` for relevant UI checks when a Tidewave browser connection is available. Its first call must use the `help` action; read the returned API before using it. Use the correct returned session ID and this project's URL. Follow the tool's connection guidance if the browser needs the `/tidewave` control page.
+- Check the affected navigation, form validation, loading/error states, and responsive behavior as appropriate to the UI change. Browser observations complement LiveView and controller tests.
+- Use `create_design_canvas` when exploring visual alternatives would help the task. Supply a new absolute `.html` path under the project's ignored `tmp/` directory, then read the generated file's instructions before editing it. Implement the chosen design in Phoenix templates and bundled assets following the project's UI rules.
+
+#### Verification and multiple servers
+
+- Keep dependency management, generators, formatting, compilation, migrations, and ExUnit in their normal mise/Mix workflows. Runtime experiments do not replace `mix precommit`, coverage checks, regression tests, or reproducible changes in source control.
+- The repository's `.mcp.json` registers Tidewave for Claude Code at `http://localhost:${PORT:-4200}/tidewave/mcp`: it follows the `PORT` supplied by mise and falls back to `4200`. Claude Code reads `PORT` from the environment it was started in, so start it from a mise-activated shell and restart it after changing `PORT` in `mise.local.toml`. For simultaneous worktrees with different ports, Tidewave offers the optional `mix tidewave.proxy` STDIO task; read `mix help tidewave.proxy` before proposing a configuration change.
+
+### Official Elixir anti-patterns
+
+- Follow the [official anti-pattern guidance](https://elixir.hexdocs.pm/what-anti-patterns.md) when implementing and reviewing changes. Read the relevant category: [code](https://elixir.hexdocs.pm/code-anti-patterns.md), [design](https://elixir.hexdocs.pm/design-anti-patterns.md), [processes](https://elixir.hexdocs.pm/process-anti-patterns.md), or [metaprogramming](https://elixir.hexdocs.pm/macro-anti-patterns.md).
+- Apply the guidance in context, including its documented exceptions. An anti-pattern is a signal to investigate, not an automatic requirement to rewrite existing code. Keep refactoring within the requested scope.
+- Make input shapes, required map keys, and return contracts explicit. Prefer pattern matching and guards for internal invariants, deliberate optional-key access, and boolean operators for boolean contracts. Validate external input at boundaries and handle expected failures explicitly.
+- Keep error handling close to its source; avoid ambiguous `with` error translations, catch-all branches that hide unexpected results, and exceptions used for routine control flow. Preserve intentional bang APIs and Phoenix exceptions that represent HTTP responses.
+- Group related parameters and model structured domain data with suitable maps, tuples, or structs. Named types improve contracts but do not provide runtime validation. Avoid overlapping boolean states, unrelated function clauses, and options that obscure return shapes.
+- Use processes for runtime needs such as state ownership, concurrency, and fault isolation. Encapsulate process protocols, supervise long-lived workers, and extract only necessary data before capturing it in task closures.
+- Prefer functions to unnecessary macros; keep generated code small and compile-time dependencies explicit and tracked. Preserve legitimate framework `use` calls. Investigate recompilation or memory costs before prescribing performance refactors.
+- During code review, explain the affected contract, reachable failure, or concrete maintenance cost. Keep optional design suggestions separate from correctness findings; Credo and Dialyzer do not replace this contextual review.
+
 ### Phoenix v1.8 guidelines
 
 - **Always** begin your LiveView templates with `<Layouts.app flash={@flash} ...>` which wraps all inner content

@@ -7,7 +7,10 @@ pin explicitly when adopting a new release.
 
 Run `mise install`, then `mise run setup`. Start Phoenix with `mise run dev`.
 Before opening a PR, run `mise run precommit`, which executes `mix precommit`.
-Mise tasks automatically use the configured tools. For individual commands,
+In development, [Tidewave](https://tidewave.ai) is mounted at
+`/tidewave/mcp`, and the repository's `.mcp.json` registers it for Claude Code
+on the mise `PORT` (falling back to `4200`). Mise tasks automatically use the
+configured tools. For individual commands,
 use `mise exec -- mix <task>`. See the
 [mise documentation](https://mise.jdx.dev/getting-started.html) for installation
 and shell activation.
