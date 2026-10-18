@@ -11,8 +11,6 @@ defmodule AcervoWeb.CoreComponents do
   use Phoenix.Component
   use Gettext, backend: AcervoWeb.Gettext
 
-  import AcervoWeb.I18n, only: [t: 1]
-
   alias Phoenix.HTML.Form
   alias Phoenix.HTML.FormField
   alias Phoenix.LiveView.JS
@@ -57,7 +55,7 @@ defmodule AcervoWeb.CoreComponents do
       <summary
         id={@trigger_id}
         class={@trigger_class}
-        aria-label={t(@label)}
+        aria-label={@label}
         title={@title}
         aria-haspopup={if @menu, do: "menu", else: "dialog"}
         aria-controls={"#{@id}-panel"}
@@ -79,7 +77,7 @@ defmodule AcervoWeb.CoreComponents do
         id={"#{@id}-panel"}
         class={["floating-panel popover-panel", @panel_class]}
         role={if @menu, do: "menu", else: "dialog"}
-        aria-label={t(@label)}
+        aria-label={@label}
         phx-mounted={JS.ignore_attributes(["style", "data-placement", "data-positioned"])}
       >
         {render_slot(@inner_block)}
@@ -161,10 +159,10 @@ defmodule AcervoWeb.CoreComponents do
         <.icon :if={@kind == :error} name="lucide-thin-info" class="size-5 shrink-0" />
         <div>
           <p :if={@title} class="font-semibold">{@title}</p>
-          <p>{if is_binary(msg), do: t(msg), else: msg}</p>
+          <p>{msg}</p>
         </div>
         <div class="flex-1" />
-        <button type="button" class="icon-button self-start" aria-label={gettext("close")}>
+        <button type="button" class="icon-button self-start" aria-label={gettext("Close")}>
           <.icon name="lucide-thin-x" class="size-4" />
         </button>
       </div>
@@ -318,7 +316,7 @@ defmodule AcervoWeb.CoreComponents do
             aria-describedby={@described_by}
             class={@class || "field-check"}
             {@rest}
-          />{t(@label)}
+          />{@label}
         </span>
       </label>
       <div :if={@errors != []} id={@error_id} class="field-errors">
@@ -333,7 +331,7 @@ defmodule AcervoWeb.CoreComponents do
 
     ~H"""
     <div class="form-field">
-      <label :if={@label} for={@id} id={@id && "#{@id}-label"} class="field-label">{t(@label)}</label>
+      <label :if={@label} for={@id} id={@id && "#{@id}-label"} class="field-label">{@label}</label>
       <div class="field-select-control">
         <select
           id={@id}
@@ -344,7 +342,7 @@ defmodule AcervoWeb.CoreComponents do
           aria-describedby={@described_by}
           {@rest}
         >
-          <option :if={@prompt} value="">{t(@prompt)}</option>
+          <option :if={@prompt} value="">{@prompt}</option>
           {Phoenix.HTML.Form.options_for_select(@options, @value)}
         </select>
         <div
@@ -370,7 +368,7 @@ defmodule AcervoWeb.CoreComponents do
     ~H"""
     <div class="form-field">
       <label for={@id}>
-        <span :if={@label} class="field-label">{t(@label)}</span>
+        <span :if={@label} class="field-label">{@label}</span>
         <textarea
           id={@id}
           name={@name}
@@ -397,7 +395,7 @@ defmodule AcervoWeb.CoreComponents do
     ~H"""
     <div class="form-field">
       <label for={@id}>
-        <span :if={@label} class="field-label">{t(@label)}</span>
+        <span :if={@label} class="field-label">{@label}</span>
         <input
           type={@type}
           name={@name}

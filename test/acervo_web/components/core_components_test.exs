@@ -37,4 +37,35 @@ defmodule AcervoWeb.CoreComponentsTest do
     html = render_component(&CoreComponents.icon/1, name: "acervo-mark")
     assert html |> LazyHTML.from_fragment() |> LazyHTML.filter("svg.acervo-mark") |> Enum.count() == 1
   end
+
+  test "input with an error sets aria-invalid and points aria-describedby at the error" do
+    form = Phoenix.Component.to_form(%{"email" => ""}, errors: [email: {"can't be blank", []}])
+    assigns = %{field: form[:email]}
+
+    html = rendered_to_string(~H|<CoreComponents.input field={@field} type="email" />|)
+    doc = LazyHTML.from_fragment(html)
+
+    input = LazyHTML.query(doc, "input[type=email]")
+    assert LazyHTML.attribute(input, "aria-invalid") == ["true"]
+    [described_by] = LazyHTML.attribute(input, "aria-describedby")
+
+    errors = LazyHTML.query(doc, "[id='#{described_by}'] .field-error")
+    assert errors |> LazyHTML.text() |> String.contains?("can't be blank")
+  end
+
+  test "popover uses the caller-translated label for title and aria-label" do
+    assigns = %{}
+
+    html =
+      rendered_to_string(~H"""
+      <CoreComponents.popover id="p" label="Abrir">
+        <:trigger>x</:trigger>
+        Panel
+      </CoreComponents.popover>
+      """)
+
+    summary = html |> LazyHTML.from_fragment() |> LazyHTML.query("summary#p-trigger")
+    assert LazyHTML.attribute(summary, "title") == ["Abrir"]
+    assert LazyHTML.attribute(summary, "aria-label") == ["Abrir"]
+  end
 end
