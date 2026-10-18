@@ -16,7 +16,7 @@ msgstr ""
 msgid "A link to confirm the new email was sent."
 msgstr "Enviamos um link para confirmar o novo e-mail."
 
-#: lib/acervo_web/live/user_live/registration.ex:62
+#: lib/acervo_web/live/user_live/registration.ex:56
 #, elixir-autogen, elixir-format
 msgid "A sign-in link was sent to %{email}."
 msgstr "Enviamos um link de acesso para %{email}."
@@ -139,13 +139,13 @@ msgstr "Que bom te ver de novo."
 msgid "Welcome to Acervo."
 msgstr "Boas-vindas ao Acervo."
 
-#: lib/acervo_web/user_auth.ex:226
-#: lib/acervo_web/user_auth.ex:275
+#: lib/acervo_web/user_auth.ex:227
+#: lib/acervo_web/user_auth.ex:276
 #, elixir-autogen, elixir-format
 msgid "You must log in to access this page."
 msgstr "Entre para acessar esta página."
 
-#: lib/acervo_web/user_auth.ex:241
+#: lib/acervo_web/user_auth.ex:242
 #, elixir-autogen, elixir-format
 msgid "You must re-authenticate to access this page."
 msgstr "Entre novamente para acessar esta página."
@@ -157,7 +157,7 @@ msgstr "Destaque"
 
 #: lib/acervo_web/live/archive_live.ex:46
 #: lib/acervo_web/live/archive_live.ex:55
-#: lib/acervo_web/live/archive_live.ex:77
+#: lib/acervo_web/live/archive_live.ex:82
 #, elixir-autogen, elixir-format
 msgid "All"
 msgstr "Tudo"
@@ -191,7 +191,7 @@ msgstr "Grafite"
 #: lib/acervo_web/components/archive_components.ex:124
 #: lib/acervo_web/live/archive_live.ex:38
 #: lib/acervo_web/live/archive_live.ex:51
-#: lib/acervo_web/live/archive_live.ex:76
+#: lib/acervo_web/live/archive_live.ex:81
 #, elixir-autogen, elixir-format
 msgid "Inbox"
 msgstr "Caixa de entrada"
@@ -221,7 +221,7 @@ msgstr "Navegação"
 msgid "Night"
 msgstr "Noite"
 
-#: lib/acervo_web/live/archive_live.ex:70
+#: lib/acervo_web/live/archive_live.ex:75
 #, elixir-autogen, elixir-format
 msgid "No links"
 msgstr "Nenhum link"
@@ -236,7 +236,7 @@ msgstr "Nada salvo ainda."
 msgid "Nothing waiting."
 msgstr "Nada esperando."
 
-#: lib/acervo_web/live/archive_live.ex:71
+#: lib/acervo_web/live/archive_live.ex:76
 #, elixir-autogen, elixir-format
 msgid "One link"
 msgid_plural "%{count} links"
@@ -278,14 +278,49 @@ msgstr "Tema"
 msgid "Vermilion"
 msgstr "Vermelhão"
 
-#: lib/acervo_web/live/archive_live.ex:73
+#: lib/acervo_web/live/archive_live.ex:78
 #, elixir-autogen, elixir-format
 msgid "no collections"
 msgstr "nenhuma coleção"
 
-#: lib/acervo_web/live/archive_live.ex:74
+#: lib/acervo_web/live/archive_live.ex:79
 #, elixir-autogen, elixir-format
 msgid "one collection"
 msgid_plural "%{count} collections"
 msgstr[0] "uma coleção"
 msgstr[1] "%{count} coleções"
+
+#: lib/acervo/accounts/user_notifier.ex:88
+#, elixir-autogen, elixir-format
+msgid "Confirm your account"
+msgstr "Confirme sua conta"
+
+#: lib/acervo/accounts/user_notifier.ex:38
+#, elixir-autogen, elixir-format
+msgid "Confirm your new email"
+msgstr "Confirme seu novo e-mail"
+
+#: lib/acervo/accounts/user_notifier.ex:39
+#, elixir-autogen, elixir-format
+msgid "Hi %{email},\n\nOpen the link below to change your email:\n\n%{url}\n\nIf you didn't ask for this, you can ignore this message.\n"
+msgstr "Olá, %{email},\n\nAbra o link abaixo para alterar seu e-mail:\n\n%{url}\n\nSe não foi você, ignore esta mensagem.\n"
+
+#: lib/acervo/accounts/user_notifier.ex:89
+#, elixir-autogen, elixir-format
+msgid "Hi %{email},\n\nOpen the link below to confirm your account:\n\n%{url}\n\nIf you didn't create an account, you can ignore this message.\n"
+msgstr "Olá, %{email},\n\nAbra o link abaixo para confirmar sua conta:\n\n%{url}\n\nSe você não criou uma conta, ignore esta mensagem.\n"
+
+#: lib/acervo/accounts/user_notifier.ex:69
+#, elixir-autogen, elixir-format
+msgid "Hi %{email},\n\nOpen the link below to sign in:\n\n%{url}\n\nIf you didn't ask for this, you can ignore this message.\n"
+msgstr "Olá, %{email},\n\nAbra o link abaixo para entrar:\n\n%{url}\n\nSe não foi você, ignore esta mensagem.\n"
+
+#: lib/acervo_web/live/user_live/registration.ex:62
+#, elixir-autogen, elixir-format
+msgid "We couldn't send the email. Try again in a moment."
+msgstr "Não foi possível enviar o e-mail. Tente de novo em instantes."
+
+#: lib/acervo/accounts/user_notifier.ex:68
+#, elixir-autogen, elixir-format
+msgid "Your sign-in link"
+msgstr "Seu link de acesso"

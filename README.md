@@ -13,7 +13,7 @@ for commit, changelog, and release conventions, and [CHANGELOG.md](CHANGELOG.md)
 
 Now you can visit [`localhost:4200`](http://localhost:4200) from your browser.
 
-Ready to run in production? Please [check our deployment guides](https://phoenix.hexdocs.pm/deployment.html).
+Ready to run in production? Please see the [deployment guide](guides/deployment.md).
 
 ## Learn more
 

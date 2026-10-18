@@ -206,9 +206,26 @@ defmodule Acervo.Accounts do
   Delivers the magic link login instructions to the given user.
   """
   def deliver_login_instructions(%User{} = user, magic_link_url_fun) when is_function(magic_link_url_fun, 1) do
-    {encoded_token, user_token} = UserToken.build_email_token(user, "login")
-    Repo.insert!(user_token)
-    UserNotifier.deliver_login_instructions(user, magic_link_url_fun.(encoded_token))
+    if recent_login_token?(user) do
+      # Throttled: behave as if sent, so callers cannot tell the difference.
+      {:ok, :throttled}
+    else
+      {encoded_token, user_token} = UserToken.build_email_token(user, "login")
+      Repo.insert!(user_token)
+      UserNotifier.deliver_login_instructions(user, magic_link_url_fun.(encoded_token))
+    end
+  end
+
+  @login_throttle_seconds 60
+
+  defp recent_login_token?(%User{id: user_id}) do
+    Repo.exists?(
+      from(t in UserToken,
+        where:
+          t.user_id == ^user_id and t.context == "login" and
+            t.inserted_at > ago(@login_throttle_seconds, "second")
+      )
+    )
   end
 
   @doc """

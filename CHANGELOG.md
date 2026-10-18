@@ -5,6 +5,21 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Flash notices were invisible; they now show above the dock, with their own
+  error icon.
+- Logging out lands on the sign-in page instead of an access error.
+- The first paint follows a dark system theme on `auto`, with no light flash.
+- A failed email delivery shows an error instead of crashing registration.
+- Sign-in links are sent at most once a minute per account.
+
+### Security
+
+- Session and remember-me cookies are `Secure` in production.
+- Content Security Policy on browser pages.
+- Language switch redirects are validated by Phoenix and keep the query string.
+
 ### Added
 
 - Column navigation with the inbox, all links and a floating dock with

@@ -307,5 +307,21 @@ defmodule Acervo.AccountsTest do
       assert user_token.sent_to == user.email
       assert user_token.context == "login"
     end
+
+    test "does not send a second email within 60 seconds", %{user: user} do
+      assert {:ok, %Swoosh.Email{}} = Accounts.deliver_login_instructions(user, &"[TOKEN]#{&1}[TOKEN]")
+      assert_received {:email, _}
+
+      assert {:ok, :throttled} = Accounts.deliver_login_instructions(user, &"[TOKEN]#{&1}[TOKEN]")
+      refute_received {:email, _}
+      assert Repo.aggregate(from(t in UserToken, where: t.user_id == ^user.id and t.context == "login"), :count) == 1
+    end
+
+    test "sends again once the previous token is older than 60 seconds", %{user: user} do
+      {:ok, _} = Accounts.deliver_login_instructions(user, &"[TOKEN]#{&1}[TOKEN]")
+      Repo.update_all(UserToken, set: [inserted_at: DateTime.shift(DateTime.utc_now(), second: -61)])
+
+      assert {:ok, %Swoosh.Email{}} = Accounts.deliver_login_instructions(user, &"[TOKEN]#{&1}[TOKEN]")
+    end
   end
 end

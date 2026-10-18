@@ -3,6 +3,21 @@ defmodule AcervoWeb.Router do
 
   import AcervoWeb.UserAuth
 
+  @content_security_policy Enum.join(
+                             [
+                               "default-src 'self'",
+                               "img-src 'self' data: blob:",
+                               "script-src 'self'",
+                               "style-src 'self' 'unsafe-inline'",
+                               "font-src 'self'",
+                               "connect-src 'self' ws: wss:",
+                               "frame-ancestors 'self'",
+                               "base-uri 'self'",
+                               "form-action 'self'"
+                             ],
+                             "; "
+                           )
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -10,7 +25,7 @@ defmodule AcervoWeb.Router do
     plug AcervoWeb.Locale
     plug :put_root_layout, html: {AcervoWeb.Layouts, :root}
     plug :protect_from_forgery
-    plug :put_secure_browser_headers
+    plug :put_secure_browser_headers, %{"content-security-policy" => @content_security_policy}
     plug :fetch_current_scope_for_user
   end
 
@@ -57,7 +72,7 @@ defmodule AcervoWeb.Router do
     pipe_through [:browser, :require_authenticated_user]
 
     live_session :require_authenticated_user,
-      on_mount: [{AcervoWeb.UserAuth, :require_authenticated}, AcervoWeb.Locale] do
+      on_mount: [AcervoWeb.Locale, {AcervoWeb.UserAuth, :require_authenticated}] do
       live "/", ArchiveLive, :home
       live "/inbox", ArchiveLive, :inbox
       live "/all", ArchiveLive, :all
@@ -70,7 +85,7 @@ defmodule AcervoWeb.Router do
     pipe_through [:browser]
 
     live_session :current_user,
-      on_mount: [{AcervoWeb.UserAuth, :mount_current_scope}, AcervoWeb.Locale] do
+      on_mount: [AcervoWeb.Locale, {AcervoWeb.UserAuth, :mount_current_scope}] do
       live "/users/register", UserLive.Registration, :new
       live "/users/log-in", UserLive.Login, :new
       live "/users/log-in/:token", UserLive.Confirmation, :new

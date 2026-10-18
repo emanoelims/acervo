@@ -98,4 +98,27 @@ defmodule AcervoWeb.UserLive.RegistrationTest do
       assert login_html =~ "Send link"
     end
   end
+
+  describe "when the mailer fails" do
+    setup do
+      original = Application.fetch_env!(:acervo, Acervo.Mailer)
+      Application.put_env(:acervo, Acervo.Mailer, adapter: Acervo.FailingMailAdapter)
+      on_exit(fn -> Application.put_env(:acervo, Acervo.Mailer, original) end)
+    end
+
+    @tag capture_log: true
+    test "keeps the account and shows an error flash", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/users/register")
+      email = unique_user_email()
+
+      {:ok, _lv, html} =
+        lv
+        |> form("#registration_form", user: valid_user_attributes(email: email))
+        |> render_submit()
+        |> follow_redirect(conn, ~p"/users/log-in")
+
+      assert html =~ "We couldn&#39;t send the email"
+      assert Acervo.Accounts.get_user_by_email(email)
+    end
+  end
 end

@@ -12,11 +12,9 @@ defmodule AcervoWeb.LocaleController do
     |> redirect(to: safe_path(params["return_to"]))
   end
 
-  # Only same-origin absolute paths: rejects "//host", backslashes and newlines.
-  defp safe_path("/" <> _ = path) do
-    if String.starts_with?(path, "//") or String.contains?(path, ["\\", "\n", "\r"]),
-      do: "/",
-      else: path
+  # Only same-origin local paths (a query string is fine), validated by Phoenix.
+  defp safe_path(path) when is_binary(path) do
+    if Phoenix.URL.classify_local_path(path) == :ok, do: path, else: "/"
   end
 
   defp safe_path(_), do: "/"

@@ -19,6 +19,9 @@ config :acervo, AcervoWeb.Endpoint,
     ]
   ]
 
+# Session and remember-me cookies are only sent over HTTPS.
+config :acervo, :secure_cookies, true
+
 # Do not print debug messages in production
 config :logger, level: :info
 

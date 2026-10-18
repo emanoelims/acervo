@@ -16,7 +16,7 @@ msgstr ""
 msgid "A link to confirm the new email was sent."
 msgstr ""
 
-#: lib/acervo_web/live/user_live/registration.ex:62
+#: lib/acervo_web/live/user_live/registration.ex:56
 #, elixir-autogen, elixir-format
 msgid "A sign-in link was sent to %{email}."
 msgstr ""
@@ -139,13 +139,13 @@ msgstr ""
 msgid "Welcome to Acervo."
 msgstr ""
 
-#: lib/acervo_web/user_auth.ex:226
-#: lib/acervo_web/user_auth.ex:275
+#: lib/acervo_web/user_auth.ex:227
+#: lib/acervo_web/user_auth.ex:276
 #, elixir-autogen, elixir-format
 msgid "You must log in to access this page."
 msgstr ""
 
-#: lib/acervo_web/user_auth.ex:241
+#: lib/acervo_web/user_auth.ex:242
 #, elixir-autogen, elixir-format
 msgid "You must re-authenticate to access this page."
 msgstr ""
@@ -157,7 +157,7 @@ msgstr ""
 
 #: lib/acervo_web/live/archive_live.ex:46
 #: lib/acervo_web/live/archive_live.ex:55
-#: lib/acervo_web/live/archive_live.ex:77
+#: lib/acervo_web/live/archive_live.ex:82
 #, elixir-autogen, elixir-format
 msgid "All"
 msgstr ""
@@ -191,7 +191,7 @@ msgstr ""
 #: lib/acervo_web/components/archive_components.ex:124
 #: lib/acervo_web/live/archive_live.ex:38
 #: lib/acervo_web/live/archive_live.ex:51
-#: lib/acervo_web/live/archive_live.ex:76
+#: lib/acervo_web/live/archive_live.ex:81
 #, elixir-autogen, elixir-format
 msgid "Inbox"
 msgstr ""
@@ -221,7 +221,7 @@ msgstr ""
 msgid "Night"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:70
+#: lib/acervo_web/live/archive_live.ex:75
 #, elixir-autogen, elixir-format
 msgid "No links"
 msgstr ""
@@ -236,7 +236,7 @@ msgstr ""
 msgid "Nothing waiting."
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:71
+#: lib/acervo_web/live/archive_live.ex:76
 #, elixir-autogen, elixir-format
 msgid "One link"
 msgid_plural "%{count} links"
@@ -278,14 +278,49 @@ msgstr ""
 msgid "Vermilion"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:73
+#: lib/acervo_web/live/archive_live.ex:78
 #, elixir-autogen, elixir-format
 msgid "no collections"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:74
+#: lib/acervo_web/live/archive_live.ex:79
 #, elixir-autogen, elixir-format
 msgid "one collection"
 msgid_plural "%{count} collections"
 msgstr[0] ""
 msgstr[1] ""
+
+#: lib/acervo/accounts/user_notifier.ex:88
+#, elixir-autogen, elixir-format
+msgid "Confirm your account"
+msgstr ""
+
+#: lib/acervo/accounts/user_notifier.ex:38
+#, elixir-autogen, elixir-format
+msgid "Confirm your new email"
+msgstr ""
+
+#: lib/acervo/accounts/user_notifier.ex:39
+#, elixir-autogen, elixir-format
+msgid "Hi %{email},\n\nOpen the link below to change your email:\n\n%{url}\n\nIf you didn't ask for this, you can ignore this message.\n"
+msgstr ""
+
+#: lib/acervo/accounts/user_notifier.ex:89
+#, elixir-autogen, elixir-format
+msgid "Hi %{email},\n\nOpen the link below to confirm your account:\n\n%{url}\n\nIf you didn't create an account, you can ignore this message.\n"
+msgstr ""
+
+#: lib/acervo/accounts/user_notifier.ex:69
+#, elixir-autogen, elixir-format
+msgid "Hi %{email},\n\nOpen the link below to sign in:\n\n%{url}\n\nIf you didn't ask for this, you can ignore this message.\n"
+msgstr ""
+
+#: lib/acervo_web/live/user_live/registration.ex:62
+#, elixir-autogen, elixir-format
+msgid "We couldn't send the email. Try again in a moment."
+msgstr ""
+
+#: lib/acervo/accounts/user_notifier.ex:68
+#, elixir-autogen, elixir-format
+msgid "Your sign-in link"
+msgstr ""
