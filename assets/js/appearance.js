@@ -13,7 +13,10 @@ let swap = null
 
 const resolved = theme => theme === 'auto' ? (system.matches ? 'dark' : 'studio') : theme
 const read = () => {
-  try {return JSON.parse(localStorage.getItem(KEY) || '{}')} catch (_) {return {}}
+  try {
+    const value = JSON.parse(localStorage.getItem(KEY) || '{}')
+    return value && typeof value === 'object' ? value : {}
+  } catch (_) {return {}}
 }
 const valid = prefs => Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>
   [k, OPTIONS[k].includes(prefs[k]) ? prefs[k] : d]))
@@ -34,8 +37,10 @@ export const appearance = () => ({...state})
 export const initializeAppearance = () => {
   apply(valid(read()))
   system.addEventListener('change', () => {if (state.theme === 'auto') apply(state)})
-  window.addEventListener('acervo:appearance', ({detail, target}) =>
-    setAppearance(detail.key, detail.value, target?.closest?.('button')))
+  window.addEventListener('acervo:appearance', ({detail, target}) => {
+    if (!detail) return
+    setAppearance(detail.key, detail.value, target?.closest?.('button'))
+  })
 }
 
 export const setAppearance = (key, value, origin) => {
