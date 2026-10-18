@@ -15,6 +15,7 @@ import Config
 # For production it's recommended to configure a different adapter
 # at the `config/runtime.exs`.
 config :acervo, Acervo.Mailer, adapter: Swoosh.Adapters.Local
+config :acervo, Acervo.Repo, types: Acervo.PostgrexTypes
 
 # Configure the endpoint
 config :acervo, AcervoWeb.Endpoint,
@@ -26,6 +27,12 @@ config :acervo, AcervoWeb.Endpoint,
   ],
   pubsub_server: Acervo.PubSub,
   live_view: [signing_salt: "+6cU70Fy"]
+
+config :acervo, Oban,
+  engine: Oban.Engines.Basic,
+  repo: Acervo.Repo,
+  queues: [capture: 4, ai: 2, embed: 4],
+  plugins: [{Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7}]
 
 config :acervo,
   ecto_repos: [Acervo.Repo],
