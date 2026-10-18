@@ -5,34 +5,37 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Fixed
+## [0.2.0] - 2026-10-18
 
-- Flash notices were invisible; they now show above the dock, with their own
-  error icon.
-- Logging out lands on the sign-in page instead of an access error.
-- The first paint follows a dark system theme on `auto`, with no light flash.
-- A failed email delivery shows an error instead of crashing registration.
-- Sign-in links are sent at most once a minute per account.
+First published release: the foundation of the link archive, before capture,
+AI organization and search.
+
+### Added
+
+- Column navigation inspired by the Finder, with the inbox, all links and a
+  floating dock with appearance and language settings.
+- The `studio` theme (default) plus leitor's light, sepia, snow, dark and ink
+  themes, four accents and four fonts, chosen per browser. The first paint
+  follows a dark system theme on `auto`.
+- Portuguese (default) and English interface and emails.
+- Email magic-link sign-in, with registration limited to
+  `ACERVO_ALLOWED_EMAILS` and sign-in links sent at most once a minute.
+- Postgres 18 with `citext`, `unaccent` and `vector` (pgvector), and Oban
+  background jobs.
+- Fly release images deployed only from stable GitHub releases, a `/health`
+  readiness check, and the deployment guide.
+- Contribution, security and deployment documentation; CI validating
+  Conventional Commit PR titles, release versions, formatting, Credo and tests.
 
 ### Security
 
 - Session and remember-me cookies are `Secure` in production.
-- Content Security Policy on browser pages.
-- Language switch redirects are validated by Phoenix and keep the query string.
+- Content Security Policy on application pages.
+- Language switch redirects only to local paths.
 
-### Added
+### Migration
 
-- Column navigation with the inbox, all links and a floating dock with
-  appearance and language settings.
-- Portuguese (default) and English interface.
-- Email magic-link sign-in, with registration limited to
-  `ACERVO_ALLOWED_EMAILS`.
-- The `studio` theme and leitor's themes, accents and fonts, chosen per browser.
-- Postgres extensions (`citext`, `unaccent`, `vector`) and Oban background
-  jobs.
-- Phoenix 1.8 application skeleton with PostgreSQL, LiveView, and Tailwind CSS.
-- Mise-managed Elixir and Erlang versions, a shared `PORT` default of `4200`,
-  and git-ignored `mise.local.toml` overrides for local secrets.
-- `ANTHROPIC_API_KEY` runtime configuration, required in production.
-- MIT license, contribution and security guides, issue and PR templates, and
-  CI validating Conventional Commit PR titles, release versions, and Elixir checks.
+First deployment to `acervo-app`. Migrations create users and tokens and the
+Oban tables; the `citext`, `unaccent` and `vector` extensions must already
+exist in the `acervo` database, created by the cluster superuser as described
+in the deployment guide. Configure the secrets listed there before publishing.
