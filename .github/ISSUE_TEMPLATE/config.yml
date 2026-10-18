@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup and contribution guide
+    url: https://github.com/emanoelims/acervo/blob/main/CONTRIBUTING.md
+    about: Check setup, conventions, and development checks before opening an issue.
+  - name: Private security report
+    url: https://github.com/emanoelims/acervo/security/advisories/new
+    about: Report vulnerabilities privately. Do not include secrets in public issues.

@@ -1,0 +1,42 @@
+name: Bug report
+description: Report unexpected application behavior with reproduction steps.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Application version or commit
+      placeholder: Version from mix.exs or the commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include Elixir/OTP versions, operating system, browser, and PostgreSQL version as relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Describe the smallest reproducible flow and any required setup.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or screenshots
+      description: Remove passwords, tokens, cookies, personal data, and other secrets before sharing.

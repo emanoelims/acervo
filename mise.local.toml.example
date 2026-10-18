@@ -1,0 +1,4 @@
+# Copie para `mise.local.toml` (gitignored) e preencha os valores.
+# O mise carrega este arquivo automaticamente por cima do `mise.toml`.
+[env]
+ANTHROPIC_API_KEY = ""
