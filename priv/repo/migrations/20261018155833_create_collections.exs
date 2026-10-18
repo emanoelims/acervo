@@ -6,8 +6,8 @@ defmodule Acervo.Repo.Migrations.CreateCollections do
       add :id, :binary_id, primary_key: true
       add :user_id, references(:users, type: :binary_id, on_delete: :delete_all), null: false
       add :name, :string, size: 80, null: false
-      add :slug, :string, size: 80, null: false
-      add :description, :string, size: 280
+      add :slug, :string, size: 120, null: false
+      add :description, :text
       add :position, :integer, null: false, default: 0
 
       timestamps(type: :utc_datetime)

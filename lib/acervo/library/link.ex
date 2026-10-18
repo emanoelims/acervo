@@ -40,7 +40,11 @@ defmodule Acervo.Library.Link do
     |> unique_constraint(:canonical_url, name: :links_user_id_canonical_url_index)
   end
 
+  @truncations [title: 500, description: 2000, author: 200, site_name: 200, capture_error: 200, text_excerpt: 8000]
+
   def capture_changeset(link, attrs) do
+    attrs = truncate_captured(attrs)
+
     link
     |> cast(attrs, [
       :title,
@@ -53,6 +57,27 @@ defmodule Acervo.Library.Link do
       :capture_error
     ])
     |> validate_length(:text_excerpt, max: 8000)
+  end
+
+  defp truncate_captured(attrs) do
+    Map.new(attrs, fn {key, value} -> {key, truncate(key, value)} end)
+  end
+
+  defp truncate(key, value) when is_binary(value) do
+    case List.keyfind(@truncations, to_existing_key(key), 0) do
+      {_, max} -> String.slice(value, 0, max)
+      nil -> value
+    end
+  end
+
+  defp truncate(_key, value), do: value
+
+  defp to_existing_key(key) when is_atom(key), do: key
+
+  defp to_existing_key(key) when is_binary(key) do
+    String.to_existing_atom(key)
+  rescue
+    ArgumentError -> nil
   end
 
   def note_changeset(link, attrs) do

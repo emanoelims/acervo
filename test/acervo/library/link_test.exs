@@ -75,9 +75,36 @@ defmodule Acervo.Library.LinkTest do
       assert changeset.changes.title == "T"
     end
 
-    test "limits text_excerpt to 8000 characters" do
+    test "truncates text_excerpt to 8000 characters" do
       changeset = Link.capture_changeset(%Link{}, %{text_excerpt: String.duplicate("a", 8001)})
-      assert [_] = errors_on(changeset).text_excerpt
+      assert changeset.valid?
+      assert String.length(changeset.changes.text_excerpt) == 8000
+    end
+
+    test "stores long captured values truncated without raising" do
+      user = user_fixture()
+      {:ok, link} = %Link{user_id: user.id} |> Link.create_changeset(@valid) |> Repo.insert()
+
+      attrs = %{title: String.duplicate("t", 10_000), author: String.duplicate("a", 1_000)}
+      assert {:ok, saved} = link |> Link.capture_changeset(attrs) |> Repo.update()
+      saved = Repo.reload!(saved)
+
+      assert String.length(saved.title) == 500
+      assert String.length(saved.author) == 200
+    end
+
+    test "inserts a link with long captured values truncated" do
+      user = user_fixture()
+      attrs = Map.merge(@valid, %{title: String.duplicate("t", 10_000), author: String.duplicate("a", 1_000)})
+
+      assert {:ok, saved} =
+               %Link{user_id: user.id}
+               |> Link.create_changeset(@valid)
+               |> Link.capture_changeset(attrs)
+               |> Repo.insert()
+
+      assert String.length(saved.title) == 500
+      assert String.length(saved.author) == 200
     end
 
     test "does not cast url" do

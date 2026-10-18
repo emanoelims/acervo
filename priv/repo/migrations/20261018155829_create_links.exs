@@ -9,11 +9,11 @@ defmodule Acervo.Repo.Migrations.CreateLinks do
       add :canonical_url, :string, size: 2048, null: false
       add :source, :string, null: false
       add :status, :string, null: false, default: "pending"
-      add :capture_error, :string
+      add :capture_error, :text
       add :title, :text
       add :description, :text
-      add :author, :string
-      add :site_name, :string
+      add :author, :text
+      add :site_name, :text
       add :published_at, :utc_datetime
       add :text_excerpt, :text
       add :note, :text
