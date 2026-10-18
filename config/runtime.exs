@@ -91,7 +91,7 @@ if config_env() == :prod do
   System.get_env("ACERVO_ALLOWED_EMAILS") ||
     raise "environment variable ACERVO_ALLOWED_EMAILS is missing (comma-separated emails allowed to register)"
 
-  host = System.get_env("PHX_HOST") || "example.com"
+  host = System.get_env("PHX_HOST") || "acervo.fly.dev"
 
   config :acervo, Acervo.Mailer,
     adapter: Swoosh.Adapters.Resend,

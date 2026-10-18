@@ -18,6 +18,11 @@ defmodule AcervoWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # Readiness probe for Fly: no pipeline, because the check sends no cookies or CSRF token.
+  scope "/", AcervoWeb do
+    get "/health", HealthController, :show
+  end
+
   scope "/", AcervoWeb do
     pipe_through :browser
 
