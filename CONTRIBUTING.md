@@ -108,7 +108,8 @@ release tags.
 
 Deployment is driven by releases: only a published, stable GitHub release
 deploys to production. Pushes to `main`, tags, drafts, and prereleases do not
-deploy. The deploy workflow will be added together with the production target.
+deploy. See the
+[deployment guide](guides/deployment.md).
 This application is not published as a Hex package.
 
 ## Elixir and Phoenix
