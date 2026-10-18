@@ -1617,7 +1617,7 @@ identical apart from the names.
 `fly.toml`:
 
 ```toml
-app = "acervo"
+app = "acervo-app"
 primary_region = "gru"
 kill_signal = "SIGTERM"
 kill_timeout = "30s"
@@ -1630,11 +1630,11 @@ kill_timeout = "30s"
   release_command_timeout = "5m"
 
 [env]
-  PHX_HOST = "acervo.fly.dev"
+  PHX_HOST = "acervo-app.fly.dev"
   PORT = "8080"
   POOL_SIZE = "5"
   ECTO_IPV6 = "true"
-  DNS_CLUSTER_QUERY = "acervo.internal"
+  DNS_CLUSTER_QUERY = "acervo-app.internal"
 
 [http_service]
   internal_port = 8080
@@ -1660,11 +1660,11 @@ kill_timeout = "30s"
 ```
 
 In `config/runtime.exs`, change the prod `host` fallback from `"example.com"`
-to `"acervo.fly.dev"`.
+to `"acervo-app.fly.dev"`.
 
 `.github/workflows/deploy.yml`: copy `$L/.github/workflows/deploy.yml` and
 - delete the "Deploy the private figure checker" step;
-- replace `leitor.fly.dev` with `acervo.fly.dev`;
+- replace `leitor.fly.dev` with `acervo-app.fly.dev`;
 - set the Actions SHAs (`actions/checkout`, `superfly/flyctl-actions/setup-flyctl`)
   to the ones `ci.yml` and leitor use, with the same `version: '0.4.116'` pin
   for flyctl.
@@ -1752,11 +1752,11 @@ gh run watch $(gh run list --workflow deploy.yml --limit 1 --json databaseId --j
 ```
 
 Expected: the `Deploy release` workflow passes, and
-`curl -fsS https://acervo.fly.dev/health` returns `{"status":"ok"}`.
+`curl -fsS https://acervo-app.fly.dev/health` returns `{"status":"ok"}`.
 
 - [ ] **Step 5: Production smoke test**
 
-- Open `https://acervo.fly.dev/users/register` and register the allowlisted
+- Open `https://acervo-app.fly.dev/users/register` and register the allowlisted
   email.
 - Confirm the magic-link email arrives through Resend, then sign in.
 - Check the column shell, the dock and switching appearance.
