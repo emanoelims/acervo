@@ -162,6 +162,24 @@ defmodule Acervo.SearchTest do
       assert %{links: [%{id: ^id}], partial: false} = Search.search(scope, "cachorro praia")
     end
 
+    test "a natural phrase finds its link by any word, prefixes included", %{scope: scope} do
+      interop = link(scope, title: "JavaScript interoperability in Phoenix LiveView")
+      both = link(scope, title: "LiveView JavaScript hooks")
+      _other = link(scope, title: "Sourdough at home")
+
+      assert Enum.map(Search.text_ranks(scope, "aquele post sobre interop de javascript"), &elem(&1, 0)) ==
+               [interop.id, both.id]
+    end
+
+    test "builds a prefix OR tsquery from words of three letters or more" do
+      assert Search.text_query("Aquele post sobre interop de JS") ==
+               "aquele:* | post:* | sobre:* | interop:*"
+
+      assert Search.text_query("a & | ! :* <-> é") == nil
+      assert Search.text_query("foo:* & !bar") == "foo:* | bar:*"
+      assert 1..20 |> Enum.map_join(" ", &"word#{&1}") |> Search.text_query() |> String.split(" | ") |> length() == 8
+    end
+
     test "matches accents and case either way", %{scope: scope} do
       inspiration = link(scope, title: "Inspiração")
       coffee = link(scope, note: "café")

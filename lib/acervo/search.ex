@@ -3,10 +3,12 @@ defmodule Acervo.Search do
   Hybrid search over the scope's links: full text and vectors, merged with
   Reciprocal Rank Fusion.
 
-    * **Text:** `links.search_tsv` against
-      `websearch_to_tsquery('simple', acervo_unaccent(query))`, ranked by
-      `ts_rank_cd`, top 50. `websearch_to_tsquery` accepts any input without
-      a syntax error, so the query needs no escaping, only `normalize_query/1`.
+    * **Text:** `links.search_tsv` against a prefix OR query built by
+      `text_query/1` (`elixir:* | interop:*`), ranked by `ts_rank_cd`, top 50.
+      Any word may match, so a natural phrase ("aquele post sobre interop")
+      still finds its link, and links matching more words rank higher. Words
+      under three letters are ignored. Terms keep only letters and digits, so
+      the tsquery can't hold an operator from the input.
     * **Vector:** the query embedded with `input_type: :query`, top 50 by
       cosine distance among links embedded with the configured model (a
       vector from another model is never compared). Hits farther than
@@ -187,11 +189,18 @@ defmodule Acervo.Search do
   # generated column outside the `Link` schema, hence the schemaless source.
   @spec text_ranks(Scope.t(), String.t(), keyword()) :: ranked()
   def text_ranks(%Scope{user: user}, query, opts \\ []) do
+    case text_query(query) do
+      nil -> []
+      tsquery -> ranked_text(user, tsquery, opts)
+    end
+  end
+
+  defp ranked_text(user, tsquery, opts) do
     from(l in "links",
       where: l.user_id == type(^user.id, Ecto.UUID),
-      where: fragment("? @@ websearch_to_tsquery('simple', acervo_unaccent(?))", l.search_tsv, ^query),
+      where: fragment("? @@ to_tsquery('simple', acervo_unaccent(?))", l.search_tsv, ^tsquery),
       order_by: [
-        desc: fragment("ts_rank_cd(?, websearch_to_tsquery('simple', acervo_unaccent(?)))", l.search_tsv, ^query),
+        desc: fragment("ts_rank_cd(?, to_tsquery('simple', acervo_unaccent(?)))", l.search_tsv, ^tsquery),
         desc: l.inserted_at,
         desc: l.id
       ],
@@ -200,6 +209,23 @@ defmodule Acervo.Search do
     )
     |> scoped(user, opts)
     |> Repo.all()
+  end
+
+  @doc false
+  # The words of `query` (letters and digits only, three or more, at most
+  # eight) as a prefix OR tsquery, or nil when none is left.
+  @spec text_query(String.t()) :: String.t() | nil
+  def text_query(query) when is_binary(query) do
+    ~r/[\p{L}\p{N}]+/u
+    |> Regex.scan(String.downcase(query))
+    |> List.flatten()
+    |> Enum.filter(&(String.length(&1) >= 3))
+    |> Enum.uniq()
+    |> Enum.take(8)
+    |> case do
+      [] -> nil
+      terms -> Enum.map_join(terms, " | ", &(&1 <> ":*"))
+    end
   end
 
   @doc false
