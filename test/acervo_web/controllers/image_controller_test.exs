@@ -53,9 +53,11 @@ defmodule AcervoWeb.ImageControllerTest do
     assert conn |> get("/images/not-a-uuid") |> response(404)
   end
 
-  test "redirects visitors to log in", %{image: image} do
+  test "returns 404 to visitors without redirecting or storing a return path", %{image: image} do
     conn = get(build_conn(), ~p"/images/#{image.id}")
 
-    assert redirected_to(conn) == ~p"/users/log-in"
+    assert response(conn, 404)
+    assert get_resp_header(conn, "location") == []
+    refute get_session(conn, :user_return_to)
   end
 end

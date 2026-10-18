@@ -280,6 +280,19 @@ defmodule AcervoWeb.UserAuth do
     end
   end
 
+  @doc """
+  Plug for resources that only exist for a signed-in user, such as images:
+  without a user it halts with a 404, revealing nothing and storing no
+  return path.
+  """
+  def require_user_or_not_found(conn, _opts) do
+    if conn.assigns.current_scope && conn.assigns.current_scope.user do
+      conn
+    else
+      conn |> send_resp(:not_found, "Not found") |> halt()
+    end
+  end
+
   defp maybe_store_return_to(%{method: "GET"} = conn) do
     put_session(conn, :user_return_to, current_path(conn))
   end
