@@ -35,6 +35,13 @@ defmodule Acervo.Library.Link do
     field :language, :string
     field :enrichment_status, Ecto.Enum, values: [:pending, :ready, :failed]
     field :enriched_at, :utc_datetime
+    # The search embedding (4 KB) and its digest are only loaded when asked
+    # for. `search_tsv` is a generated column, left out so Ecto never writes it.
+    field :embedding, Pgvector.Ecto.Vector, load_in_query: false
+    field :embedding_model, :string
+    field :embedding_digest, :binary, load_in_query: false
+    field :embedding_status, Ecto.Enum, values: [:pending, :ready, :failed]
+    field :embedded_at, :utc_datetime
 
     belongs_to :user, User
     has_many :images, LinkImage, preload_order: [asc: :position]
@@ -145,6 +152,16 @@ defmodule Acervo.Library.Link do
     else
       changeset
     end
+  end
+
+  @doc """
+  The search embedding: the vector, the model that made it, the digest of
+  the embedded text and the embedding's state.
+  """
+  def embedding_changeset(link, attrs) do
+    link
+    |> cast(attrs, [:embedding, :embedding_model, :embedding_digest, :embedding_status, :embedded_at])
+    |> validate_length(:embedding_model, max: 200)
   end
 
   defp clip(value, max) when is_binary(value), do: value |> String.replace(<<0>>, "") |> String.slice(0, max)
