@@ -19,7 +19,7 @@ defmodule AcervoWeb.UserLive.Login do
           required
           phx-mounted={JS.focus()}
         />
-        <.button variant="primary" class="action action-primary auth-submit">
+        <.button id="login-submit" variant="primary" class="action action-primary auth-submit">
           {gettext("Send link")}
           <.icon name="lucide-arrow-right" class="size-4" />
         </.button>

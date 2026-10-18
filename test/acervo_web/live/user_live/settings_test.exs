@@ -8,11 +8,12 @@ defmodule AcervoWeb.UserLive.SettingsTest do
 
   describe "Settings page" do
     test "renders settings page", %{conn: conn} do
-      {:ok, _lv, html} =
+      {:ok, lv, html} =
         conn
         |> log_in_user(user_fixture())
         |> live(~p"/users/settings")
 
+      assert has_element?(lv, "#email-submit")
       assert html =~ "Change email"
       refute html =~ "assword"
     end

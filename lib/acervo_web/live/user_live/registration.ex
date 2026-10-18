@@ -19,7 +19,7 @@ defmodule AcervoWeb.UserLive.Registration do
           required
           phx-mounted={JS.focus()}
         />
-        <.button variant="primary" class="action action-primary auth-submit">
+        <.button id="registration-submit" variant="primary" class="action action-primary auth-submit">
           {gettext("Create account")}
           <.icon name="lucide-arrow-right" class="size-4" />
         </.button>

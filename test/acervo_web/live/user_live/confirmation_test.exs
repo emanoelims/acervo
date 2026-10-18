@@ -17,7 +17,8 @@ defmodule AcervoWeb.UserLive.ConfirmationTest do
           Accounts.deliver_login_instructions(user, url)
         end)
 
-      {:ok, _lv, html} = live(conn, ~p"/users/log-in/#{token}")
+      {:ok, lv, html} = live(conn, ~p"/users/log-in/#{token}")
+      assert has_element?(lv, "#confirm-submit")
       assert html =~ "Confirm"
     end
 
@@ -30,6 +31,7 @@ defmodule AcervoWeb.UserLive.ConfirmationTest do
       {:ok, lv, _html} = live(conn, ~p"/users/log-in/#{token}")
       refute has_element?(lv, "#confirmation_form")
       assert has_element?(lv, "#login_form")
+      assert has_element?(lv, "#confirm-login-submit")
     end
 
     test "renders login page for already logged in user", %{conn: conn, confirmed_user: user} do
@@ -74,7 +76,7 @@ defmodule AcervoWeb.UserLive.ConfirmationTest do
         |> live(~p"/users/log-in/#{token}")
         |> follow_redirect(conn, ~p"/users/log-in")
 
-      assert html =~ "Magic link is invalid or it has expired"
+      assert html =~ "The link is invalid or it has expired"
     end
 
     test "logs confirmed user in without changing confirmed_at", %{
@@ -106,7 +108,7 @@ defmodule AcervoWeb.UserLive.ConfirmationTest do
         |> live(~p"/users/log-in/#{token}")
         |> follow_redirect(conn, ~p"/users/log-in")
 
-      assert html =~ "Magic link is invalid or it has expired"
+      assert html =~ "The link is invalid or it has expired"
     end
 
     test "raises error for invalid token", %{conn: conn} do
@@ -115,7 +117,7 @@ defmodule AcervoWeb.UserLive.ConfirmationTest do
         |> live(~p"/users/log-in/invalid-token")
         |> follow_redirect(conn, ~p"/users/log-in")
 
-      assert html =~ "Magic link is invalid or it has expired"
+      assert html =~ "The link is invalid or it has expired"
     end
   end
 end

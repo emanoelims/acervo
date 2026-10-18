@@ -21,6 +21,7 @@ defmodule AcervoWeb.UserLive.Confirmation do
       >
         <input type="hidden" name={@form[:token].name} value={@form[:token].value} />
         <.button
+          id="confirm-submit"
           variant="primary"
           class="action action-primary auth-submit"
           name={@form[:remember_me].name}
@@ -43,6 +44,7 @@ defmodule AcervoWeb.UserLive.Confirmation do
       >
         <input type="hidden" name={@form[:token].name} value={@form[:token].value} />
         <.button
+          id="confirm-login-submit"
           variant="primary"
           class="action action-primary auth-submit"
           name={@form[:remember_me].name}
@@ -66,7 +68,7 @@ defmodule AcervoWeb.UserLive.Confirmation do
     else
       {:ok,
        socket
-       |> put_flash(:error, gettext("Magic link is invalid or it has expired."))
+       |> put_flash(:error, gettext("The link is invalid or it has expired."))
        |> push_navigate(to: ~p"/users/log-in")}
     end
   end

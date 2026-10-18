@@ -68,16 +68,18 @@ defmodule Acervo.AccountsTest do
     end
 
     test "rejects emails outside the allowlist" do
+      previous = Application.get_env(:acervo, :allowed_emails)
       Application.put_env(:acervo, :allowed_emails, ["owner@example.com"])
-      on_exit(fn -> Application.put_env(:acervo, :allowed_emails, :all) end)
+      on_exit(fn -> Application.put_env(:acervo, :allowed_emails, previous) end)
 
       assert {:error, changeset} = Accounts.register_user(%{email: "stranger@example.com"})
       assert "is not allowed to register" in errors_on(changeset).email
     end
 
     test "accepts allowlisted emails regardless of case" do
+      previous = Application.get_env(:acervo, :allowed_emails)
       Application.put_env(:acervo, :allowed_emails, ["owner@example.com"])
-      on_exit(fn -> Application.put_env(:acervo, :allowed_emails, :all) end)
+      on_exit(fn -> Application.put_env(:acervo, :allowed_emails, previous) end)
 
       assert {:ok, _user} = Accounts.register_user(%{email: "Owner@Example.com"})
     end
@@ -272,6 +274,10 @@ defmodule Acervo.AccountsTest do
       assert {:ok, {^user, []}} = Accounts.login_user_by_magic_link(encoded_token)
       # one time use only
       assert {:error, :not_found} = Accounts.login_user_by_magic_link(encoded_token)
+    end
+
+    test "returns not_found for a malformed token instead of raising" do
+      assert {:error, :not_found} = Accounts.login_user_by_magic_link("!!!")
     end
   end
 

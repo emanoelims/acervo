@@ -26,11 +26,13 @@ config :acervo, AcervoWeb.Endpoint, http: [port: String.to_integer(System.get_en
 # (see `mise.local.toml.example`); it is required in production.
 config :acervo, :anthropic, api_key: System.get_env("ANTHROPIC_API_KEY")
 
-if allowed = System.get_env("ACERVO_ALLOWED_EMAILS") do
-  emails =
-    allowed |> String.split(",") |> Enum.map(&(&1 |> String.trim() |> String.downcase())) |> Enum.reject(&(&1 == ""))
+if config_env() != :test do
+  if allowed = System.get_env("ACERVO_ALLOWED_EMAILS") do
+    emails =
+      allowed |> String.split(",") |> Enum.map(&(&1 |> String.trim() |> String.downcase())) |> Enum.reject(&(&1 == ""))
 
-  config :acervo, :allowed_emails, emails
+    config :acervo, :allowed_emails, emails
+  end
 end
 
 if config_env() == :dev do

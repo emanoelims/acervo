@@ -57,6 +57,15 @@ defmodule AcervoWeb.UserSessionControllerTest do
       assert html =~ user.email
     end
 
+    test "redirects to login page when magic link is malformed", %{conn: conn} do
+      conn = post(conn, ~p"/users/log-in", %{"user" => %{"token" => "!!!"}})
+
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) ==
+               "The link is invalid or it has expired."
+
+      assert redirected_to(conn) == ~p"/users/log-in"
+    end
+
     test "redirects to login page when magic link is invalid", %{conn: conn} do
       conn =
         post(conn, ~p"/users/log-in", %{

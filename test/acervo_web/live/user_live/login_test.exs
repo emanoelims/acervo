@@ -6,8 +6,9 @@ defmodule AcervoWeb.UserLive.LoginTest do
 
   describe "login page" do
     test "renders login page", %{conn: conn} do
-      {:ok, _lv, html} = live(conn, ~p"/users/log-in")
+      {:ok, lv, html} = live(conn, ~p"/users/log-in")
 
+      assert has_element?(lv, "#login-submit")
       assert html =~ "Send link"
       assert html =~ "Create account"
       refute html =~ "assword"

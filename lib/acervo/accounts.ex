@@ -163,19 +163,23 @@ defmodule Acervo.Accounts do
      security practices.
   """
   def login_user_by_magic_link(token) do
-    {:ok, query} = UserToken.verify_magic_link_token_query(token)
+    case UserToken.verify_magic_link_token_query(token) do
+      {:ok, query} ->
+        case Repo.one(query) do
+          {%User{confirmed_at: nil} = user, _token} ->
+            user
+            |> User.confirm_changeset()
+            |> update_user_and_delete_all_tokens()
 
-    case Repo.one(query) do
-      {%User{confirmed_at: nil} = user, _token} ->
-        user
-        |> User.confirm_changeset()
-        |> update_user_and_delete_all_tokens()
+          {user, token} ->
+            Repo.delete!(token)
+            {:ok, {user, []}}
 
-      {user, token} ->
-        Repo.delete!(token)
-        {:ok, {user, []}}
+          nil ->
+            {:error, :not_found}
+        end
 
-      nil ->
+      :error ->
         {:error, :not_found}
     end
   end

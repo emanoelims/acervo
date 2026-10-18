@@ -10,6 +10,7 @@ defmodule AcervoWeb.UserLive.RegistrationTest do
 
       assert html =~ "Create account"
       assert has_element?(lv, "#login-link")
+      assert has_element?(lv, "#registration-submit")
     end
 
     test "redirects if already logged in", %{conn: conn} do
@@ -67,8 +68,9 @@ defmodule AcervoWeb.UserLive.RegistrationTest do
 
   describe "allowlist" do
     setup do
+      previous = Application.get_env(:acervo, :allowed_emails)
       Application.put_env(:acervo, :allowed_emails, ["owner@example.com"])
-      on_exit(fn -> Application.put_env(:acervo, :allowed_emails, :all) end)
+      on_exit(fn -> Application.put_env(:acervo, :allowed_emails, previous) end)
     end
 
     test "rejects emails outside the allowlist", %{conn: conn} do

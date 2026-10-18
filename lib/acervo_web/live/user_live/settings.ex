@@ -19,7 +19,7 @@ defmodule AcervoWeb.UserLive.Settings do
           spellcheck="false"
           required
         />
-        <.button variant="primary" class="action action-primary auth-submit">
+        <.button id="email-submit" variant="primary" class="action action-primary auth-submit">
           {gettext("Change email")}
           <.icon name="lucide-arrow-right" class="size-4" />
         </.button>
