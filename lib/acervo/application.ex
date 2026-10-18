@@ -13,8 +13,9 @@ defmodule Acervo.Application do
       {DNSCluster, query: Application.get_env(:acervo, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Acervo.PubSub},
       {Oban, Application.fetch_env!(:acervo, Oban)},
-      # Start a worker by calling: Acervo.Worker.start_link(arg)
-      # {Acervo.Worker, arg},
+      # Query embeddings run here, unlinked, so a slow one outlives its search.
+      {Task.Supervisor, name: Acervo.TaskSupervisor},
+      Acervo.Search.QueryCache,
       # Start to serve requests, typically the last entry
       AcervoWeb.Endpoint
     ]

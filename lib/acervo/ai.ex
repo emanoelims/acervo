@@ -3,9 +3,10 @@ defmodule Acervo.AI do
   Model calls and their cost records.
 
   Every call goes through `generate_object/4`, which uses the configured
-  `Acervo.AI.Client` (`config :acervo, :ai_client`) and records one
-  `Acervo.AI.Call` per call, success or not. Logs carry only ids, the model,
-  token counts, cost, duration and an error code, never content.
+  `Acervo.AI.Client` (`config :acervo, :ai_client`), or `embed/4`, which uses
+  the configured `Acervo.AI.Embedder` (`config :acervo, :embedder`). Each
+  records one `Acervo.AI.Call` per call, success or not. Logs carry only ids,
+  the model, token counts, cost, duration and an error code, never content.
   """
   import Ecto.Query
 
@@ -17,11 +18,26 @@ defmodule Acervo.AI do
 
   require Logger
 
+  @embedding_dimensions 1024
+
   @doc "The configured chat model, such as `\"anthropic:claude-opus-5-5\"` (Opus 5.5 by default)."
   @spec model() :: String.t()
   def model do
     Application.get_env(:acervo, :ai, [])[:model] || "anthropic:claude-opus-5-5"
   end
+
+  @doc """
+  The configured embedding model, `\"openrouter:voyageai/voyage-4-lite\"` by
+  default. It must return `embedding_dimensions/0`-long vectors.
+  """
+  @spec embedding_model() :: String.t()
+  def embedding_model do
+    Application.get_env(:acervo, :embeddings, [])[:model] || "openrouter:voyageai/voyage-4-lite"
+  end
+
+  @doc "The embedding length, fixed by the `links.embedding` column type."
+  @spec embedding_dimensions() :: 1024
+  def embedding_dimensions, do: @embedding_dimensions
 
   @doc """
   Generates an object matching `schema` for the scope's user, recording the
@@ -36,15 +52,49 @@ defmodule Acervo.AI do
           ReqLLM.Context.t(),
           map()
         ) :: {:ok, map()} | {:error, Client.error()}
-  def generate_object(%Scope{user: user}, %{operation: operation, link_id: link_id}, context, schema)
-      when is_binary(operation) do
+  def generate_object(%Scope{} = scope, %{operation: operation} = meta, context, schema) when is_binary(operation) do
     model = model()
+
+    run_call(scope, meta, model, fn usage_callback ->
+      client().generate_object(model, context, schema, usage_callback: usage_callback)
+    end)
+  end
+
+  @doc """
+  Embeds `text` with the configured embedding model for the scope's user,
+  recording the call in `ai_calls` like `generate_object/4`. The vector has
+  `embedding_dimensions/0` floats.
+
+  `meta` names the operation (`"embed_link"` or `"embed_query"`) and the
+  link, if any. `opts` takes `:input_type` (`:document` or `:query`) and
+  `:receive_timeout`.
+  """
+  @spec embed(Scope.t(), %{operation: String.t(), link_id: Ecto.UUID.t() | nil}, String.t(), keyword()) ::
+          {:ok, [float()]} | {:error, Client.error()}
+  def embed(%Scope{} = scope, %{operation: operation} = meta, text, opts \\ [])
+      when is_binary(operation) and is_binary(text) do
+    model = embedding_model()
+
+    embed_opts =
+      opts
+      |> Keyword.take([:input_type, :receive_timeout])
+      |> Keyword.put(:dimensions, @embedding_dimensions)
+
+    run_call(scope, meta, model, fn usage_callback ->
+      embedder().embed(model, text, Keyword.put(embed_opts, :usage_callback, usage_callback))
+    end)
+  end
+
+  defp client, do: Application.fetch_env!(:acervo, :ai_client)
+  defp embedder, do: Application.fetch_env!(:acervo, :embedder)
+
+  # Runs one model call, then records and logs it whatever its outcome.
+  defp run_call(%Scope{user: user}, %{operation: operation, link_id: link_id}, model, fun) do
     ref = make_ref()
     caller = self()
-    usage_callback = fn usage -> send(caller, {ref, usage}) end
 
     started = System.monotonic_time()
-    result = client().generate_object(model, context, schema, usage_callback: usage_callback)
+    result = fun.(fn usage -> send(caller, {ref, usage}) end)
     duration_ms = System.convert_time_unit(System.monotonic_time() - started, :native, :millisecond)
 
     usage = receive_usage(ref)
@@ -61,7 +111,7 @@ defmodule Acervo.AI do
 
     attrs =
       case result do
-        {:ok, _object} -> Map.put(attrs, :status, :ok)
+        {:ok, _value} -> Map.put(attrs, :status, :ok)
         {:error, reason} -> Map.merge(attrs, %{status: :error, error: Client.error_code(reason)})
       end
 
@@ -69,8 +119,6 @@ defmodule Acervo.AI do
     log(attrs)
     result
   end
-
-  defp client, do: Application.fetch_env!(:acervo, :ai_client)
 
   # The usage callback runs once per completed response; keep the last one.
   defp receive_usage(ref, usage \\ %{}) do
@@ -81,10 +129,15 @@ defmodule Acervo.AI do
     end
   end
 
-  # ReqLLM's cost when it has one, else the dated estimate (`Acervo.AI.Rates`).
-  defp cost(%{total_cost: cost}, _model) when is_float(cost), do: cost |> Decimal.from_float() |> Decimal.round(8)
-  defp cost(%{total_cost: cost}, _model) when is_integer(cost), do: Decimal.new(cost)
-  defp cost(usage, model), do: Rates.estimate(model, usage[:input_tokens], usage[:output_tokens])
+  # The dated estimate (`Acervo.AI.Rates`) when the model has one, else
+  # ReqLLM's cost: ReqLLM rounds to $0.000001, which zeroes a short query.
+  defp cost(usage, model) do
+    Rates.estimate(model, usage[:input_tokens], usage[:output_tokens]) || reported_cost(usage)
+  end
+
+  defp reported_cost(%{total_cost: cost}) when is_float(cost), do: cost |> Decimal.from_float() |> Decimal.round(8)
+  defp reported_cost(%{total_cost: cost}) when is_integer(cost), do: Decimal.new(cost)
+  defp reported_cost(_usage), do: nil
 
   defp record(user, attrs) do
     case %Call{user_id: user.id} |> Call.changeset(attrs) |> Repo.insert() do

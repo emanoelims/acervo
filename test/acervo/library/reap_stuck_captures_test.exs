@@ -10,6 +10,7 @@ defmodule Acervo.Library.ReapStuckCapturesTest do
   alias Acervo.Library.CaptureLink
   alias Acervo.Library.Link
   alias Acervo.Library.ReapStuckCaptures
+  alias Acervo.Search.EmbedLink
 
   setup do
     scope = user_scope_fixture()
@@ -107,6 +108,47 @@ defmodule Acervo.Library.ReapStuckCapturesTest do
       assert %Link{enrichment_status: :pending} = Repo.get!(Link, fresh.id)
       assert %Link{enrichment_status: :pending} = Repo.get!(Link, live.id)
       assert %Link{enrichment_status: :ready} = Repo.get!(Link, done.id)
+    end
+  end
+
+  describe "embeddings" do
+    defp put_embedding(link, status, minutes_ago) do
+      updated_at = DateTime.shift(DateTime.utc_now(:second), minute: -minutes_ago)
+
+      Repo.update_all(from(l in Link, where: l.id == ^link.id),
+        set: [status: :ready, embedding_status: status, updated_at: updated_at]
+      )
+    end
+
+    test "fails a stale pending embedding with no live job", %{scope: scope} do
+      link = link_fixture(scope)
+      put_embedding(link, :pending, 31)
+      finish_job(link)
+
+      assert :ok = perform_job(ReapStuckCaptures, %{})
+
+      assert %Link{embedding_status: :failed, status: :ready, capture_error: nil} = Repo.get!(Link, link.id)
+    end
+
+    test "leaves fresh, live and finished embeddings alone", %{scope: scope} do
+      fresh = link_fixture(scope)
+      put_embedding(fresh, :pending, 5)
+      finish_job(fresh)
+
+      live = link_fixture(scope)
+      finish_job(live)
+      {:ok, _job} = EmbedLink.enqueue(live, delay: 5)
+      put_embedding(live, :pending, 45)
+
+      done = link_fixture(scope)
+      put_embedding(done, :ready, 45)
+      finish_job(done)
+
+      assert :ok = perform_job(ReapStuckCaptures, %{})
+
+      assert %Link{embedding_status: :pending} = Repo.get!(Link, fresh.id)
+      assert %Link{embedding_status: :pending} = Repo.get!(Link, live.id)
+      assert %Link{embedding_status: :ready} = Repo.get!(Link, done.id)
     end
   end
 end

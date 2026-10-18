@@ -29,10 +29,14 @@ defmodule Acervo.Library do
   alias Acervo.Library.SafeFetch
   alias Acervo.Library.URL
   alias Acervo.Repo
+  alias Acervo.Search.EmbedLink
   alias Acervo.Storage
   alias Ecto.Multi
 
   @default_limit 60
+  # Owner edits wait this many seconds before embedding, so a burst of them
+  # collapses into one job.
+  @embed_delay 5
   @image_fields LinkImage.__schema__(:fields) -- [:bytes]
 
   @type filter :: :all | :inbox | {:collection, Ecto.UUID.t()}
@@ -128,6 +132,28 @@ defmodule Acervo.Library do
     |> Repo.all()
   end
 
+  @doc """
+  The scope's links among `ids`, with the same preloads as `list_links/2`,
+  in the order of `ids`. Ids of other users' links, or of deleted ones, are
+  left out.
+  """
+  @spec list_links_by_ids(Scope.t(), [Ecto.UUID.t()]) :: [Link.t()]
+  def list_links_by_ids(%Scope{}, []), do: []
+
+  def list_links_by_ids(%Scope{user: user}, ids) when is_list(ids) do
+    first_image = from i in images_query(), where: i.position == 0
+
+    by_id =
+      from(l in Link,
+        where: l.user_id == ^user.id and l.id in ^ids,
+        preload: [:collections, images: ^first_image, suggestions: ^pending_suggestions_query()]
+      )
+      |> Repo.all()
+      |> Map.new(&{&1.id, &1})
+
+    for id <- ids, link = by_id[id], do: link
+  end
+
   defp filter(query, :all), do: query
   defp filter(query, :inbox), do: where(query, [l], is_nil(l.triaged_at))
 
@@ -155,11 +181,14 @@ defmodule Acervo.Library do
     Repo.aggregate(from(l in Link, where: l.user_id == ^user.id and is_nil(l.triaged_at)), :count)
   end
 
+  @doc """
+  Saves the owner's note. A changed note is embedded again for search
+  (`Acervo.Search.EmbedLink`, after a short delay); an unchanged one costs
+  nothing.
+  """
   @spec update_note(Scope.t(), Link.t(), map()) :: {:ok, Link.t()} | {:error, :not_found | Ecto.Changeset.t()}
   def update_note(%Scope{} = scope, %Link{} = link, attrs) do
-    with {:ok, link} <- owned(scope, link) do
-      link |> Link.note_changeset(attrs) |> Repo.update() |> updated(scope)
-    end
+    scope |> update_embedded(link, :note, &Link.note_changeset(&1, attrs)) |> updated(scope)
   end
 
   @doc "Returns a changeset for tracking note changes."
@@ -173,10 +202,31 @@ defmodule Acervo.Library do
   @spec update_image_description(Scope.t(), Link.t(), map()) ::
           {:ok, Link.t()} | {:error, :not_found | Ecto.Changeset.t()}
   def update_image_description(%Scope{} = scope, %Link{} = link, attrs) do
-    with {:ok, link} <- owned(scope, link) do
-      # phase 4: enqueue EmbedLink
-      link |> Link.image_description_changeset(attrs) |> Repo.update() |> updated(scope)
+    scope
+    |> update_embedded(link, :image_description, &Link.image_description_changeset(&1, attrs))
+    |> updated(scope)
+  end
+
+  # Updates a field search embeds, under the link lock (checked against the
+  # database), and enqueues the embedding when the field changed, in the
+  # same transaction.
+  defp update_embedded(%Scope{user: user}, %Link{id: id}, field, changeset_fun) do
+    Repo.transact(fn ->
+      case Repo.one(from l in Link, where: l.id == ^id and l.user_id == ^user.id, lock: "FOR NO KEY UPDATE") do
+        nil -> {:error, :not_found}
+        %Link{} = link -> link |> changeset_fun.() |> update_and_embed(field)
+      end
+    end)
+  end
+
+  defp update_and_embed(changeset, field) do
+    with {:ok, link} <- Repo.update(changeset) do
+      if Ecto.Changeset.changed?(changeset, field), do: embed(link), else: {:ok, link}
     end
+  end
+
+  defp embed(link) do
+    with {:ok, _job} <- EmbedLink.enqueue(link, delay: @embed_delay), do: {:ok, %{link | embedding_status: :pending}}
   end
 
   @doc "Returns a changeset for tracking image description changes."

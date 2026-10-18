@@ -165,8 +165,8 @@ defmodule Acervo.AI.Enrichment do
   with block boundaries kept as newlines, else the capture's excerpt.
 
   NUL and control characters (except newline and tab) are stripped,
-  whitespace is collapsed, and the result is capped at #{@max_text}
-  characters, cut at a whitespace boundary.
+  whitespace is collapsed, and the result is capped at `max` characters
+  (#{@max_text} by default), cut at a whitespace boundary.
 
   ## Examples
 
@@ -177,8 +177,8 @@ defmodule Acervo.AI.Enrichment do
       "Just the excerpt"
 
   """
-  @spec article_text(String.t() | nil, String.t() | nil) :: String.t()
-  def article_text(html, excerpt) do
+  @spec article_text(String.t() | nil, String.t() | nil, pos_integer()) :: String.t()
+  def article_text(html, excerpt, max \\ @max_text) do
     html_text = if is_binary(html) and html != "", do: html_text(html), else: ""
 
     case_result =
@@ -187,7 +187,7 @@ defmodule Acervo.AI.Enrichment do
         text -> text
       end
 
-    cap(case_result, @max_text)
+    cap(case_result, max)
   end
 
   defp html_text(html) do
@@ -209,9 +209,12 @@ defmodule Acervo.AI.Enrichment do
   defp collect_text({_tag, _attrs, children}), do: Enum.flat_map(children, &collect_text/1)
   defp collect_text(_node), do: []
 
-  # Keeps line breaks, collapses every other run of whitespace, drops blank
-  # lines.
-  defp clean_text(text) do
+  @doc false
+  # Strips invalid UTF-8, NUL and control characters, keeps line breaks,
+  # collapses every other run of whitespace and drops blank lines. Shared
+  # with `Acervo.Search.Document`.
+  @spec clean_text(String.t()) :: String.t()
+  def clean_text(text) do
     text
     |> String.replace_invalid()
     |> String.replace(@control, "")
@@ -221,7 +224,11 @@ defmodule Acervo.AI.Enrichment do
     |> Enum.join("\n")
   end
 
-  defp cap(text, max) do
+  @doc false
+  # Clips `text` to `max` characters at a whitespace boundary. Shared with
+  # `Acervo.Search.Document`.
+  @spec cap(String.t(), pos_integer()) :: String.t()
+  def cap(text, max) do
     if String.length(text) <= max do
       text
     else

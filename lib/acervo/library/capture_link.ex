@@ -18,6 +18,11 @@ defmodule Acervo.Library.CaptureLink do
   preview is saved; YouTube, X and Instagram keep their embeds instead. A
   failure there is logged and never fails the capture.
 
+  A first capture enqueues `Acervo.AI.EnrichLink`, which embeds the link for
+  search once it finishes. A re-capture of an enriched link, and a capture
+  that ends with a permanent error, enqueue `Acervo.Search.EmbedLink`
+  directly.
+
   A run never leaves the link `:processing` on its own. A job killed mid-run
   (by its timeout or a node restart rescued by `Oban.Plugins.Lifeline`) is
   retried, and every run starts over whatever the link's status. When the
@@ -40,6 +45,7 @@ defmodule Acervo.Library.CaptureLink do
   alias Acervo.Library.SafeFetch
   alias Acervo.Library.URL
   alias Acervo.Repo
+  alias Acervo.Search.EmbedLink
   alias Acervo.Storage
 
   require Logger
@@ -147,6 +153,7 @@ defmodule Acervo.Library.CaptureLink do
 
   # Once per link: a re-capture, or a retry after the link was saved, does
   # not pay for the model again. A screenshot enqueues it on its own.
+  # Enrichment embeds the link when it finishes; without it, embed now.
   defp enrich({:ok, %Link{enriched_at: nil} = link}) do
     case EnrichLink.enqueue(link) do
       {:ok, _job} -> :ok
@@ -154,7 +161,17 @@ defmodule Acervo.Library.CaptureLink do
     end
   end
 
-  defp enrich(_saved), do: :ok
+  defp enrich(saved), do: embed(saved)
+
+  # Nothing changed costs nothing: `EmbedLink` skips an unchanged document.
+  defp embed({:ok, %Link{} = link}) do
+    case EmbedLink.enqueue(link) do
+      {:ok, _job} -> :ok
+      {:error, reason} -> Logger.error("could not enqueue embedding of link #{link.id}: #{inspect(reason)}")
+    end
+  end
+
+  defp embed(_gone_or_error), do: :ok
 
   ## Reader view
 
@@ -235,7 +252,10 @@ defmodule Acervo.Library.CaptureLink do
   defp handle_error(link, reason, final_attempt?) do
     case {classify(reason), final_attempt?} do
       {:permanent, _} ->
-        link |> update_link(%{status: :ready, capture_error: error_code(reason)}) |> finish(:ok)
+        link
+        |> update_link(%{status: :ready, capture_error: error_code(reason)})
+        |> tap(&embed/1)
+        |> finish(:ok)
 
       {:transient, false} ->
         link |> update_link(%{status: :pending, capture_error: nil}) |> finish({:error, reason})

@@ -4,6 +4,9 @@
 ANTHROPIC_API_KEY = ""
 # Optional: the chat model for enrichment (defaults to Opus 5.5)
 # ACERVO_CHAT_MODEL = "anthropic:claude-opus-5-5"
+OPENROUTER_API_KEY = ""
+# Optional: the embedding model for search; it must return 1024 dimensions
+# ACERVO_EMBEDDING_MODEL = "openrouter:voyageai/voyage-4-lite"
 # Optional in dev; required in production
 # ACERVO_ALLOWED_EMAILS = ""
 # Required in production: Resend API key and the sender address (the address

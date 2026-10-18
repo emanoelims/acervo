@@ -9,6 +9,7 @@ defmodule Acervo.Release do
   alias Acervo.AI.EnrichLink
   alias Acervo.Library.ExtractContent
   alias Acervo.Library.Link
+  alias Acervo.Search.EmbedLink
 
   @app :acervo
 
@@ -133,6 +134,70 @@ defmodule Acervo.Release do
         order_by: [desc: l.inserted_at],
         select: l.id
     )
+  end
+
+  @doc """
+  Enqueues `Acervo.Search.EmbedLink` for every ready link whose embedding
+  was never made or was made with another model than the configured one,
+  newest first (in transactions of 200 links, so the newest are scheduled
+  first), marks them `:pending` and returns how many were enqueued.
+  The running app's `embed` queue works through them. Run it after deploying
+  search and after changing `ACERVO_EMBEDDING_MODEL`; meanwhile text search
+  keeps working and the vector side sees only links already on the new model.
+
+  `all: true` enqueues every ready link instead, for a change in the
+  embedded document's format. Each job compares the document's digest with
+  the stored one, so a link whose text and model are unchanged costs no call.
+  Links already `:pending` are left to their job. Starts only the repository
+  and an Oban instance that runs no queues:
+
+      bin/acervo eval 'Acervo.Release.reindex()'
+  """
+  @spec reindex(keyword()) :: non_neg_integer()
+  def reindex(opts \\ []) do
+    opts = Keyword.validate!(opts, all: false)
+    load_app()
+    {:ok, _started} = Application.ensure_all_started(:oban)
+    [repo] = repos()
+
+    {:ok, count, _apps} =
+      Ecto.Migrator.with_repo(repo, fn repo ->
+        name = Acervo.Release.Oban
+        config = Keyword.merge(Application.fetch_env!(@app, Oban), name: name, queues: false, plugins: false, peer: false)
+        {:ok, oban} = Oban.start_link(config)
+
+        try do
+          {:ok, count} = repo |> stale_embeddings(opts) |> EmbedLink.enqueue_many(oban: name)
+          count
+        after
+          Supervisor.stop(oban)
+        end
+      end)
+
+    IO.puts("Enqueued embedding for #{count} links.")
+    count
+  end
+
+  @doc false
+  # Ready links not `:pending` whose `embedding_model` is nil or not the
+  # configured model; with `all: true`, every ready link not `:pending`.
+  @spec stale_embeddings(module(), keyword()) :: [Ecto.UUID.t()]
+  def stale_embeddings(repo, opts \\ []) do
+    model = AI.embedding_model()
+
+    query =
+      from l in Link,
+        where: l.status == :ready,
+        where: is_nil(l.embedding_status) or l.embedding_status != :pending,
+        order_by: [desc: l.inserted_at],
+        select: l.id
+
+    query =
+      if Keyword.get(opts, :all, false),
+        do: query,
+        else: where(query, [l], is_nil(l.embedding_model) or l.embedding_model != ^model)
+
+    repo.all(query)
   end
 
   @doc """

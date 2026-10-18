@@ -1,5 +1,6 @@
 defmodule Acervo.CollectionsTest do
   use Acervo.DataCase, async: true
+  use Oban.Testing, repo: Acervo.Repo
 
   import Acervo.AccountsFixtures
   import Acervo.CollectionsFixtures
@@ -8,6 +9,7 @@ defmodule Acervo.CollectionsTest do
   alias Acervo.Collections.Collection
   alias Acervo.Collections.CollectionLink
   alias Acervo.Library.Link
+  alias Acervo.Search.EmbedLink
 
   setup do
     scope = user_scope_fixture()
@@ -139,6 +141,91 @@ defmodule Acervo.CollectionsTest do
       assert {:error, :not_found} = Collections.add_link(scope, theirs, my_link)
       assert {:error, :not_found} = Collections.remove_link(other, mine, my_link)
       assert Repo.aggregate(CollectionLink, :count) == 0
+    end
+  end
+
+  describe "search embedding" do
+    defp embed_jobs(link), do: all_enqueued(worker: EmbedLink, args: %{"link_id" => link.id})
+    defp embedding_status(link), do: Repo.get!(Link, link.id).embedding_status
+
+    defp settle do
+      Repo.delete_all(Oban.Job)
+      Repo.update_all(Link, set: [embedding_status: :ready])
+    end
+
+    test "adding and removing a link enqueue it 5 seconds ahead; repeats do not", %{scope: scope} do
+      c = collection_fixture(scope)
+      link = collection_link_fixture(scope)
+
+      :ok = Collections.add_link(scope, c, link)
+      assert [%Oban.Job{state: "scheduled", scheduled_at: at}] = embed_jobs(link)
+      assert DateTime.diff(at, DateTime.utc_now()) in 3..5
+      assert embedding_status(link) == :pending
+
+      settle()
+      :ok = Collections.add_link(scope, c, link)
+      assert embed_jobs(link) == []
+      assert embedding_status(link) == :ready
+
+      :ok = Collections.remove_link(scope, c, link)
+      assert [_] = embed_jobs(link)
+      assert embedding_status(link) == :pending
+
+      settle()
+      :ok = Collections.remove_link(scope, c, link)
+      assert embed_jobs(link) == []
+    end
+
+    test "another user's records enqueue nothing", %{scope: scope} do
+      other = user_scope_fixture()
+      link = collection_link_fixture(scope)
+
+      assert {:error, :not_found} = Collections.add_link(scope, collection_fixture(other), link)
+      assert {:error, :not_found} = Collections.add_link(other, collection_fixture(other), link)
+      assert embed_jobs(link) == []
+    end
+
+    test "renaming a collection enqueues every member; a description edit does not", %{scope: scope} do
+      c = collection_fixture(scope)
+      members = for _ <- 1..2, do: collection_link_fixture(scope)
+      outsider = collection_link_fixture(scope)
+      for link <- members, do: :ok = Collections.add_link(scope, c, link)
+      settle()
+
+      assert {:ok, _} = Collections.update_collection(scope, c, %{description: "New description"})
+      assert all_enqueued(worker: EmbedLink) == []
+
+      assert {:ok, %Collection{name: "Renamed"}} = Collections.update_collection(scope, c, %{name: "Renamed"})
+
+      for link <- members do
+        assert [%Oban.Job{state: "scheduled"}] = embed_jobs(link)
+        assert embedding_status(link) == :pending
+      end
+
+      assert embed_jobs(outsider) == []
+      assert embedding_status(outsider) == :ready
+    end
+
+    test "an invalid rename enqueues nothing", %{scope: scope} do
+      c = collection_fixture(scope)
+      link = collection_link_fixture(scope)
+      :ok = Collections.add_link(scope, c, link)
+      settle()
+
+      assert {:error, %Ecto.Changeset{}} = Collections.update_collection(scope, c, %{name: ""})
+      assert all_enqueued(worker: EmbedLink) == []
+    end
+
+    test "deleting a collection enqueues its former members", %{scope: scope} do
+      c = collection_fixture(scope)
+      link = collection_link_fixture(scope)
+      :ok = Collections.add_link(scope, c, link)
+      settle()
+
+      assert {:ok, _} = Collections.delete_collection(scope, c)
+
+      assert [_] = embed_jobs(link)
+      assert embedding_status(link) == :pending
     end
   end
 

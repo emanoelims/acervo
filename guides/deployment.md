@@ -69,6 +69,24 @@ Created on 2026-10-18 by attaching the app:
 fly postgres attach sisteo-apps-db --app acervo-app --database-name acervo --database-user acervo --superuser=false
 ```
 
+### Search sizes
+
+What search adds, for the shared cluster and the 1 GB app machine:
+
+- **Per link:** a `vector(1024)` is 4,104 bytes, stored out of line in TOAST.
+- **HNSW index** (`links_embedding_index`): each element takes about one 8 KB
+  page, so about 8 MB per 1,000 links (80 MB at 10,000). `search_tsv` and its
+  GIN index add well under 1 MB per 1,000 links.
+- **Build:** the migration built the index while every embedding was NULL, so
+  it was instant; later embeddings update the graph one at a time.
+  `maintenance_work_mem` only matters for a rebuild past about 8,000 links.
+- **App:** the query cache holds at most 500 vectors (about 2 MB), and a
+  search holds about 40 KB at a time for its vector list.
+- **Later:** `halfvec(1024)` would halve all of this if it ever matters.
+
+Check the real numbers with
+`SELECT pg_size_pretty(pg_relation_size('links_embedding_index')), pg_size_pretty(pg_total_relation_size('links'))`.
+
 ### Extensions
 
 `vector` is not a trusted extension, so the `acervo` role cannot create it. The
@@ -104,6 +122,13 @@ deployment policy:
   (`anthropic:claude-opus-5-5`) is used.
 - `ACERVO_ALLOWED_EMAILS`: the owner's address (comma-separated allowlist for
   magic-link sign-in).
+- `OPENROUTER_API_KEY`: the OpenRouter key for search embeddings (required
+  since 0.9.0). Search falls back to matching words only while it is missing or
+  OpenRouter is down, and links are not embedded.
+- `ACERVO_EMBEDDING_MODEL` (optional): the embedding model, by default
+  `openrouter:voyageai/voyage-4-lite`. It must return 1024-dimension vectors,
+  or the `links.embedding` column and its migration must change. See
+  "Changing the embedding model" below.
 
 The GitHub encrypted secret `FLY_API_TOKEN` is a deploy token for `acervo-app`,
 valid for one year: `fly tokens create deploy --app acervo-app --expiry 8760h`.
@@ -167,11 +192,48 @@ collection suggestions. Rerunning it enqueues only links that are still missing
 enrichment. Watch progress with
 `SELECT enrichment_status, count(*) FROM links GROUP BY 1`.
 
+### Search reindex
+
+Every link is embedded for search by `Acervo.Search.EmbedLink`. After deploying
+0.9.0, and after changing the embedding model, enqueue one job per ready link
+whose embedding is missing or was made with another model than the configured
+one, newest first:
+
+```sh
+fly ssh console -a acervo-app -C "/app/bin/acervo eval 'Acervo.Release.reindex()'"
+```
+
+It prints how many links were enqueued and marks them `pending`; the running
+app's `embed` queue works through them, four at a time. Each costs one
+embedding call (about $0.00004 for a long article at most). Links already
+`pending` are left to their job, so rerunning it is safe. Watch progress with
+`SELECT embedding_status, count(*) FROM links GROUP BY 1`: a link with nothing
+to embed (no title, text, image description or note) goes back to empty, and a
+link whose embedding keeps failing ends as `failed`.
+
+`Acervo.Release.reindex(all: true)` enqueues every ready link instead, for a
+change in what is embedded (`Acervo.Search.Document`). Each job compares the
+document's digest with the stored one, so a link whose text and model are
+unchanged costs no call. In development, with the server running, use
+`mise exec -- mix acervo.reindex` (or `--all`); the server's queue does the
+work.
+
+### Changing the embedding model
+
+1. Stage the new model: `fly secrets set --stage --app acervo-app ACERVO_EMBEDDING_MODEL=...`.
+   It must return 1024 dimensions.
+2. Deploy, then run the search reindex above.
+
+Search compares a query only with vectors from the configured model, so while
+the reindex runs, text search keeps working and the vector side finds only the
+links already embedded with the new model.
+
 ### AI costs
 
-Every model call is recorded in `ai_calls` with its tokens and an estimated
-cost (`Acervo.AI.Rates`, at Anthropic's published prices). Print the last 30
-days per day, or pass another number of days:
+Every model call, embeddings included, is recorded in `ai_calls` with its
+tokens and an estimated cost (`Acervo.AI.Rates`, at Anthropic's and
+OpenRouter's published prices). Print the last 30 days per day, or pass another
+number of days:
 
 ```sh
 fly ssh console -a acervo-app -C "/app/bin/acervo eval 'Acervo.Release.ai_costs()'"

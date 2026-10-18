@@ -87,6 +87,48 @@ uses them. Their names start with a dot.
   `ArchiveComponents`) renames, describes or deletes the collection. Deleting
   keeps its links. Business rules live in `Acervo.Collections`.
 
+## Search
+
+- **Pill.** The dock's search item (`#dock-search`, between Acervo and
+  Inbox) opens the search pill (`search_pill/1` in `ArchiveComponents`,
+  `#search-form`), in the add pill's place. `/` and ⌘K (Ctrl+K) open it too.
+  Typing searches after a 250 ms pause (`phx-debounce`); ↩ searches at once.
+  Esc closes the pill and keeps the results.
+- **Routes.** Searching patches to `/search?q=…`, replacing the history entry
+  while you type, so a reload or back/forward keeps the query. A result opens
+  at `/search/l/:id?q=…` (and `/search/l/:id/web?q=…`) without searching
+  again. The results column (`#column-search`) is titled with the query and
+  shows the usual cards.
+- **Scope.** Opening search inside a collection scopes it there: `in=<slug>`
+  in the URL and a chip in the pill (`#search-scope`). Its ✕
+  (`#search-scope-clear`) searches everything. An unknown or someone else's
+  slug says “Not found.” and drops the scope.
+- **Short queries.** Under 2 characters, the column lists the recent links
+  (of the collection, when scoped). A query with no match shows “Nothing
+  found.” (`#search-empty`). `#search-status` announces the result count to
+  screen readers (`aria-live`).
+- **How it matches.** `Acervo.Search.search/3`, run with `start_async` so the
+  current cards stay until the results arrive. Two lists are merged with
+  Reciprocal Rank Fusion (k = 60):
+  - **text:** the generated `links.search_tsv` (title; description, image
+    description and note; site, author and article text), any word of three
+    letters or more, by prefix, accents ignored;
+  - **meaning:** the query's embedding against each link's, by cosine
+    distance, past a similarity cutoff (`max_distance`), only among links
+    embedded with the configured model.
+- **Embeddings.** `Acervo.Search.EmbedLink` (Oban, queue `embed`) embeds a
+  link's title, site, author, collections, description, image description,
+  note and article text (`Acervo.Search.Document`, about 2,000 tokens) when
+  that text changes. Query vectors are cached for 10 minutes per user
+  (`Acervo.Search.QueryCache`). `mix acervo.reindex` (`Acervo.Release.reindex/1`)
+  embeds links whose embedding is missing or from another model.
+- **Partial results.** When embedding the query fails or takes over 3 s, the
+  search returns the text matches only and the column head shows a faint
+  icon (`#search-partial`, “Only matching words”). Typing on usually fills
+  the cache for the next search.
+- **Live updates.** A listed result updates in place; new links don't join
+  the results until you search again.
+
 ## Inbox
 
 - **Cards.** On `/inbox` each card is wrapped by `LinkComponents.inbox_item/1`
@@ -178,13 +220,20 @@ and hooks use it to pick the modifier key.
 | ------------ | ----------------- | ------------------------------------ | ------------------------------------- |
 | ⌘/Ctrl V     | anywhere          | saves a copied link                  | `.Shortcuts` (`ArchiveLive`)          |
 | ⌘/Ctrl V     | with a link open  | adds a copied image as a screenshot  | `.ScreenshotPaste` (`LinkComponents`) |
+| /            | outside fields    | opens the search pill                | `.Shortcuts` → `open_search` event    |
+| ⌘/Ctrl K     | anywhere          | opens the search pill, or closes it  | `.Shortcuts` → `toggle_search` event  |
 | ↩            | add pill          | saves the link                       | `#add-link-form` submit               |
+| ↩            | search pill       | searches at once                     | `#search-form` submit                 |
 | Esc          | add pill, popover | closes it                            | `close_add`; `assets/js/floating.js`  |
+| Esc          | search pill       | closes it, keeping the results       | `close_search` event                  |
 | Esc          | page column open  | closes the page column               | `.Shortcuts` → `close_web` event      |
 | ⌘/Ctrl ↩     | note, description | saves the field                      | `.SubmitShortcut` (`LinkComponents`)  |
 | ?            | outside fields    | opens the guide (`/guide`)           | `.Shortcuts` → `open_guide` event     |
 
 Page-wide keys do nothing while you type in an input, a textarea or a
-contenteditable element. The `?` key also does nothing when Ctrl, ⌘ or Alt is
-held. Esc closes the add pill or an open popover before the page column, and
-does nothing while focus is inside the framed page.
+contenteditable element, except ⌘K (Ctrl+K), which works in fields too: it
+closes the search pill when its field has focus, and otherwise opens or
+focuses it. `/` and `?` do nothing when Ctrl, ⌘ or Alt is held, and `/` does
+nothing while a popover is open. Esc closes the add or search pill or an open
+popover before the page column, and does nothing while focus is inside the
+framed page.

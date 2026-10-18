@@ -204,4 +204,33 @@ defmodule Acervo.Library.LinkTest do
       assert Map.keys(changeset.changes) -- [:image_description, :image_description_edited_at] == []
     end
   end
+
+  describe "embedding_changeset/2" do
+    test "casts the embedding fields" do
+      digest = :crypto.hash(:sha256, "doc")
+
+      changeset =
+        Link.embedding_changeset(%Link{}, %{
+          embedding: Pgvector.new([0.1, 0.2]),
+          embedding_model: "openrouter:voyageai/voyage-4-lite",
+          embedding_digest: digest,
+          embedding_status: :ready,
+          embedded_at: DateTime.utc_now(:second),
+          note: "ignored"
+        })
+
+      assert changeset.valid?
+
+      assert Enum.sort(Map.keys(changeset.changes)) ==
+               [:embedded_at, :embedding, :embedding_digest, :embedding_model, :embedding_status]
+    end
+
+    test "limits the model to 200 characters and rejects unknown states" do
+      changeset =
+        Link.embedding_changeset(%Link{}, %{embedding_model: String.duplicate("m", 201), embedding_status: :lost})
+
+      assert [_] = errors_on(changeset).embedding_model
+      assert [_] = errors_on(changeset).embedding_status
+    end
+  end
 end
