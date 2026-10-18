@@ -1,0 +1,38 @@
+name: Dependency submission
+
+# GitHub's dependency graph does not read mix.lock. Submitting the resolved Mix
+# dependencies lets Dependabot alerts and security updates cover Hex packages.
+on:
+  push:
+    branches: [main]
+    paths:
+      - mix.exs
+      - mix.lock
+      - mise.toml
+      - .github/workflows/dependency-submission.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    name: Submit Mix dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # The Dependency Submission API requires write access to the repository.
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # Provides mix for `install-deps`, so transitive dependencies resolve fully.
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
+      - uses: erlef/mix-dependency-submission@257b2df58056895d7a0f3f7dba5b0520d71d9a46 # v1.3.4
+        with:
+          install-deps: 'true'

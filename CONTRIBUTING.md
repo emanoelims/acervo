@@ -115,11 +115,13 @@ finding does not affect the project, acknowledge it narrowly in the `:hex`
 section of `mix.exs` (`ignore_advisories` or `ignore_retirements`) and explain
 why in the PR; ignored findings are still listed but no longer fail CI.
 
-Dependabot security alerts and security updates are enabled on the repository,
-but GitHub's dependency graph does not read `mix.lock`: they currently cover
-GitHub Actions only. `mix hex.audit` is the advisory check for Hex dependencies.
-A clean result from either tool is not a guarantee that every dependency is free
-of vulnerabilities.
+Dependabot security alerts and security updates are enabled on the repository.
+GitHub's dependency graph does not read `mix.lock`, so the `Dependency
+submission` workflow uses `erlef/mix-dependency-submission` to submit the
+resolved Mix dependencies whenever `mix.exs` or `mix.lock` changes on `main`.
+Alerts then cover Hex packages as well as GitHub Actions, alongside the
+`mix hex.audit` check in CI. A clean result from either tool is not a guarantee
+that every dependency is free of vulnerabilities.
 
 ## Security reports
 
