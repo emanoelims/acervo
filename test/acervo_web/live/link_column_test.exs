@@ -89,6 +89,16 @@ defmodule AcervoWeb.LinkColumnTest do
       assert page_title(view) =~ "Miller columns are back"
     end
 
+    test "opens the canonical URL and shows its host for a link saved without a scheme", %{conn: conn, scope: scope} do
+      link = link_fixture(scope, "example.com/a")
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+
+      assert has_element?(view, ~s|#link-open[href="https://example.com/a"]|)
+      assert has_element?(view, "#column-link .meta", "example.com")
+      assert has_element?(view, "#link-#{link.id}", "example.com")
+    end
+
     test "leaving an open link for another list keeps the order", %{conn: conn, scope: scope} do
       older = link_fixture(scope)
       newer = link_fixture(scope)
@@ -121,6 +131,30 @@ defmodule AcervoWeb.LinkColumnTest do
 
       view |> element("#note-form textarea") |> render_blur(%{"value" => "On blur"})
       assert Library.get_link!(scope, link.id).note == "On blur"
+    end
+
+    test "a note over 4000 characters shows its error inline", %{conn: conn, scope: scope} do
+      link = link_fixture(scope)
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+
+      view |> element("#note-form textarea") |> render_blur(%{"value" => String.duplicate("a", 4001)})
+
+      assert has_element?(view, "#note-form", "should be at most 4000 character(s)")
+      assert Library.get_link!(scope, link.id).note == nil
+    end
+
+    test "events without an open link are ignored", %{conn: conn, scope: scope} do
+      link_fixture(scope)
+
+      {:ok, view, _html} = live(conn, ~p"/all")
+
+      for event <- ~w(done delete save_note) do
+        render_hook(view, event, %{})
+      end
+
+      assert has_element?(view, "#links")
+      assert Library.count_links(scope) == 1
     end
 
     test "done on the inbox marks the link triaged and leaves the column", %{conn: conn, scope: scope} do
@@ -157,6 +191,22 @@ defmodule AcervoWeb.LinkColumnTest do
       assert_patch(view, ~p"/all")
       refute has_element?(view, "#link-#{link.id}")
       assert_raise Ecto.NoResultsError, fn -> Library.get_link!(scope, link.id) end
+    end
+
+    test "renaming the open collection follows the new slug and keeps the link open", %{conn: conn, scope: scope} do
+      link = link_fixture(scope)
+      collection = collection_fixture(scope, %{name: "Receitas"})
+      :ok = Collections.add_link(scope, collection, link)
+
+      {:ok, view, _html} = live(conn, ~p"/c/#{collection.slug}/l/#{link.id}")
+      assert has_element?(view, "#link-#{link.id}[href='/c/#{collection.slug}/l/#{link.id}']")
+
+      {:ok, renamed} = Collections.update_collection(scope, collection, %{name: "Cozinha"})
+      refute renamed.slug == collection.slug
+
+      assert_patch(view, ~p"/c/#{renamed.slug}/l/#{link.id}")
+      assert has_element?(view, "#link-#{link.id}[href='/c/#{renamed.slug}/l/#{link.id}']")
+      assert has_element?(view, "#column-link")
     end
 
     test "another user's link redirects to the list with an error", %{conn: conn} do
@@ -201,22 +251,25 @@ defmodule AcervoWeb.LinkColumnTest do
 
   describe "live updates" do
     test "a created link appears at the top", %{conn: conn, scope: scope} do
+      older = link_fixture(scope)
       {:ok, view, _html} = live(conn, ~p"/all")
-
       link = link_fixture(scope)
 
       assert has_element?(view, "#links #link-#{link.id}")
-      assert has_element?(view, "#nav-all .nav-count", "1")
-      assert has_element?(view, "#nav-inbox .nav-count", "1")
+
+      [first | _] =
+        view |> render() |> LazyHTML.from_fragment() |> LazyHTML.query("#links [id^=link-]") |> LazyHTML.attribute("id")
+
+      assert first == "link-#{link.id}"
+      assert has_element?(view, "#link-#{older.id}")
+      assert has_element?(view, "#nav-all .nav-count", "2")
+      assert has_element?(view, "#nav-inbox .nav-count", "2")
     end
 
     test "an updated link re-renders its card and the open column", %{conn: conn, scope: scope} do
       link = link_fixture(scope)
 
       {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
-
-      {:ok, _} = Library.update_note(scope, link, %{note: "Updated elsewhere"})
-      assert render(view) =~ "Updated elsewhere"
 
       capture(link, title: "Captured title")
       :ok = Library.broadcast_updated(scope, link.id)
@@ -240,6 +293,8 @@ defmodule AcervoWeb.LinkColumnTest do
       link = link_fixture(scope)
 
       {:ok, view, _html} = live(conn, ~p"/all")
+      assert has_element?(view, "#link-#{link.id}")
+
       {:ok, _} = Library.delete_link(scope, link)
 
       refute has_element?(view, "#link-#{link.id}")

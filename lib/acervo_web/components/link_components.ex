@@ -28,7 +28,12 @@ defmodule AcervoWeb.LinkComponents do
     <.link
       id={@id}
       patch={@patch}
-      class={["card", "card-#{@kind}", @kind == :text && "text", @selected && "is-selected"]}
+      class={[
+        "card",
+        @kind != :text && "card-#{@kind}",
+        @kind == :text && "text",
+        @selected && "is-selected"
+      ]}
       aria-current={@selected && "true"}
     >
       <.source_icon source={@link.source} />
@@ -162,7 +167,7 @@ defmodule AcervoWeb.LinkComponents do
       <div class="acts">
         <a
           id="link-open"
-          href={@link.url}
+          href={@link.canonical_url}
           target="_blank"
           rel="noopener noreferrer"
           class="round"
@@ -288,7 +293,7 @@ defmodule AcervoWeb.LinkComponents do
   def display_title(link), do: host(link)
 
   @doc "The link's host without a leading `www.`."
-  def host(%{url: url}) do
+  def host(%{canonical_url: url}) do
     case URI.parse(url) do
       %URI{host: "www." <> host} -> host
       %URI{host: host} when is_binary(host) -> host

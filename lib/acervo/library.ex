@@ -142,6 +142,10 @@ defmodule Acervo.Library do
     end
   end
 
+  @doc "Returns a changeset for tracking note changes."
+  @spec change_note(Link.t(), map()) :: Ecto.Changeset.t()
+  def change_note(%Link{} = link, attrs \\ %{}), do: Link.note_changeset(link, attrs)
+
   @spec mark_triaged(Scope.t(), Link.t()) :: {:ok, Link.t()} | {:error, :not_found}
   def mark_triaged(%Scope{} = scope, %Link{} = link) do
     with {:ok, link} <- owned(scope, link) do

@@ -29,8 +29,8 @@ defmodule AcervoWeb.ArchiveLive do
 
     with {:ok, collection} <- fetch_collection(socket, params),
          filter = filter(socket.assigns.live_action, collection),
-         reset? = filter != socket.assigns.filter,
-         socket = socket |> assign(:collection, collection) |> apply_filter(filter),
+         reset? = filter != socket.assigns.filter or renamed?(socket.assigns.collection, collection),
+         socket = socket |> assign(:collection, collection) |> apply_filter(filter, reset?),
          {:ok, link} <- fetch_link(socket, params) do
       {:noreply, socket |> select_link(link, reset?) |> assign_page_title()}
     else
@@ -60,12 +60,16 @@ defmodule AcervoWeb.ArchiveLive do
   defp filter(action, collection) when action in [:collection, :collection_link], do: {:collection, collection.id}
   defp filter(:home, _collection), do: nil
 
+  # A renamed collection changes the cards' hrefs, so it re-streams too.
+  defp renamed?(%{id: id, slug: old}, %{id: id, slug: new}), do: old != new
+  defp renamed?(_old, _new), do: false
+
   # Re-streams only when the list changes, so opening a link keeps the cards.
-  defp apply_filter(%{assigns: %{filter: filter}} = socket, filter), do: socket
+  defp apply_filter(socket, _filter, false), do: socket
 
-  defp apply_filter(socket, nil), do: socket |> assign(:filter, nil) |> stream(:links, [], reset: true)
+  defp apply_filter(socket, nil, true), do: socket |> assign(:filter, nil) |> stream(:links, [], reset: true)
 
-  defp apply_filter(socket, filter) do
+  defp apply_filter(socket, filter, true) do
     links = Library.list_links(socket.assigns.current_scope, filter: filter)
     socket |> assign(:filter, filter) |> stream(:links, links, reset: true)
   end
@@ -87,9 +91,12 @@ defmodule AcervoWeb.ArchiveLive do
   defp restream_existing(socket, nil), do: socket
   defp restream_existing(socket, link), do: stream_insert(socket, :links, link, update_only: true)
 
-  defp note_form(link), do: to_form(%{"note" => link.note}, as: :link)
+  defp note_form(link, attrs \\ %{}), do: to_form(Library.change_note(link, attrs), as: :link)
 
   @impl true
+  def handle_event(event, _params, %{assigns: %{link: nil}} = socket) when event in ~w(save_note done delete),
+    do: {:noreply, socket}
+
   def handle_event("save_note", %{"link" => %{"note" => note}}, socket), do: save_note(socket, note)
   def handle_event("save_note", %{"value" => note}, socket), do: save_note(socket, note)
 
@@ -126,7 +133,7 @@ defmodule AcervoWeb.ArchiveLive do
       case Library.update_note(socket.assigns.current_scope, link, %{note: note}) do
         {:ok, link} -> {:noreply, assign(socket, link: link, note_form: note_form(link))}
         {:error, :not_found} -> {:noreply, gone(socket)}
-        {:error, _changeset} -> {:noreply, put_flash(socket, :error, gettext("Could not save the note."))}
+        {:error, changeset} -> {:noreply, assign(socket, :note_form, to_form(changeset, as: :link, action: :validate))}
       end
     end
   end
@@ -172,10 +179,14 @@ defmodule AcervoWeb.ArchiveLive do
         case Enum.find(socket.assigns.collections, &(&1.id == current.id)) do
           nil -> {:noreply, push_patch(socket, to: ~p"/")}
           %{slug: slug} = collection when slug == current.slug -> {:noreply, assign(socket, :collection, collection)}
-          collection -> {:noreply, push_patch(socket, to: list_path(%{socket.assigns | collection: collection}))}
+          collection -> {:noreply, push_patch(socket, to: renamed_path(socket.assigns, collection))}
         end
     end
   end
+
+  defp renamed_path(%{link: nil} = assigns, collection), do: list_path(%{assigns | collection: collection})
+
+  defp renamed_path(%{link: link} = assigns, collection), do: link_path(assigns.filter, collection, link)
 
   defp restream(socket, link) do
     if matches?(socket.assigns.filter, link),
