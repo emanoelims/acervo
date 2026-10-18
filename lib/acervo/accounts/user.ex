@@ -1,6 +1,7 @@
 defmodule Acervo.Accounts.User do
   @moduledoc false
   use Acervo.Schema
+  use Gettext, backend: AcervoWeb.Gettext
 
   import Ecto.Changeset
 
@@ -37,7 +38,9 @@ defmodule Acervo.Accounts.User do
     changeset =
       changeset
       |> validate_required([:email])
-      |> validate_format(:email, ~r/^[^@,;\s]+@[^@,;\s]+$/, message: "must have the @ sign and no spaces")
+      |> validate_format(:email, ~r/^[^@,;\s]+@[^@,;\s]+$/,
+        message: dgettext_noop("errors", "must have the @ sign and no spaces")
+      )
       |> validate_length(:email, max: 160)
       |> maybe_validate_allowlist(opts)
 
@@ -60,12 +63,12 @@ defmodule Acervo.Accounts.User do
   end
 
   defp allowlist_errors(:email, email) do
-    if Allowlist.allowed?(email), do: [], else: [email: "is not allowed to register"]
+    if Allowlist.allowed?(email), do: [], else: [email: dgettext_noop("errors", "is not allowed to register")]
   end
 
   defp validate_email_changed(changeset) do
     if get_field(changeset, :email) && get_change(changeset, :email) == nil do
-      add_error(changeset, :email, "did not change")
+      add_error(changeset, :email, dgettext_noop("errors", "did not change"))
     else
       changeset
     end

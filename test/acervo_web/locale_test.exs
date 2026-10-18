@@ -28,6 +28,16 @@ defmodule AcervoWeb.LocaleTest do
     assert redirected_to(conn) == "/"
   end
 
+  test "ignores a backslash return path", %{conn: conn} do
+    conn = get(conn, "/locale/en?return_to=/%5Cevil.example")
+    assert redirected_to(conn) == "/"
+  end
+
+  test "ignores a return path with a newline", %{conn: conn} do
+    conn = get(conn, "/locale/en?return_to=/users%0Alog-in")
+    assert redirected_to(conn) == "/"
+  end
+
   test "the cookie selects English", %{conn: conn} do
     conn = conn |> put_req_cookie("acervo_locale", "en") |> get(~p"/users/log-in")
     assert conn.assigns.locale == "en"

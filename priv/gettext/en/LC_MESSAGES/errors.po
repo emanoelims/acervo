@@ -110,3 +110,18 @@ msgstr ""
 
 msgid "must be equal to %{number}"
 msgstr ""
+
+#: lib/acervo/accounts/user.ex:69
+#, elixir-autogen, elixir-format
+msgid "did not change"
+msgstr ""
+
+#: lib/acervo/accounts/user.ex:64
+#, elixir-autogen, elixir-format
+msgid "is not allowed to register"
+msgstr ""
+
+#: lib/acervo/accounts/user.ex:41
+#, elixir-autogen, elixir-format
+msgid "must have the @ sign and no spaces"
+msgstr ""

@@ -131,12 +131,12 @@ msgstr "Sem conexão com a internet"
 #: lib/acervo_web/controllers/user_session_controller.ex:12
 #, elixir-autogen, elixir-format
 msgid "Welcome back."
-msgstr "Bem-vindo de volta."
+msgstr "Que bom te ver de novo."
 
 #: lib/acervo_web/controllers/user_session_controller.ex:8
 #, elixir-autogen, elixir-format
 msgid "Welcome to Acervo."
-msgstr "Bem-vindo ao Acervo."
+msgstr "Boas-vindas ao Acervo."
 
 #: lib/acervo_web/user_auth.ex:226
 #: lib/acervo_web/user_auth.ex:275
