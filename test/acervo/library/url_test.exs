@@ -1,6 +1,8 @@
 defmodule Acervo.Library.URLTest do
   use ExUnit.Case, async: true
 
+  alias Acervo.Library.Extractor
+  alias Acervo.Library.Extractors.YouTube
   alias Acervo.Library.URL
 
   describe "normalize/1" do
@@ -45,6 +47,14 @@ defmodule Acervo.Library.URLTest do
       assert URL.source("https://x.com/user/status/1") == :x
       assert URL.source("https://example.com/") == :generic
       assert URL.source("garbage") == :generic
+    end
+
+    test "treats YouTube Music as YouTube, like the extractor" do
+      {:ok, url} = URL.normalize("https://music.youtube.com/watch?v=abc&si=x")
+
+      assert url == "https://music.youtube.com/watch?v=abc"
+      assert URL.source(url) == :youtube
+      assert Extractor.for(URI.parse(url)) == YouTube
     end
   end
 end

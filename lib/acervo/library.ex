@@ -32,18 +32,30 @@ defmodule Acervo.Library do
 
   @doc """
   Saves `url` for the scope's user. A URL whose canonical form is already
-  saved returns that link as `:existing`; otherwise the link is inserted with
+  saved, as a link's `canonical_url` or as the `resolved_url` its capture
+  found, returns that link as `:existing`; otherwise the link is inserted with
   its capture job in one transaction and broadcast as `{:link_created, link}`.
   """
   @spec save_link(Scope.t(), String.t()) ::
           {:ok, Link.t(), :created | :existing} | {:error, :invalid_url | Ecto.Changeset.t()}
   def save_link(%Scope{user: user} = scope, url) when is_binary(url) do
     with {:ok, canonical_url} <- URL.normalize(url) do
-      case Repo.get_by(Link, user_id: user.id, canonical_url: canonical_url) do
+      case find_saved(user, canonical_url) do
         %Link{} = link -> {:ok, preload_link(link), :existing}
         nil -> insert_link(scope, String.trim(url), canonical_url)
       end
     end
+  end
+
+  # `resolved_url` is not unique, so prefer the link saved under that exact
+  # canonical URL, then the oldest.
+  defp find_saved(user, canonical_url) do
+    Repo.one(
+      from l in Link,
+        where: l.user_id == ^user.id and (l.canonical_url == ^canonical_url or l.resolved_url == ^canonical_url),
+        order_by: [desc: l.canonical_url == ^canonical_url, asc: l.inserted_at, asc: l.id],
+        limit: 1
+    )
   end
 
   @doc false
@@ -191,7 +203,8 @@ defmodule Acervo.Library do
 
   @doc false
   # Re-reads a link with its preloads and broadcasts `{:link_updated, link}`.
-  # Used by `Acervo.Library.CaptureLink`; returns `:error` if the link is gone.
+  # Used by `Acervo.Library.CaptureLink` and `Acervo.Collections`; returns
+  # `:error` if the link is gone.
   @spec broadcast_updated(Scope.t(), Ecto.UUID.t()) :: :ok | :error
   def broadcast_updated(%Scope{user: user} = scope, link_id) do
     case Repo.get_by(Link, id: link_id, user_id: user.id) do

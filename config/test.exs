@@ -37,6 +37,7 @@ config :acervo, :static_hosts, %{
   "internal.test" => [{10, 0, 0, 5}],
   "mixed.test" => [{93, 184, 216, 34}, {127, 0, 0, 1}],
   "example.com" => [{93, 184, 216, 40}],
+  "x.test" => [{93, 184, 216, 45}],
   "www.youtube.com" => [{93, 184, 216, 41}],
   "publish.twitter.com" => [{93, 184, 216, 42}],
   "x.com" => [{93, 184, 216, 43}],

@@ -380,6 +380,27 @@ defmodule AcervoWeb.UserAuthTest do
     end
   end
 
+  describe "require_user_or_not_found/2" do
+    setup %{conn: conn} do
+      %{conn: UserAuth.fetch_current_scope_for_user(conn, [])}
+    end
+
+    test "halts with 404 without a user and stores no return path", %{conn: conn} do
+      conn = UserAuth.require_user_or_not_found(%{conn | path_info: ["images", "x"]}, [])
+
+      assert conn.halted
+      assert conn.status == 404
+      refute get_session(conn, :user_return_to)
+    end
+
+    test "lets a signed-in user through", %{conn: conn, user: user} do
+      conn = conn |> assign(:current_scope, Scope.for_user(user)) |> UserAuth.require_user_or_not_found([])
+
+      refute conn.halted
+      refute conn.status
+    end
+  end
+
   describe "disconnect_sessions/1" do
     test "broadcasts disconnect messages for each token" do
       tokens = [%{token: "token1"}, %{token: "token2"}]

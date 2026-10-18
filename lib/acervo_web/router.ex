@@ -41,6 +41,13 @@ defmodule AcervoWeb.Router do
     plug :fetch_current_scope_for_user
   end
 
+  # Private resources answer 404 without a user, never a login redirect.
+  pipeline :private_resource do
+    plug :fetch_session
+    plug :fetch_current_scope_for_user
+    plug :require_user_or_not_found
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
   end
@@ -54,6 +61,13 @@ defmodule AcervoWeb.Router do
     pipe_through :browser
 
     get "/locale/:locale", LocaleController, :update
+  end
+
+  # The controller still scopes each image to its owner.
+  scope "/", AcervoWeb do
+    pipe_through :private_resource
+
+    get "/images/:id", ImageController, :show
   end
 
   # Other scopes may use custom stacks.
@@ -82,8 +96,6 @@ defmodule AcervoWeb.Router do
 
   scope "/", AcervoWeb do
     pipe_through [:browser, :require_authenticated_user]
-
-    get "/images/:id", ImageController, :show
 
     live_session :require_authenticated_user,
       on_mount: [AcervoWeb.Locale, {AcervoWeb.UserAuth, :require_authenticated}] do

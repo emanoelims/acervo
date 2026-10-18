@@ -13,11 +13,28 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   them into collections you create, rename and describe.
 - Add a screenshot to a link whose preview couldn't be captured, by uploading
   or pasting an image.
+- Saved links are captured in the background: title, description, text and up
+  to four images for web pages, YouTube, X and Instagram (best-effort), with
+  retries when a site fails temporarily. Images are stored privately as WebP
+  and served only to their owner.
 
 ### Changed
 
 - Signing in with an allowed email creates the account; there is no separate
   sign-up screen.
+
+### Security
+
+- Outbound fetches are guarded against SSRF: private, loopback and link-local
+  addresses are blocked, only ports 80 and 443 are allowed, every redirect is
+  checked again, and the connection is pinned to the vetted address.
+- Captured and uploaded images are re-encoded with their metadata stripped,
+  and only common formats (JPEG, PNG, WebP, GIF and HEIF) are accepted.
+- WebSocket frames are capped in size.
+
+### Migration
+
+Migrations create the links, link images and collections tables.
 
 ## [0.2.0] - 2026-10-18
 

@@ -33,12 +33,13 @@ config :acervo, AcervoWeb.Gettext, default_locale: "pt_BR", locales: ~w(pt_BR en
 config :acervo, Oban,
   engine: Oban.Engines.Basic,
   repo: Acervo.Repo,
-  queues: [capture: 4, ai: 2, embed: 4],
+  queues: [capture: 2, ai: 2, embed: 4],
   # Below the 30 s kill_timeout in fly.toml, so jobs can finish before SIGKILL.
   shutdown_grace_period: to_timeout(second: 20),
   plugins: [
     {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
-    {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 30)},
+    # Above the longest job timeout (CaptureLink, 3 minutes).
+    {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 5)},
     {Oban.Plugins.Cron, crontab: [{"*/10 * * * *", Acervo.Library.ReapStuckCaptures}]}
   ]
 

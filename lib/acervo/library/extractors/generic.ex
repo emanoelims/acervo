@@ -25,13 +25,16 @@ defmodule Acervo.Library.Extractors.Generic do
   end
 
   @doc """
-  Like `fetch/2`, but also returns the final URL after redirects.
+  Like `fetch/2`, but also returns the final URL after redirects, which the
+  capture carries as `final_url` too.
   """
   @spec fetch_page(URI.t(), keyword()) :: {:ok, Capture.t(), String.t()} | {:error, term()}
   def fetch_page(%URI{} = uri, opts) do
     case SafeFetch.get(URI.to_string(uri), Keyword.put(opts, :accept, @accept)) do
       {:ok, %{body: body, url: url} = response} when is_binary(body) ->
-        if html?(response), do: {:ok, HtmlMeta.parse(body, url, content_type(response)), url}, else: {:error, :not_html}
+        if html?(response),
+          do: {:ok, %{HtmlMeta.parse(body, url, content_type(response)) | final_url: url}, url},
+          else: {:error, :not_html}
 
       {:ok, _response} ->
         {:error, :not_html}

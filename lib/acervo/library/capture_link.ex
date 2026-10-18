@@ -2,6 +2,8 @@ defmodule Acervo.Library.CaptureLink do
   @moduledoc """
   Captures a saved link's preview: runs `Acervo.Library.Extractor`, stores up
   to four preview images normalized to WebP, and fills the link's fields.
+  The link's `canonical_url` (its dedupe key) never changes: the page's own
+  canonical URL, or else its final URL after redirects, goes to `resolved_url`.
 
   Errors that will not change on retry (blocked, not found, not HTML, an
   address or port SafeFetch refuses, an invalid URL, a redirect loop or any
@@ -122,38 +124,31 @@ defmodule Acervo.Library.CaptureLink do
       capture_error: nil
     }
 
-    changeset = Link.capture_changeset(link, attrs)
-
-    changeset
-    |> put_canonical_url(link, capture.canonical_url)
+    link
+    |> Link.capture_changeset(Map.merge(attrs, resolved_url(capture)))
     |> save()
-    |> keep_canonical_if_taken(changeset)
     |> finish(:ok)
   end
 
-  # The page's own canonical URL replaces ours when it is valid.
-  defp put_canonical_url(changeset, _link, nil), do: changeset
-
-  defp put_canonical_url(changeset, %Link{} = link, url) do
-    with {:ok, canonical_url} <- URL.normalize(url),
-         true <- canonical_url != link.canonical_url and byte_size(canonical_url) <= 2048 do
-      Ecto.Changeset.put_change(changeset, :canonical_url, canonical_url)
-    else
-      _ -> changeset
+  # `canonical_url` is the immutable dedupe key and never changes. Where the
+  # page says it lives (its canonical URL, or else where the fetch ended up
+  # after redirects) goes to `resolved_url`, which `Library.save_link/2` also
+  # matches and "open original" prefers.
+  defp resolved_url(%Capture{canonical_url: canonical, final_url: final}) do
+    case Enum.find_value([canonical, final], &valid_url/1) do
+      nil -> %{}
+      url -> %{resolved_url: url}
     end
   end
 
-  # Another link of this user already has that canonical URL, so the unique
-  # index refused it: save the capture and keep ours. Relying on the index
-  # instead of checking first leaves no window for a concurrent save.
-  defp keep_canonical_if_taken({:error, %Ecto.Changeset{errors: errors}} = result, changeset) do
-    case errors[:canonical_url] do
-      {_, [constraint: :unique, constraint_name: _]} -> save(changeset)
-      _ -> result
+  defp valid_url(url) when is_binary(url) do
+    case URL.normalize(url) do
+      {:ok, normalized} when byte_size(normalized) <= 2048 -> normalized
+      _ -> nil
     end
   end
 
-  defp keep_canonical_if_taken(result, _changeset), do: result
+  defp valid_url(nil), do: nil
 
   ## Images
 

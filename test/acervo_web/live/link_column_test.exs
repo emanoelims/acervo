@@ -99,6 +99,14 @@ defmodule AcervoWeb.LinkColumnTest do
       assert has_element?(view, "#link-#{link.id}", "example.com")
     end
 
+    test "opens the resolved URL when the capture found one", %{conn: conn, scope: scope} do
+      link = scope |> link_fixture("http://example.com/a") |> capture(resolved_url: "https://example.com/b")
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+
+      assert has_element?(view, ~s|#link-open[href="https://example.com/b"]|)
+    end
+
     test "leaving an open link for another list keeps the order", %{conn: conn, scope: scope} do
       older = link_fixture(scope)
       newer = link_fixture(scope)

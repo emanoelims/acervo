@@ -664,9 +664,11 @@ defmodule AcervoWeb.ArchiveLive do
       />
     </Layouts.app>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".PasteLink">
-      // Pasting a link anywhere outside a field saves it. Pasted images are
-      // handled by the link column's own hook.
-      const URL_LIKE = /^(https?:\/\/)?[^\s]+\.[^\s]{2,}$/
+      // Pasting a link anywhere outside a field saves it. Only text that
+      // starts like a URL counts, so stray pasted words are never saved; the
+      // dock's add field still takes bare hosts. Pasted images are handled by
+      // the link column's own hook.
+      const URL_LIKE = /^(https?:\/\/|www\.)[^\s]+\.[^\s]{2,}$/i
       export default {
         mounted() {
           this.onPaste = event => {

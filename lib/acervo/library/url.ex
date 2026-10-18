@@ -14,6 +14,8 @@ defmodule Acervo.Library.URL do
   @youtube_hosts ~w(youtube.com www.youtube.com m.youtube.com)
   @youtube_short_host "youtu.be"
   @youtube_canonical_host "www.youtube.com"
+  # Kept as is by `normalize/1`, but captured by the YouTube extractor.
+  @youtube_music_host "music.youtube.com"
   @instagram_hosts ~w(instagram.com www.instagram.com)
   @instagram_canonical_host "www.instagram.com"
 
@@ -42,6 +44,7 @@ defmodule Acervo.Library.URL do
   def source(url) when is_binary(url) do
     case URI.parse(url) do
       %URI{host: @youtube_canonical_host} -> :youtube
+      %URI{host: @youtube_music_host} -> :youtube
       %URI{host: @instagram_canonical_host} -> :instagram
       %URI{host: "x.com"} -> :x
       _ -> :generic
