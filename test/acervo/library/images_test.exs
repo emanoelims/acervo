@@ -6,7 +6,9 @@ defmodule Acervo.Library.ImagesTest do
   alias Acervo.Accounts.Scope
   alias Acervo.Library.Images
   alias Acervo.Library.Link
+  alias Acervo.Library.LinkImage
   alias Acervo.Storage.Database
+  alias Vix.Vips.MutableImage
 
   @fixtures Path.expand("../../support/fixtures/images", __DIR__)
 
@@ -34,8 +36,57 @@ defmodule Acervo.Library.ImagesTest do
       assert Images.normalize(fixture("not_image.txt")) == {:error, :not_an_image}
     end
 
+    test "rejects images whose dimensions exceed the limits before decoding" do
+      png = fixture("wide.png")
+      <<sig::binary-size(8), 13::32, "IHDR", _w::32, _h::32, rest::binary-size(5), _crc::32, tail::binary>> = png
+      ihdr_body = <<25_000::32, 25_000::32, rest::binary>>
+      crc = :erlang.crc32(["IHDR", ihdr_body])
+      lying = <<sig::binary, 13::32, "IHDR", ihdr_body::binary, crc::32, tail::binary>>
+
+      assert Images.normalize(lying) == {:error, :too_large}
+    end
+
+    test "strips EXIF metadata" do
+      {:ok, source} = Image.new(64, 64, color: [200, 10, 10])
+
+      {:ok, tagged} =
+        Image.mutate(source, fn mut ->
+          MutableImage.set(mut, "exif-ifd0-Artist", :gchararray, "Somebody")
+        end)
+
+      {:ok, jpeg} = Image.write(tagged, :memory, suffix: ".jpg")
+      {:ok, reread} = Image.from_binary(jpeg)
+      assert {:ok, %{artist: "Somebody"}} = Image.exif(reread)
+
+      assert {:ok, normalized} = Images.normalize(jpeg)
+      {:ok, out} = Image.from_binary(normalized.bytes)
+
+      case Image.exif(out) do
+        {:ok, exif} -> assert exif == %{}
+        {:error, _} -> :ok
+      end
+    end
+
     test "rejects input over 15 MB" do
       assert Images.normalize(:binary.copy(<<0>>, 15 * 1024 * 1024 + 1)) == {:error, :too_large}
+    end
+  end
+
+  describe "LinkImage.changeset/2" do
+    test "only accepts image/webp" do
+      attrs = %{
+        kind: :preview,
+        content_type: "image/png",
+        bytes: "x",
+        width: 1,
+        height: 1,
+        sha256: String.duplicate("a", 64)
+      }
+
+      changeset = LinkImage.changeset(%LinkImage{}, attrs)
+
+      assert %{content_type: ["is invalid"]} = errors_on(changeset)
+      assert LinkImage.changeset(%LinkImage{}, %{attrs | content_type: "image/webp"}).valid?
     end
   end
 

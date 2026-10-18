@@ -24,7 +24,7 @@ defmodule Acervo.Library.LinkImage do
     image
     |> cast(attrs, [:position, :kind, :content_type, :bytes, :width, :height, :sha256])
     |> validate_required([:kind, :content_type, :bytes, :width, :height, :sha256])
-    |> validate_length(:content_type, max: 100)
+    |> validate_inclusion(:content_type, ["image/webp"])
     |> validate_length(:sha256, is: 64)
   end
 end

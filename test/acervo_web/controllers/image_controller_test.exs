@@ -30,6 +30,15 @@ defmodule AcervoWeb.ImageControllerTest do
     assert get_resp_header(conn, "etag") == [~s("#{image.sha256}")]
   end
 
+  test "returns 304 when if-none-match matches the etag", %{conn: conn, image: image} do
+    conn =
+      conn
+      |> put_req_header("if-none-match", ~s("#{image.sha256}"))
+      |> get(~p"/images/#{image.id}")
+
+    assert response(conn, 304) == ""
+  end
+
   test "returns 404 for another user's image", %{image: image} do
     conn = log_in_user(build_conn(), user_fixture())
 
