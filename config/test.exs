@@ -25,6 +25,19 @@ config :acervo, AcervoWeb.Endpoint,
 
 config :acervo, Oban, testing: :manual
 
+# No DNS or network in tests: SafeFetch resolves through a static table and
+# its requests go to `Req.Test` stubs named `Acervo.Library.SafeFetch`.
+config :acervo, :resolver, Acervo.StaticResolver
+config :acervo, :safe_fetch_req_options, plug: {Req.Test, Acervo.Library.SafeFetch}
+
+config :acervo, :static_hosts, %{
+  "public.test" => [{93, 184, 216, 34}],
+  "other.test" => [{93, 184, 216, 35}],
+  "ipv6.test" => [{0x2001, 0x4860, 0, 0, 0, 0, 0, 0x8888}],
+  "internal.test" => [{10, 0, 0, 5}],
+  "mixed.test" => [{93, 184, 216, 34}, {127, 0, 0, 1}]
+}
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 
