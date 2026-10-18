@@ -1,0 +1,202 @@
+defmodule Acervo.Library.CaptureLink do
+  @moduledoc """
+  Captures a saved link's preview: runs `Acervo.Library.Extractor`, stores up
+  to four preview images normalized to WebP, and fills the link's fields.
+
+  Errors that will not change on retry (blocked, not found, not HTML, an
+  address or port SafeFetch refuses, an invalid URL, a redirect loop or any
+  4xx) leave the link `:ready` with a `capture_error` and do not retry.
+  Anything else (timeouts, transport errors, 5xx, an oversized body or an
+  unexpected response) puts the link back to `:pending` and retries, ending
+  `:failed` on the last attempt. Every run broadcasts `{:link_updated, link}`.
+  """
+  use Oban.Worker, queue: :capture, max_attempts: 5, unique: [period: 60, keys: [:link_id]]
+
+  import Ecto.Query
+
+  alias Acervo.Accounts.Scope
+  alias Acervo.Library
+  alias Acervo.Library.Capture
+  alias Acervo.Library.Extractor
+  alias Acervo.Library.Images
+  alias Acervo.Library.Link
+  alias Acervo.Library.LinkImage
+  alias Acervo.Library.SafeFetch
+  alias Acervo.Library.URL
+  alias Acervo.Repo
+  alias Acervo.Storage
+
+  require Logger
+
+  @max_images 4
+  @max_image_bytes 15_000_000
+  @permanent_errors [:blocked, :not_found, :not_html, :blocked_address, :bad_port, :invalid_url, :too_many_redirects]
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{args: %{"link_id" => link_id}, attempt: attempt, max_attempts: max_attempts}) do
+    case load(link_id) do
+      {:ok, scope, link} ->
+        result = capture(scope, link, attempt >= max_attempts)
+        Library.broadcast_updated(scope, link.id)
+        result
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp load(link_id) do
+    with {:ok, id} <- Ecto.UUID.cast(link_id),
+         %Link{} = link <- Link |> Repo.get(id) |> Repo.preload(:user) do
+      {:ok, Scope.for_user(link.user), link}
+    else
+      _ -> :error
+    end
+  end
+
+  # Extracts from the canonical URL, which always has an http(s) scheme even
+  # when the user typed a bare host.
+  defp capture(scope, link, final_attempt?) do
+    case update_link(link, %{status: :processing}) do
+      {:ok, link} -> extract(scope, link, final_attempt?)
+      gone_or_error -> finish(gone_or_error, :ok)
+    end
+  end
+
+  defp extract(scope, link, final_attempt?) do
+    case Extractor.extract(link.canonical_url) do
+      {:ok, %Capture{} = capture} -> apply_capture(scope, link, capture)
+      {:error, reason} -> handle_error(link, reason, final_attempt?)
+    end
+  end
+
+  ## Success
+
+  defp apply_capture(scope, link, %Capture{} = capture) do
+    store_images(scope, link, capture.image_urls)
+
+    attrs = %{
+      title: capture.title,
+      description: capture.description,
+      author: capture.author,
+      site_name: capture.site_name,
+      published_at: capture.published_at,
+      text_excerpt: capture.text,
+      status: :ready,
+      capture_error: nil
+    }
+
+    link
+    |> Link.capture_changeset(attrs)
+    |> put_canonical_url(link, capture.canonical_url)
+    |> save()
+    |> finish(:ok)
+  end
+
+  # The page's own canonical URL replaces ours only when it is valid and no
+  # other link of this user has it, so the unique index never trips.
+  defp put_canonical_url(changeset, _link, nil), do: changeset
+
+  defp put_canonical_url(changeset, %Link{} = link, url) do
+    with {:ok, canonical_url} <- URL.normalize(url),
+         true <- canonical_url != link.canonical_url and byte_size(canonical_url) <= 2048,
+         false <- canonical_taken?(link, canonical_url) do
+      Ecto.Changeset.put_change(changeset, :canonical_url, canonical_url)
+    else
+      _ -> changeset
+    end
+  end
+
+  defp canonical_taken?(link, canonical_url) do
+    Repo.exists?(
+      from l in Link, where: l.user_id == ^link.user_id and l.canonical_url == ^canonical_url and l.id != ^link.id
+    )
+  end
+
+  ## Images
+
+  # Previews already stored (say, by an earlier attempt) count towards the
+  # limit and are recognized by their hash, so a re-capture adds no duplicates.
+  defp store_images(scope, link, urls) do
+    existing =
+      Repo.all(
+        from i in LinkImage, where: i.link_id == ^link.id, select: %{sha256: i.sha256, kind: i.kind, position: i.position}
+      )
+
+    state = %{
+      hashes: MapSet.new(existing, & &1.sha256),
+      stored: Enum.count(existing, &(&1.kind == :preview)),
+      position: existing |> Enum.map(& &1.position) |> Enum.max(fn -> -1 end) |> Kernel.+(1)
+    }
+
+    Enum.reduce_while(urls, state, fn
+      _url, %{stored: stored} = state when stored >= @max_images -> {:halt, state}
+      url, state -> {:cont, store_image(scope, link, url, state)}
+    end)
+  end
+
+  defp store_image(scope, link, url, state) do
+    with {:ok, %{body: body}} <- SafeFetch.get(url, max_bytes: @max_image_bytes, accept: "image/*"),
+         {:ok, image} <- Images.normalize(body),
+         :new <- if(MapSet.member?(state.hashes, image.sha256), do: :duplicate, else: :new),
+         {:ok, _image} <- Storage.put(scope, link, Map.merge(image, %{kind: :preview, position: state.position})) do
+      %{
+        state
+        | hashes: MapSet.put(state.hashes, image.sha256),
+          stored: state.stored + 1,
+          position: state.position + 1
+      }
+    else
+      skipped ->
+        Logger.debug("skipped preview image #{url}: #{inspect(skipped)}")
+        state
+    end
+  end
+
+  ## Errors
+
+  defp handle_error(link, reason, final_attempt?) do
+    case {classify(reason), final_attempt?} do
+      {:permanent, _} ->
+        link |> update_link(%{status: :ready, capture_error: error_code(reason)}) |> finish(:ok)
+
+      {:transient, false} ->
+        link |> update_link(%{status: :pending, capture_error: nil}) |> finish({:error, reason})
+
+      {:transient, true} ->
+        link |> update_link(%{status: :failed, capture_error: error_code(reason)}) |> finish({:error, reason})
+    end
+  end
+
+  @doc false
+  @spec classify(term()) :: :permanent | :transient
+  def classify(reason) when reason in @permanent_errors, do: :permanent
+  def classify({:http, status}) when status in 400..499, do: :permanent
+  def classify(_reason), do: :transient
+
+  @doc false
+  @spec error_code(term()) :: String.t()
+  def error_code({:http, status}) when is_integer(status), do: "http_#{status}"
+  def error_code({:transport, reason}) when is_atom(reason), do: "transport_#{reason}"
+  def error_code({:transport, _reason}), do: "transport"
+  def error_code(reason) when is_atom(reason), do: Atom.to_string(reason)
+  def error_code(_reason), do: "unknown"
+
+  ## Persistence
+
+  defp update_link(link, attrs), do: link |> Link.capture_changeset(attrs) |> save()
+
+  defp finish({:ok, %Link{}}, result), do: result
+  defp finish(:gone, _result), do: :ok
+  defp finish({:error, _changeset} = error, _result), do: error
+
+  # A link deleted mid-capture makes the update stale: there is nothing left
+  # to capture, so the job ends quietly.
+  defp save(changeset) do
+    case Repo.update(changeset, stale_error_field: :id) do
+      {:ok, link} -> {:ok, link}
+      {:error, %Ecto.Changeset{errors: [id: {"is stale", _}]}} -> :gone
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+end
