@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-18
+
+Capture: save links by pasting them, see their previews and organize them.
+
 ### Added
 
 - Links appear as cards and open in their own column with note, done and
@@ -34,7 +38,11 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Migration
 
-Migrations create the links, link images and collections tables.
+Additive migrations create the `links`, `link_images`, `collections` and
+`collection_links` tables and the `links.resolved_url` column. Images are stored
+in the shared database, whose volume was extended to 10 GB. No new environment
+variables; `ACERVO_ALLOWED_EMAILS` now also decides which emails can create an
+account by signing in.
 
 ## [0.2.0] - 2026-10-18
 
