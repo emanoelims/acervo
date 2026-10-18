@@ -324,15 +324,15 @@ in dev for each phase.
 
 ## Phases
 
-Each phase gets its own implementation plan, PRs, and release.
+Each phase gets its own implementation plan, PRs, and release. Releases 0.4.0–0.7.0 shipped design polish, the web view column and reader mode between phases 2 and 3, so later phases moved to the next minor version.
 
 | Phase | Scope | Release |
 |---|---|---|
 | 1. Foundation | Remove daisyUI. Port leitor's styles, the `studio` theme, the appearance panel, fonts and components. Magic-link auth with the allowlist. Column shell and dock. Oban and pgvector extension migrations. Styler and Credo. Fly deploy on release | 0.2.0 |
 | 2. Capture | URL normalization, `SafeFetch`, the extractors, image storage and serving, screenshot upload, cards, link column, manual collections | 0.3.0 |
-| 3. AI | `EnrichLink`, suggestions, the inbox triage UI, editable image description and note | 0.4.0 |
-| 4. Search | `EmbedLink`, the hybrid search query, search UI, the reindex task | 0.5.0 |
-| 5. Mobile | Personal API tokens, the `POST /api/links` endpoint, an iOS Shortcut guide, PWA manifest and `share_target` | 0.6.0 |
+| 3. AI | `EnrichLink`, suggestions, the inbox triage UI, editable image description and note | 0.8.0 |
+| 4. Search | `EmbedLink`, the hybrid search query, search UI, the reindex task | 0.9.0 |
+| 5. Mobile | Personal API tokens, the `POST /api/links` endpoint, an iOS Shortcut guide, PWA manifest and `share_target` | later |
 
 ## Risks
 
