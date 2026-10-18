@@ -39,6 +39,15 @@ defmodule AcervoWeb.GuideComponents do
         </:row>
       </.guide_section>
 
+      <.guide_section id="guide-web" title={gettext("Read")}>
+        <:row icon="lucide-globe">
+          {gettext("Click a link's image, or the globe, to open its page in a new column.")}
+        </:row>
+        <:row icon="lucide-book-open">
+          {gettext("Sites that can't be shown there open as a reader view of the saved text.")}
+        </:row>
+      </.guide_section>
+
       <.guide_section id="guide-organize" title={gettext("Organize")}>
         <:row icon="lucide-folder-plus">
           {gettext("On a link: filter collections, tap to toggle, or type a new name to create one.")}
@@ -94,6 +103,10 @@ defmodule AcervoWeb.GuideComponents do
             <tr>
               <td><kbd>Esc</kbd></td>
               <td>{gettext("Close the add field or a menu")}</td>
+            </tr>
+            <tr>
+              <td><kbd>Esc</kbd></td>
+              <td>{gettext("Close the page column")}</td>
             </tr>
             <tr>
               <td><kbd><.mod_key /></kbd><kbd>↩</kbd></td>

@@ -112,10 +112,52 @@ a.card:hover .card-shot { color: var(--muted); }
 .round:hover { transform: translateY(-1px); color: var(--ink); box-shadow: var(--card-shadow), 0 4px 12px rgb(0 0 0 / .06); }
 .round:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .round-danger:hover { color: var(--danger); }
+.round.is-active { color: var(--ink); box-shadow: 0 0 0 1.5px var(--ink); }
+
+/* The link's image opens the web view column; the open one keeps a ring. */
+.web-toggle { display: block; border-radius: 32px; color: inherit; text-decoration: none; }
+.web-toggle .card { transition: transform .35s var(--ease), box-shadow .35s var(--ease); }
+.web-toggle:hover .card { transform: translateY(-2px); box-shadow: var(--card-shadow), 0 14px 30px -12px rgb(0 0 0 / .14); }
+.web-toggle:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.web-toggle.is-open .card { box-shadow: 0 0 0 1.5px var(--ink), 0 14px 30px -14px rgb(0 0 0 / .16); }
+
+/* The web view column: a wide column whose body is the framed page, under
+   the header and without the column's padding, or a reader view. */
+.column-web { flex-basis: min(960px, 100vw); }
+.column-web .column-scroll { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.column-web .column-head { flex: none; margin-bottom: 0; padding: 32px 32px 24px; }
+.head-acts { display: flex; flex: none; gap: 8px; }
+.web-view { display: flex; flex: 1; min-height: 0; }
+.web-frame { display: block; flex: 1; width: 100%; height: 100%; border: 0; background: var(--soft); }
+.web-view-page .web-frame { border-top: 1px solid var(--separator); }
+.web-view-video { align-items: flex-start; padding: 0 32px; }
+.web-view-video .web-frame { flex: none; height: auto; aspect-ratio: 16 / 9; border-radius: 16px; box-shadow: var(--card-shadow); }
+.web-view-post { justify-content: center; padding: 0 32px; }
+.web-view-post { align-items: flex-start; }
+.web-view-post .web-frame { max-width: 560px; border-radius: 16px; background: transparent; }
+.web-view-post .web-frame[data-sized] { max-height: 100%; }
+.web-loading { padding: 0 32px 140px; }
+.web-loading .skeleton { flex: 1; aspect-ratio: auto; border-radius: 16px; }
+.web-reader { flex: 1; min-height: 0; overflow-y: auto; padding: 0 32px 140px; scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent; }
+.web-reader-head, .web-reader-text { max-width: 640px; }
+.web-reader-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.web-reader-head:last-child { border-bottom: 0; }
+.web-hint { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--faint); font-size: 13px; line-height: 20px; }
+.pill-button { display: inline-flex; flex: none; align-items: center; gap: 6px; height: 36px; padding: 0 16px; border-radius: 999px; background: var(--card); color: var(--ink); font-size: 14px; font-weight: 500; line-height: 20px; text-decoration: none; box-shadow: var(--card-shadow); transition: transform .2s var(--ease), box-shadow .2s; }
+.pill-button:hover { transform: translateY(-1px); box-shadow: var(--card-shadow), 0 4px 12px rgb(0 0 0 / .06); }
+.pill-button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.pill-button > span[class*=lucide-] { color: var(--muted); }
+.web-reader-text { margin-top: 24px; color: var(--body); font-size: 16px; line-height: 25.6px; overflow-wrap: anywhere; }
+.web-reader-text p { margin: 0; }
+.web-reader-text p + p { margin-top: 16px; }
+@media (max-width: 640px) {
+  .column-web .column-head { padding-inline: 24px; }
+  .web-view-video, .web-view-post, .web-loading, .web-reader { padding-inline: 24px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .card, .chip, .chip-x, .round, .pick-row { transition: none; }
-  a.card:hover, .chip:hover, .round:hover { transform: none; }
+  .card, .chip, .chip-x, .round, .pick-row, .web-toggle .card, .pill-button { transition: none; }
+  a.card:hover, .chip:hover, .round:hover, .web-toggle:hover .card, .pill-button:hover { transform: none; }
   .skeleton, .note-saved, .note-saved.is-leaving { animation: none; }
   .note-hint { transition: none; }
 }

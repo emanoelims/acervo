@@ -8,6 +8,11 @@ defmodule AcervoWeb.ArchiveLive do
   into collections from the link column; collections are created in column 1
   and renamed, described or deleted from their column's menu. `/guide` opens
   a column describing every feature and shortcut, also opened with `?`.
+
+  `…/l/:id/web` opens one more column with the link's page, framed when it
+  allows it (see `Acervo.Library.Embed`) and as a reader view of its captured
+  text otherwise. Links captured before capture recorded whether their page
+  may be framed are checked once, in the background, when this column opens.
   """
   use AcervoWeb, :live_view
 
@@ -17,9 +22,11 @@ defmodule AcervoWeb.ArchiveLive do
   alias Acervo.Collections
   alias Acervo.Collections.Collection
   alias Acervo.Library
+  alias Acervo.Library.Embed
 
   @max_screenshot_bytes 15_000_000
   @note_saved_ms 1500
+  @web_actions [:all_link_web, :inbox_link_web, :collection_link_web]
 
   @impl true
   def mount(_params, _session, socket) do
@@ -29,6 +36,7 @@ defmodule AcervoWeb.ArchiveLive do
      socket
      |> assign(filter: nil, collection: nil, link: nil, note_form: nil, note_saved: nil, screenshot_link_id: nil)
      |> assign(add_form: nil, new_collection_form: nil, editing: nil, collection_form: nil)
+     |> assign(web?: false, web_check: nil)
      |> assign(:collection_filter, collection_filter(""))
      |> allow_upload(:screenshot,
        accept: ~w(.png .jpg .jpeg .webp .heic),
@@ -51,7 +59,7 @@ defmodule AcervoWeb.ArchiveLive do
          reset? = filter != socket.assigns.filter or renamed?(socket.assigns.collection, collection),
          socket = socket |> stop_editing(collection) |> assign(:collection, collection) |> apply_filter(filter, reset?),
          {:ok, link} <- fetch_link(socket, params) do
-      {:noreply, socket |> select_link(link, reset?) |> assign_page_title()}
+      {:noreply, socket |> select_link(link, reset?) |> assign_web() |> assign_page_title()}
     else
       {:error, :not_found, to} ->
         {:noreply, socket |> put_flash(:error, gettext("Not found.")) |> push_patch(to: to)}
@@ -78,9 +86,12 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp fetch_link(_socket, _params), do: {:ok, nil}
 
-  defp filter(action, _collection) when action in [:all, :all_link], do: :all
-  defp filter(action, _collection) when action in [:inbox, :inbox_link], do: :inbox
-  defp filter(action, collection) when action in [:collection, :collection_link], do: {:collection, collection.id}
+  defp filter(action, _collection) when action in [:all, :all_link, :all_link_web], do: :all
+  defp filter(action, _collection) when action in [:inbox, :inbox_link, :inbox_link_web], do: :inbox
+
+  defp filter(action, collection) when action in [:collection, :collection_link, :collection_link_web],
+    do: {:collection, collection.id}
+
   defp filter(action, _collection) when action in [:home, :guide], do: nil
 
   # A renamed collection changes the cards' hrefs, so it re-streams too.
@@ -134,6 +145,35 @@ defmodule AcervoWeb.ArchiveLive do
       note_saved: nil,
       collection_filter: collection_filter("")
     )
+  end
+
+  # The web view column. A page whose embeddability is still unknown is
+  # checked once per link while the LiveView lives: `web_check` is
+  # `{:checking, id}` meanwhile and `{:failed, id}` when it couldn't tell,
+  # which shows the reader view.
+  defp assign_web(socket) do
+    socket = assign(socket, :web?, socket.assigns.live_action in @web_actions)
+
+    case socket.assigns do
+      %{web?: true, link: %{} = link} -> maybe_check_embeddable(socket, link)
+      _closed -> socket
+    end
+  end
+
+  defp maybe_check_embeddable(socket, link) do
+    case {Embed.frame(link), socket.assigns.web_check} do
+      {:unknown, {_state, id}} when id == link.id -> socket
+      {:unknown, _check} -> if connected?(socket), do: check_embeddable(socket, link), else: socket
+      _known -> socket
+    end
+  end
+
+  defp check_embeddable(socket, link) do
+    scope = socket.assigns.current_scope
+
+    socket
+    |> assign(:web_check, {:checking, link.id})
+    |> start_async(:embeddable, fn -> Library.check_embeddable(scope, link) end)
   end
 
   defp restream_existing(socket, nil), do: socket
@@ -212,6 +252,12 @@ defmodule AcervoWeb.ArchiveLive do
 
   # The `?` key, outside fields.
   def handle_event("open_guide", _params, socket), do: {:noreply, push_patch(socket, to: ~p"/guide")}
+
+  # Esc, outside fields and menus, while the web view column is open.
+  def handle_event("close_web", _params, %{assigns: %{web?: true, link: %{} = link}} = socket),
+    do: {:noreply, push_patch(socket, to: link_path(socket.assigns.filter, socket.assigns.collection, link))}
+
+  def handle_event("close_web", _params, socket), do: {:noreply, socket}
 
   # Organizing the open link.
   def handle_event("filter_collections", %{"query" => query}, socket),
@@ -294,7 +340,7 @@ defmodule AcervoWeb.ArchiveLive do
   def handle_event("save_note", %{"value" => note}, socket), do: save_note(socket, note)
 
   def handle_event("done", _params, socket) do
-    inbox? = socket.assigns.live_action == :inbox_link
+    inbox? = socket.assigns.live_action in [:inbox_link, :inbox_link_web]
 
     case Library.mark_triaged(socket.assigns.current_scope, socket.assigns.link) do
       {:ok, link} when inbox? ->
@@ -365,8 +411,8 @@ defmodule AcervoWeb.ArchiveLive do
 
   # A link removed from the collection being viewed no longer belongs in that
   # list, so close it.
-  defp left_collection(%{assigns: %{live_action: :collection_link, collection: %{id: id, slug: slug}}} = socket, %{id: id}),
-       do: push_patch(socket, to: ~p"/c/#{slug}")
+  defp left_collection(%{assigns: %{live_action: action, collection: %{id: id, slug: slug}}} = socket, %{id: id})
+       when action in [:collection_link, :collection_link_web], do: push_patch(socket, to: ~p"/c/#{slug}")
 
   defp left_collection(socket, _collection), do: socket
 
@@ -487,7 +533,18 @@ defmodule AcervoWeb.ArchiveLive do
 
   def handle_info({:clear_note_saved, _stale}, socket), do: {:noreply, socket}
 
+  @impl true
+  def handle_async(:embeddable, {:ok, {:ok, link}}, socket),
+    do: {:noreply, socket |> assign(:web_check, nil) |> refresh_open(link)}
+
+  def handle_async(:embeddable, _failed, %{assigns: %{web_check: {:checking, id}}} = socket),
+    do: {:noreply, assign(socket, :web_check, {:failed, id})}
+
+  def handle_async(:embeddable, _failed, socket), do: {:noreply, socket}
+
   defp renamed_path(%{link: nil} = assigns, collection), do: list_path(%{assigns | collection: collection})
+
+  defp renamed_path(%{link: link, web?: true} = assigns, collection), do: web_path(assigns.filter, collection, link)
 
   defp renamed_path(%{link: link} = assigns, collection), do: link_path(assigns.filter, collection, link)
 
@@ -678,7 +735,43 @@ defmodule AcervoWeb.ArchiveLive do
             collection_filter={@collection_filter}
             upload={@uploads.screenshot}
             note_saved={!!@note_saved}
+            web_path={web_toggle_path(assigns, @link)}
+            web_open={@web?}
           />
+        </.column>
+
+        <.column
+          :if={@web? and @link}
+          id="column-web"
+          class="column-web"
+          title={site_title(@link)}
+          key={@link.id}
+        >
+          <:actions>
+            <div class="head-acts">
+              <a
+                id="web-open"
+                href={Embed.original_url(@link)}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="head-button"
+                title={gettext("Open original")}
+                aria-label={gettext("Open original")}
+              >
+                <.icon name="lucide-external-link" class="size-4" />
+              </a>
+              <.link
+                id="web-close"
+                patch={link_path(@filter, @collection, @link)}
+                class="head-button"
+                title={gettext("Close")}
+                aria-label={gettext("Close")}
+              >
+                <.icon name="lucide-x" class="size-4" />
+              </.link>
+            </div>
+          </:actions>
+          <.web_view link={@link} check={@web_check} />
         </.column>
 
         <.column :if={@live_action == :guide} id="column-guide" title={gettext("Guide")}>
@@ -700,16 +793,25 @@ defmodule AcervoWeb.ArchiveLive do
       //   stray pasted words are never saved; the dock's add field still takes
       //   bare hosts. Pasted images are handled by the link column's own hook.
       // - `?` opens the guide.
+      // - Esc closes the web view column, unless a menu or the add field is
+      //   open: those close first, on their own.
       const URL_LIKE = /^(https?:\/\/|www\.)[^\s]+\.[^\s]{2,}$/i
       const typing = target => target instanceof Element &&
         (target.closest('input, textarea, select, [contenteditable]') || target.isContentEditable)
       export default {
         mounted() {
           this.onKeydown = event => {
-            if (event.key !== '?' || event.ctrlKey || event.metaKey || event.altKey) return
             if (event.defaultPrevented || event.isComposing || typing(event.target)) return
+            if (event.key === 'Escape') return this.closeWeb(event)
+            if (event.key !== '?' || event.ctrlKey || event.metaKey || event.altKey) return
             event.preventDefault()
             this.pushEvent('open_guide', {})
+          }
+          this.closeWeb = event => {
+            if (!document.getElementById('column-web')) return
+            if (document.querySelector('#add-pill, .popover[open]')) return
+            event.preventDefault()
+            this.pushEvent('close_web', {})
           }
           this.onPaste = event => {
             if (typing(event.target)) return
@@ -771,6 +873,14 @@ defmodule AcervoWeb.ArchiveLive do
   defp link_path(:inbox, _collection, link), do: ~p"/inbox/l/#{link.id}"
   defp link_path({:collection, _id}, collection, link), do: ~p"/c/#{collection.slug}/l/#{link.id}"
   defp link_path(_filter, _collection, link), do: ~p"/all/l/#{link.id}"
+
+  defp web_path(:inbox, _collection, link), do: ~p"/inbox/l/#{link.id}/web"
+  defp web_path({:collection, _id}, collection, link), do: ~p"/c/#{collection.slug}/l/#{link.id}/web"
+  defp web_path(_filter, _collection, link), do: ~p"/all/l/#{link.id}/web"
+
+  # The link column's image opens the web view column, and closes it again.
+  defp web_toggle_path(%{web?: true} = assigns, link), do: link_path(assigns.filter, assigns.collection, link)
+  defp web_toggle_path(assigns, link), do: web_path(assigns.filter, assigns.collection, link)
 
   defp selected?(%{id: id}, %{id: id}), do: true
   defp selected?(_open, _link), do: false
