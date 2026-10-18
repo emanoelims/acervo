@@ -38,7 +38,8 @@ one subject and run the nearest tests while working.
 CI cancels obsolete runs, limits job runtime, pins Actions to immutable commits,
 and uses caches keyed by the BEAM versions, test environment, and lockfile.
 Dependabot proposes weekly Mix and GitHub Actions updates using allowed
-Conventional Commit prefixes. Review its PRs and let the same required checks
+Conventional Commit prefixes. Updates are grouped: one PR for compatible Mix
+updates, one for GitHub Actions, and separate PRs for major Mix updates. Review its PRs and let the same required checks
 validate them; updates are not merged automatically.
 
 ## Conventional Commits
