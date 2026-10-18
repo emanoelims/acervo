@@ -16,6 +16,10 @@ defmodule Acervo.AI.EnrichLink do
   description and language but no suggestions. Every finished run broadcasts
   `{:link_updated, link}`.
 
+  Every terminal outcome (stored, nothing to read, given up) enqueues
+  `Acervo.Search.EmbedLink`, so each link is embedded once enrichment has
+  had its say; a transient retry does not.
+
   Errors (see `Acervo.AI.Client`):
 
     * Rate limits snooze the job with a backoff of our own, because ReqLLM
@@ -41,6 +45,7 @@ defmodule Acervo.AI.EnrichLink do
   alias Acervo.Library
   alias Acervo.Library.Link
   alias Acervo.Repo
+  alias Acervo.Search.EmbedLink
 
   require Logger
 
@@ -141,7 +146,8 @@ defmodule Acervo.AI.EnrichLink do
         else: attrs
 
     with {:ok, link} <- link |> Link.enrichment_changeset(attrs) |> Repo.update(),
-         {:ok, _suggestions} <- suggest(scope, link, input, output) do
+         {:ok, _suggestions} <- suggest(scope, link, input, output),
+         {:ok, _job} <- EmbedLink.enqueue(link) do
       {:ok, link}
     end
   end
@@ -170,6 +176,7 @@ defmodule Acervo.AI.EnrichLink do
       set: [enrichment_status: nil]
     )
 
+    embed(link)
     Library.broadcast_updated(scope, link.id)
     :ok
   end
@@ -204,8 +211,17 @@ defmodule Acervo.AI.EnrichLink do
 
   defp give_up(scope, link, result) do
     Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [enrichment_status: :failed])
+    embed(link)
     Library.broadcast_updated(scope, link.id)
     result
+  end
+
+  # The search embedding does not wait for a successful enrichment.
+  defp embed(link) do
+    case EmbedLink.enqueue(link) do
+      {:ok, _job} -> :ok
+      {:error, reason} -> Logger.error("could not enqueue embedding of link #{link.id}: #{inspect(reason)}")
+    end
   end
 
   defp crashed(job, scope, link, exception, stacktrace) do

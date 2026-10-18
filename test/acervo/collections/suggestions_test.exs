@@ -1,5 +1,6 @@
 defmodule Acervo.Collections.SuggestionsTest do
   use Acervo.DataCase, async: true
+  use Oban.Testing, repo: Acervo.Repo
 
   import Acervo.AccountsFixtures
   import Acervo.CollectionsFixtures
@@ -9,6 +10,7 @@ defmodule Acervo.Collections.SuggestionsTest do
   alias Acervo.Collections.CollectionLink
   alias Acervo.Collections.Suggestion
   alias Acervo.Library.Link
+  alias Acervo.Search.EmbedLink
 
   setup do
     scope = user_scope_fixture()
@@ -41,6 +43,27 @@ defmodule Acervo.Collections.SuggestionsTest do
 
       assert_receive {:link_updated, %Link{suggestions: [], collections: [%Collection{}]}}
       refute_receive {:collections_changed}
+    end
+
+    test "enqueues the link's embedding when it joins the collection", %{scope: scope, link: link} do
+      suggestion = suggestion_fixture(scope, link, %{proposed_name: "Receitas"})
+
+      assert {:ok, _} = Collections.accept_suggestion(scope, suggestion.id)
+
+      assert [%Oban.Job{state: "scheduled"}] = all_enqueued(worker: EmbedLink, args: %{"link_id" => link.id})
+      assert %Link{embedding_status: :pending} = Repo.get!(Link, link.id)
+    end
+
+    test "enqueues nothing when the link already is a member, or for repointed links", %{scope: scope, link: link} do
+      collection = collection_fixture(scope, %{name: "Receitas"})
+      :ok = Collections.add_link(scope, collection, link)
+      other = collection_link_fixture(scope)
+      suggestion_fixture(scope, other, %{proposed_name: "Receitas"})
+      suggestion = suggestion_fixture(scope, link, %{proposed_name: "Receitas"})
+      Repo.delete_all(Oban.Job)
+
+      assert {:ok, _} = Collections.accept_suggestion(scope, suggestion.id)
+      assert all_enqueued(worker: EmbedLink) == []
     end
 
     test "accepting twice is not_found", %{scope: scope, link: link} do

@@ -12,6 +12,7 @@ defmodule Acervo.Library.CaptureLinkTest do
   alias Acervo.Library.Link
   alias Acervo.Library.LinkImage
   alias Acervo.Library.SafeFetch
+  alias Acervo.Search.EmbedLink
 
   setup do
     scope = user_scope_fixture()
@@ -328,6 +329,42 @@ defmodule Acervo.Library.CaptureLinkTest do
 
       assert :ok = perform(link)
       refute_enqueued(worker: EnrichLink)
+    end
+  end
+
+  describe "search embedding" do
+    test "a first capture leaves it to enrichment", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+      stub_site(page_html([]), %{})
+
+      assert :ok = perform(link)
+
+      assert_enqueued(worker: EnrichLink, args: %{"link_id" => link.id})
+      refute_enqueued(worker: EmbedLink)
+      assert %Link{embedding_status: nil} = Repo.get!(Link, link.id)
+    end
+
+    test "a re-capture of an enriched link enqueues it", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+      Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [enriched_at: DateTime.utc_now(:second)])
+      stub_site(page_html([]), %{})
+
+      assert :ok = perform(link)
+
+      assert_enqueued(worker: EmbedLink, args: %{"link_id" => link.id})
+      assert %Link{embedding_status: :pending} = Repo.get!(Link, link.id)
+    end
+
+    test "a permanent error enqueues it, a transient one does not", %{scope: scope} do
+      blocked = link_fixture(scope, "https://internal.test/admin")
+      assert :ok = perform(blocked)
+      assert_enqueued(worker: EmbedLink, args: %{"link_id" => blocked.id})
+      assert %Link{embedding_status: :pending} = Repo.get!(Link, blocked.id)
+
+      flaky = link_fixture(scope, "https://example.com/posts/flaky")
+      Req.Test.stub(SafeFetch, &Plug.Conn.send_resp(&1, 503, ""))
+      assert {:error, _} = perform(flaky)
+      refute_enqueued(worker: EmbedLink, args: %{"link_id" => flaky.id})
     end
   end
 

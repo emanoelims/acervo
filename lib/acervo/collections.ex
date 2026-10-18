@@ -23,6 +23,11 @@ defmodule Acervo.Collections do
   alias Acervo.Library
   alias Acervo.Library.Link
   alias Acervo.Repo
+  alias Acervo.Search.EmbedLink
+
+  # Owner edits wait this many seconds before embedding (see
+  # `Acervo.Search.EmbedLink`).
+  @embed_delay 5
 
   @doc """
   Lists the user's collections ordered by position then name. Each one carries
@@ -81,10 +86,19 @@ defmodule Acervo.Collections do
     with {:ok, collection} <- owned(scope, collection) do
       collection
       |> Collection.changeset(attrs)
-      |> Repo.update()
+      |> update_and_embed()
       |> broadcast_collections_changed(scope)
     end
   end
+
+  # Search embeds collection names, not descriptions.
+  defp update_and_embed(%Ecto.Changeset{valid?: true, data: collection} = changeset) do
+    if Ecto.Changeset.changed?(changeset, :name),
+      do: with_members_embedded(collection, fn -> Repo.update(changeset) end),
+      else: Repo.update(changeset)
+  end
+
+  defp update_and_embed(changeset), do: Repo.update(changeset)
 
   @doc """
   Deletes the collection with the same id, re-fetched from the database for the
@@ -97,8 +111,35 @@ defmodule Acervo.Collections do
   def delete_collection(%Scope{} = scope, %Collection{} = collection) do
     with {:ok, collection} <- owned(scope, collection) do
       collection
-      |> Repo.delete()
+      |> with_members_embedded(fn -> Repo.delete(collection) end)
       |> broadcast_collections_changed(scope)
+    end
+  end
+
+  # Runs `fun` (a rename or a delete of `collection`) in a transaction, after
+  # locking, in id order, the links it holds and the links suggested into it,
+  # then embeds its members again. Links first keeps the lock order of `finish_triage/2`
+  # and `replace_suggestions/3`, which lock the link before its suggestions
+  # (a delete cascades into both memberships and suggestions).
+  defp with_members_embedded(%Collection{id: id}, fun) do
+    Repo.transact(fn -> lock_and_embed_members(id, fun) end)
+  end
+
+  defp lock_and_embed_members(id, fun) do
+    member_ids = Repo.all(from cl in CollectionLink, where: cl.collection_id == ^id, select: cl.link_id)
+    suggested_ids = Repo.all(from s in Suggestion, where: s.collection_id == ^id, select: s.link_id)
+
+    Repo.all(
+      from l in Link,
+        where: l.id in ^Enum.uniq(member_ids ++ suggested_ids),
+        order_by: l.id,
+        lock: "FOR NO KEY UPDATE",
+        select: l.id
+    )
+
+    with {:ok, result} <- fun.(),
+         {:ok, _count} <- EmbedLink.enqueue_many(member_ids, delay: @embed_delay) do
+      {:ok, result}
     end
   end
 
@@ -107,14 +148,9 @@ defmodule Acervo.Collections do
   either record does not belong to the scope's user.
   """
   def add_link(%Scope{} = scope, %Collection{} = collection, %Link{} = link) do
-    with :ok <- authorize(scope, collection, link) do
-      Repo.insert!(%CollectionLink{collection_id: collection.id, link_id: link.id, source: :manual},
-        on_conflict: :nothing,
-        conflict_target: [:collection_id, :link_id]
-      )
-
-      broadcast_link_updated(scope, link)
-    end
+    change_membership(scope, collection, link, fn ->
+      insert_membership(collection.id, link.id, :manual)
+    end)
   end
 
   @doc """
@@ -122,11 +158,55 @@ defmodule Acervo.Collections do
   when either record does not belong to the scope's user.
   """
   def remove_link(%Scope{} = scope, %Collection{} = collection, %Link{} = link) do
-    with :ok <- authorize(scope, collection, link) do
-      Repo.delete_all(from cl in CollectionLink, where: cl.collection_id == ^collection.id and cl.link_id == ^link.id)
+    change_membership(scope, collection, link, fn ->
+      {count, _} =
+        Repo.delete_all(from cl in CollectionLink, where: cl.collection_id == ^collection.id and cl.link_id == ^link.id)
 
-      broadcast_link_updated(scope, link)
+      count > 0
+    end)
+  end
+
+  # Locks the link first (ownership checked in the database), then checks the
+  # collection, runs `change` and, when it changed a membership, embeds the
+  # link again. Broadcasts after commit. A link deleted meanwhile is
+  # `:not_found`.
+  defp change_membership(%Scope{user: user} = scope, collection, link, change) do
+    fn ->
+      with %Link{} <- lock_link(user, link.id) || {:error, :not_found},
+           true <- owned_collection?(user, collection) || {:error, :not_found} do
+        embed_if(change.(), link.id)
+      end
     end
+    |> Repo.transact()
+    |> case do
+      {:ok, _} -> broadcast_link_updated(scope, link)
+      {:error, _} = error -> error
+    end
+  end
+
+  defp embed_if(true = _changed?, link_id), do: EmbedLink.enqueue(link_id, delay: @embed_delay)
+  defp embed_if(false = _changed?, _link_id), do: {:ok, :unchanged}
+
+  # Returns whether a row was inserted: `on_conflict: :nothing` inserts none
+  # when the link is already in the collection.
+  defp insert_membership(collection_id, link_id, source) do
+    {count, _} =
+      Repo.insert_all(
+        CollectionLink,
+        [
+          %{
+            id: Ecto.UUID.generate(version: 7),
+            collection_id: collection_id,
+            link_id: link_id,
+            source: source,
+            inserted_at: DateTime.utc_now(:second)
+          }
+        ],
+        on_conflict: :nothing,
+        conflict_target: [:collection_id, :link_id]
+      )
+
+    count == 1
   end
 
   @max_enrichment_collections 50
@@ -282,13 +362,8 @@ defmodule Acervo.Collections do
   def accept_suggestion(%Scope{user: user} = scope, id) do
     fn ->
       with {:ok, suggestion} <- lock_pending(user, id),
-           {:ok, collection, created?} <- target_collection(user, suggestion) do
-        Repo.insert!(
-          %CollectionLink{collection_id: collection.id, link_id: suggestion.link_id, source: :suggestion},
-          on_conflict: :nothing,
-          conflict_target: [:collection_id, :link_id]
-        )
-
+           {:ok, collection, created?} <- target_collection(user, suggestion),
+           {:ok, _} <- add_suggested(collection, suggestion) do
         suggestion |> Ecto.Changeset.change(status: :accepted) |> Repo.update!()
         repointed = repoint(user, suggestion, collection)
 
@@ -307,18 +382,24 @@ defmodule Acervo.Collections do
     end
   end
 
+  # The link first, then the suggestion, as `finish_triage/2` and
+  # `replace_suggestions/3` do: the suggestion's link is read unlocked, the
+  # link locked, and the suggestion locked and checked again.
   defp lock_pending(user, id) do
     with {:ok, id} <- Ecto.UUID.cast(id),
-         %Suggestion{} = suggestion <-
-           Repo.one(
-             from s in Suggestion,
-               where: s.id == ^id and s.user_id == ^user.id and s.status == :pending,
-               lock: "FOR UPDATE"
-           ) do
+         pending = from(s in Suggestion, where: s.id == ^id and s.user_id == ^user.id and s.status == :pending),
+         link_id when is_binary(link_id) <- Repo.one(from s in pending, select: s.link_id),
+         %Link{} <- lock_link(user, link_id),
+         %Suggestion{link_id: ^link_id} = suggestion <- Repo.one(from s in pending, lock: "FOR UPDATE") do
       {:ok, suggestion}
     else
       _ -> {:error, :not_found}
     end
+  end
+
+  # A suggestion whose link joins the collection embeds the link again.
+  defp add_suggested(collection, %Suggestion{link_id: link_id}) do
+    collection.id |> insert_membership(link_id, :suggestion) |> embed_if(link_id)
   end
 
   defp target_collection(user, %Suggestion{collection_id: id}) when is_binary(id) do
@@ -487,12 +568,9 @@ defmodule Acervo.Collections do
     end
   end
 
-  # Checks ownership against the database, not the (possibly stale) structs.
-  defp authorize(%Scope{user: user}, collection, link) do
-    owned_collection? = Repo.exists?(from c in Collection, where: c.id == ^collection.id and c.user_id == ^user.id)
-    owned_link? = Repo.exists?(from l in Link, where: l.id == ^link.id and l.user_id == ^user.id)
-
-    if owned_collection? and owned_link?, do: :ok, else: {:error, :not_found}
+  # Checks ownership against the database, not the (possibly stale) struct.
+  defp owned_collection?(user, collection) do
+    Repo.exists?(from c in Collection, where: c.id == ^collection.id and c.user_id == ^user.id)
   end
 
   defp broadcast_collections_changed({:ok, _} = result, scope) do

@@ -11,6 +11,10 @@ defmodule Acervo.Library.ExtractContent do
   A page that can't be fetched for good (see
   `Acervo.Library.CaptureLink.classify/1`) is recorded as having no content;
   other errors retry.
+
+  New content changes what search embeds: a link never enriched is enriched
+  (which embeds it when done); otherwise `Acervo.Search.EmbedLink` is
+  enqueued directly.
   """
   use Oban.Worker, queue: :content, max_attempts: 3, unique: [period: 300, keys: [:link_id]]
 
@@ -23,6 +27,7 @@ defmodule Acervo.Library.ExtractContent do
   alias Acervo.Library.Link
   alias Acervo.Library.Reader
   alias Acervo.Repo
+  alias Acervo.Search.EmbedLink
 
   require Logger
 
@@ -66,6 +71,16 @@ defmodule Acervo.Library.ExtractContent do
     end
   end
 
+  # A pending enrichment embeds the link when it finishes.
+  defp enrich({:ok, %Link{enrichment_status: :pending}} = result), do: result
+
+  defp enrich({:ok, %Link{} = link}) do
+    case EmbedLink.enqueue(link) do
+      {:ok, _job} -> {:ok, link}
+      {:error, _reason} = error -> error
+    end
+  end
+
   defp enrich(result), do: result
 
   defp parse(url) do
@@ -79,7 +94,7 @@ defmodule Acervo.Library.ExtractContent do
     case CaptureLink.classify(reason) do
       :permanent ->
         Logger.info("no reader content for link #{link.id}: #{CaptureLink.error_code(reason)}")
-        done(Reader.store(scope, link, :none))
+        scope |> Reader.store(link, :none) |> enrich() |> done()
 
       :transient ->
         {:error, reason}

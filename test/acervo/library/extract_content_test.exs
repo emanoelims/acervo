@@ -15,6 +15,7 @@ defmodule Acervo.Library.ExtractContentTest do
   alias Acervo.Library.LinkImage
   alias Acervo.Library.SafeFetch
   alias Acervo.Release
+  alias Acervo.Search.EmbedLink
 
   setup do
     scope = user_scope_fixture()
@@ -123,6 +124,57 @@ defmodule Acervo.Library.ExtractContentTest do
 
     assert :ok = perform_job(ExtractContent, %{"link_id" => link.id})
     refute_enqueued(worker: EnrichLink)
+  end
+
+  describe "search embedding" do
+    # The fixture's note and collection enqueued an embedding already.
+    defp clear_jobs(link) do
+      Repo.delete_all(Oban.Job)
+      Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [embedding_status: nil])
+    end
+
+    test "new content of an enriched link enqueues it", %{scope: scope} do
+      link = captured_link(scope)
+      Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [enriched_at: DateTime.utc_now(:second)])
+      clear_jobs(link)
+      stub_page("/img/a.png", png(40))
+
+      assert :ok = perform_job(ExtractContent, %{"link_id" => link.id})
+
+      assert_enqueued(worker: EmbedLink, args: %{"link_id" => link.id})
+      refute_enqueued(worker: EnrichLink)
+      assert %Link{embedding_status: :pending} = Repo.get!(Link, link.id)
+    end
+
+    test "new content of a never-enriched link leaves it to enrichment", %{scope: scope} do
+      link = captured_link(scope)
+      clear_jobs(link)
+      stub_page("/img/a.png", png(40))
+
+      assert :ok = perform_job(ExtractContent, %{"link_id" => link.id})
+
+      assert_enqueued(worker: EnrichLink, args: %{"link_id" => link.id})
+      refute_enqueued(worker: EmbedLink)
+    end
+
+    test "a pending enrichment embeds it when done", %{scope: scope} do
+      link = captured_link(scope)
+      clear_jobs(link)
+      Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [enrichment_status: :pending])
+      stub_page("/img/a.png", png(40))
+
+      assert :ok = perform_job(ExtractContent, %{"link_id" => link.id})
+      refute_enqueued(worker: EmbedLink)
+    end
+
+    test "a transient failure does not", %{scope: scope} do
+      link = captured_link(scope)
+      clear_jobs(link)
+      Req.Test.stub(SafeFetch, &Plug.Conn.send_resp(&1, 503, ""))
+
+      assert {:error, _} = perform_job(ExtractContent, %{"link_id" => link.id})
+      refute_enqueued(worker: EmbedLink)
+    end
   end
 
   test "running it again replaces the content images", %{scope: scope} do

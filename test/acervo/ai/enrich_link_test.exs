@@ -14,6 +14,7 @@ defmodule Acervo.AI.EnrichLinkTest do
   alias Acervo.Library
   alias Acervo.Library.Images
   alias Acervo.Library.Link
+  alias Acervo.Search.EmbedLink
   alias Acervo.Storage
 
   setup do
@@ -306,6 +307,53 @@ defmodule Acervo.AI.EnrichLinkTest do
 
       assert {:ok, %Oban.Job{conflict?: true}} = EnrichLink.enqueue(link)
       assert %Link{enrichment_status: :pending} = Repo.get!(Link, link.id)
+    end
+  end
+
+  describe "search embedding" do
+    defp assert_embedding_enqueued(link) do
+      assert_enqueued(worker: EmbedLink, args: %{"link_id" => link.id})
+      assert %Link{embedding_status: :pending} = Repo.get!(Link, link.id)
+    end
+
+    test "a stored enrichment enqueues it", %{scope: scope} do
+      link = ready_link(scope)
+      stub_ok()
+
+      assert :ok = perform(link)
+      assert_embedding_enqueued(link)
+    end
+
+    test "a link with nothing to read enqueues it", %{scope: scope} do
+      link = scope |> link_fixture() |> Link.capture_changeset(%{status: :ready}) |> Repo.update!()
+
+      assert :ok = perform(link)
+      assert_embedding_enqueued(link)
+    end
+
+    test "giving up enqueues it, a transient failure does not", %{scope: scope} do
+      link = ready_link(scope)
+      stub_error({:http, 500})
+
+      assert {:error, _} = perform(link, attempt: 1)
+      refute_enqueued(worker: EmbedLink)
+      assert %Link{embedding_status: nil} = Repo.get!(Link, link.id)
+
+      assert {:error, _} = perform(link, attempt: 4)
+      assert_embedding_enqueued(link)
+
+      cancelled = ready_link(scope)
+      stub_error(:unavailable)
+      assert {:cancel, _} = perform(cancelled)
+      assert_embedding_enqueued(cancelled)
+    end
+
+    test "a snooze does not enqueue it", %{scope: scope} do
+      link = ready_link(scope)
+      stub_error({:rate_limited, nil})
+
+      assert {:snooze, _} = perform(link)
+      refute_enqueued(worker: EmbedLink)
     end
   end
 end

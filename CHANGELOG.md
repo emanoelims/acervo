@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Each link's text, image description, note and collections are embedded for search, and embedded again whenever they change.
+
 ### Migration
 
 - Production now requires the `OPENROUTER_API_KEY` secret, used for search embeddings. `ACERVO_EMBEDDING_MODEL` optionally picks another model that returns 1024 dimensions.

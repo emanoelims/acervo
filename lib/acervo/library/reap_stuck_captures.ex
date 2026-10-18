@@ -12,6 +12,10 @@ defmodule Acervo.Library.ReapStuckCaptures do
   :pending` for longer than 30 minutes with no live `Acervo.AI.EnrichLink`
   job becomes `enrichment_status: :failed`. The capture is left alone.
 
+  A third pass does the same for search embeddings: a link
+  `embedding_status: :pending` for longer than 30 minutes with no live
+  `Acervo.Search.EmbedLink` job becomes `embedding_status: :failed`.
+
   Runs from `Oban.Plugins.Cron` every 10 minutes.
   """
   use Oban.Worker, queue: :capture, max_attempts: 3
@@ -24,6 +28,7 @@ defmodule Acervo.Library.ReapStuckCaptures do
   alias Acervo.Library.CaptureLink
   alias Acervo.Library.Link
   alias Acervo.Repo
+  alias Acervo.Search.EmbedLink
 
   @stuck_after_minutes 30
   @stuck_statuses [:processing, :pending]
@@ -34,6 +39,7 @@ defmodule Acervo.Library.ReapStuckCaptures do
     cutoff = DateTime.shift(DateTime.utc_now(:second), minute: -@stuck_after_minutes)
     reap_captures(cutoff)
     reap_enrichments(cutoff)
+    reap_embeddings(cutoff)
     :ok
   end
 
@@ -57,6 +63,16 @@ defmodule Acervo.Library.ReapStuckCaptures do
         select: l
 
     stuck |> Repo.update_all(set: [enrichment_status: :failed]) |> broadcast()
+  end
+
+  # Nothing visible changes, so nothing is broadcast.
+  defp reap_embeddings(cutoff) do
+    stuck =
+      from l in Link,
+        as: :link,
+        where: l.embedding_status == :pending and l.updated_at < ^cutoff and not exists(live_jobs(EmbedLink))
+
+    Repo.update_all(stuck, set: [embedding_status: :failed])
   end
 
   defp live_jobs(worker) do

@@ -14,6 +14,7 @@ defmodule Acervo.LibraryTest do
   alias Acervo.Library.CaptureLink
   alias Acervo.Library.Link
   alias Acervo.Library.LinkImage
+  alias Acervo.Search.EmbedLink
 
   setup do
     scope = user_scope_fixture()
@@ -228,6 +229,62 @@ defmodule Acervo.LibraryTest do
         Library.change_image_description(link_fixture(scope), %{"image_description" => String.duplicate("a", 1001)})
 
       refute changeset.valid?
+    end
+  end
+
+  describe "search embedding on edits" do
+    defp embed_jobs(link), do: all_enqueued(worker: EmbedLink, args: %{"link_id" => link.id})
+
+    defp assert_scheduled_embedding(link) do
+      assert [%Oban.Job{state: "scheduled", scheduled_at: at}] = embed_jobs(link)
+      assert DateTime.diff(at, DateTime.utc_now()) in 3..5
+      assert %Link{embedding_status: :pending} = Repo.get!(Link, link.id)
+    end
+
+    defp settle(link) do
+      Repo.delete_all(Oban.Job)
+      Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [embedding_status: :ready])
+    end
+
+    test "a note edit enqueues it 5 seconds ahead; the same note again does not", %{scope: scope} do
+      link = link_fixture(scope)
+
+      assert {:ok, %Link{embedding_status: :pending}} = Library.update_note(scope, link, %{note: "worth reading"})
+      assert_scheduled_embedding(link)
+
+      settle(link)
+      assert {:ok, _} = Library.update_note(scope, link, %{note: "worth reading"})
+      assert embed_jobs(link) == []
+      assert %Link{embedding_status: :ready} = Repo.get!(Link, link.id)
+    end
+
+    test "an image description edit enqueues it; the same text again does not", %{scope: scope} do
+      link = link_fixture(scope)
+
+      assert {:ok, _} = Library.update_image_description(scope, link, %{"image_description" => "Um gato"})
+      assert_scheduled_embedding(link)
+
+      settle(link)
+      assert {:ok, _} = Library.update_image_description(scope, link, %{"image_description" => " Um gato "})
+      assert embed_jobs(link) == []
+    end
+
+    test "a burst of edits leaves one job", %{scope: scope} do
+      link = link_fixture(scope)
+
+      for note <- ["a", "ab", "abc"], do: {:ok, _} = Library.update_note(scope, link, %{note: note})
+      {:ok, _} = Library.update_image_description(scope, link, %{"image_description" => "Um gato"})
+
+      assert [_] = embed_jobs(link)
+    end
+
+    test "an invalid edit or another user's link enqueues nothing", %{scope: scope} do
+      link = link_fixture(scope)
+
+      assert {:error, %Ecto.Changeset{}} = Library.update_note(scope, link, %{note: String.duplicate("a", 4001)})
+      assert {:error, :not_found} = Library.update_note(user_scope_fixture(), link, %{note: "x"})
+      assert embed_jobs(link) == []
+      assert %Link{embedding_status: nil} = Repo.get!(Link, link.id)
     end
   end
 
