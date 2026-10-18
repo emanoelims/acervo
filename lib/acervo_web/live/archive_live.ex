@@ -110,6 +110,10 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp collection_filter(query), do: to_form(%{"query" => query})
 
+  defp picker_error(query),
+    do: to_form(%{"query" => query}, errors: [query: {gettext("Couldn't create that collection."), []}])
+
+  @max_url_bytes 2048
   @link_events ~w(save_note done delete add_to_collection remove_from_collection create_collection_for_link pick_collection)
   @collection_events ~w(edit_collection validate_collection save_collection delete_collection)
 
@@ -125,6 +129,10 @@ defmodule AcervoWeb.ArchiveLive do
 
   def handle_event(event, _params, socket) when event in ~w(toggle_add close_add),
     do: {:noreply, assign(socket, :add_form, nil)}
+
+  # Nothing legitimate is this long; don't echo it back into the input.
+  def handle_event("add_link", %{"url" => url}, socket) when is_binary(url) and byte_size(url) > @max_url_bytes,
+    do: {:noreply, add_error(socket, "", invalid_link_error())}
 
   def handle_event("add_link", %{"url" => url}, socket) when is_binary(url) do
     case Library.save_link(socket.assigns.current_scope, url) do
@@ -143,12 +151,20 @@ defmodule AcervoWeb.ArchiveLive do
          |> push_patch(to: existing_path(link))}
 
       {:error, :invalid_url} ->
-        {:noreply, add_error(socket, url, {dgettext_noop("errors", "That doesn't look like a link."), []})}
+        {:noreply, add_error(socket, url, invalid_link_error())}
 
-      {:error, %Ecto.Changeset{errors: [{_field, error} | _]}} ->
+      {:error, %Ecto.Changeset{errors: errors}} ->
+        error =
+          case errors do
+            [{_field, error} | _] -> error
+            _ -> invalid_link_error()
+          end
+
         {:noreply, add_error(socket, url, error)}
     end
   end
+
+  def handle_event("add_link", _params, socket), do: {:noreply, socket}
 
   # Organizing the open link.
   def handle_event("filter_collections", %{"query" => query}, socket),
@@ -162,11 +178,15 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   def handle_event("remove_from_collection", %{"id" => id}, socket) do
-    with %Collection{} = collection <- own_collection(socket, id),
-         {:error, :not_found} <- Collections.remove_link(socket.assigns.current_scope, collection, socket.assigns.link) do
-      {:noreply, gone(socket)}
-    else
-      _removed_or_unknown -> {:noreply, socket}
+    case own_collection(socket, id) do
+      %Collection{} = collection ->
+        case Collections.remove_link(socket.assigns.current_scope, collection, socket.assigns.link) do
+          :ok -> {:noreply, left_collection(socket, collection)}
+          {:error, :not_found} -> {:noreply, gone(socket)}
+        end
+
+      _unknown ->
+        {:noreply, socket}
     end
   end
 
@@ -252,6 +272,8 @@ defmodule AcervoWeb.ArchiveLive do
     end
   end
 
+  defp invalid_link_error, do: {dgettext_noop("errors", "That doesn't look like a link."), []}
+
   defp add_error(socket, url, error), do: assign(socket, :add_form, to_form(%{"url" => url}, errors: [url: error]))
 
   # A new link waits in the inbox; a saved one opens where it lives.
@@ -259,6 +281,13 @@ defmodule AcervoWeb.ArchiveLive do
   defp existing_path(link), do: ~p"/all/l/#{link.id}"
 
   defp own_collection(socket, id), do: Enum.find(socket.assigns.collections, &(&1.id == id))
+
+  # A link removed from the collection being viewed no longer belongs in that
+  # list, so close it.
+  defp left_collection(%{assigns: %{live_action: :collection_link, collection: %{id: id, slug: slug}}} = socket, %{id: id}),
+       do: push_patch(socket, to: ~p"/c/#{slug}")
+
+  defp left_collection(socket, _collection), do: socket
 
   # The link column follows `{:link_updated, link}`, which adding broadcasts.
   defp add_to(socket, collection) do
@@ -272,7 +301,7 @@ defmodule AcervoWeb.ArchiveLive do
   defp pick_or_create(socket, name) do
     name = String.trim(name)
 
-    case {name, AcervoWeb.LinkComponents.existing_collection(socket.assigns.collections, name)} do
+    case {name, Collections.find_by_name_or_slug(socket.assigns.collections, name)} do
       {"", _collection} ->
         {:noreply, socket}
 
@@ -282,7 +311,7 @@ defmodule AcervoWeb.ArchiveLive do
       {name, nil} ->
         case Collections.create_collection(socket.assigns.current_scope, %{"name" => name}) do
           {:ok, collection} -> add_to(socket, collection)
-          {:error, _changeset} -> {:noreply, put_flash(socket, :error, gettext("Couldn't create that collection."))}
+          {:error, _changeset} -> {:noreply, assign(socket, :collection_filter, picker_error(name))}
         end
     end
   end
@@ -577,7 +606,7 @@ defmodule AcervoWeb.ArchiveLive do
             if (!data) return
             if (Array.from(data.files || []).some(file => file.type.startsWith('image/'))) return
             const url = data.getData('text/plain').trim()
-            if (!URL_LIKE.test(url)) return
+            if (url.length > 2048 || !URL_LIKE.test(url)) return
             event.preventDefault()
             this.pushEvent('add_link', {url})
           }

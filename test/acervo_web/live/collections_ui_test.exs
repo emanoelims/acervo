@@ -93,6 +93,19 @@ defmodule AcervoWeb.CollectionsUITest do
       assert has_element?(view, "#rename-collection-form .field-error")
     end
 
+    test "a second submit after the rename is ignored", %{conn: conn, scope: scope} do
+      collection = collection_fixture(scope, %{name: "Receitas"})
+      {:ok, view, _html} = live(conn, ~p"/c/#{collection.slug}")
+
+      view |> element("#rename-collection") |> render_click()
+      view |> form("#rename-collection-form", %{"collection" => %{"name" => "Cozinha"}}) |> render_submit()
+      assert_patch(view, ~p"/c/cozinha")
+
+      render_hook(view, "save_collection", %{"collection" => %{"name" => "Outro"}})
+
+      assert Collections.get_collection_by_slug!(scope, "cozinha").name == "Cozinha"
+    end
+
     test "describe saves the description under the title", %{conn: conn, scope: scope} do
       collection = collection_fixture(scope, %{name: "Receitas"})
       {:ok, view, _html} = live(conn, ~p"/c/#{collection.slug}")
@@ -179,6 +192,92 @@ defmodule AcervoWeb.CollectionsUITest do
 
       assert collections_of(scope, link) == []
       refute has_element?(view, "#link-chip-#{collection.id}")
+    end
+
+    test "clicking a checked row removes the link from that collection", %{conn: conn, scope: scope} do
+      link = link_fixture(scope)
+      collection = collection_fixture(scope, %{name: "Receitas"})
+      :ok = Collections.add_link(scope, collection, link)
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+      assert has_element?(view, "#collection-option-#{collection.id}[aria-pressed='true']")
+
+      view |> element("#collection-option-#{collection.id}") |> render_click()
+
+      assert collections_of(scope, link) == []
+      assert has_element?(view, "#collection-option-#{collection.id}[aria-pressed='false']")
+    end
+
+    test "Enter on an exact match for a collection the link is in is a no-op", %{conn: conn, scope: scope} do
+      link = link_fixture(scope)
+      collection = collection_fixture(scope, %{name: "Receitas"})
+      :ok = Collections.add_link(scope, collection, link)
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+
+      view |> form("#collection-filter-form", %{"query" => "receitas"}) |> render_submit()
+
+      assert collections_of(scope, link) == ["Receitas"]
+      assert [_] = Collections.list_collections(scope)
+    end
+
+    test "a name colliding by slug shows the existing collection instead of nothing", %{conn: conn, scope: scope} do
+      link = link_fixture(scope)
+      c = collection_fixture(scope, %{name: "C"})
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+
+      view |> form("#collection-filter-form", %{"query" => "C++"}) |> render_change()
+      assert has_element?(view, "#collection-option-#{c.id}", "C")
+      refute has_element?(view, "#collection-create")
+      refute has_element?(view, ".pick-empty")
+
+      view |> element("#collection-option-#{c.id}") |> render_click()
+      assert collections_of(scope, link) == ["C"]
+      assert [_] = Collections.list_collections(scope)
+    end
+
+    test "a name with no letters or numbers shows an error in the picker", %{conn: conn, scope: scope} do
+      link = link_fixture(scope)
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+
+      view |> form("#collection-filter-form", %{"query" => "!!!"}) |> render_change()
+      view |> element("#collection-create") |> render_click()
+
+      assert has_element?(view, "#collection-options #collection-error", "Couldn't create that collection.")
+      assert Collections.list_collections(scope) == []
+    end
+
+    test "removing the link from the collection being viewed returns to its list", %{conn: conn, scope: scope} do
+      link = link_fixture(scope)
+      collection = collection_fixture(scope, %{name: "Receitas"})
+      other = collection_fixture(scope, %{name: "Viagem"})
+      :ok = Collections.add_link(scope, collection, link)
+      :ok = Collections.add_link(scope, other, link)
+
+      {:ok, view, _html} = live(conn, ~p"/c/#{collection.slug}/l/#{link.id}")
+
+      view |> element("#chip-remove-#{other.id}") |> render_click()
+      assert render(view) =~ "chip-remove-#{collection.id}"
+      assert has_element?(view, "#column-link")
+
+      view |> element("#chip-remove-#{collection.id}") |> render_click()
+      assert_patch(view, ~p"/c/#{collection.slug}")
+      refute has_element?(view, "#column-link")
+      assert collections_of(scope, link) == []
+    end
+
+    test "the picker toggle on the viewed collection returns to its list", %{conn: conn, scope: scope} do
+      link = link_fixture(scope)
+      collection = collection_fixture(scope, %{name: "Receitas"})
+      :ok = Collections.add_link(scope, collection, link)
+
+      {:ok, view, _html} = live(conn, ~p"/c/#{collection.slug}/l/#{link.id}")
+
+      view |> element("#collection-option-#{collection.id}") |> render_click()
+
+      assert_patch(view, ~p"/c/#{collection.slug}")
     end
 
     test "another user's collection id is ignored", %{conn: conn, scope: scope} do

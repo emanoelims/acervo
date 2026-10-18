@@ -78,6 +78,7 @@ a.card:hover .card-shot { color: var(--muted); }
 .pick-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pick-create { color: var(--muted); }
 .pick-empty { margin: 0; padding: 8px 10px; color: var(--faint); font-size: 13px; }
+.pick-error { margin: 0; padding: 8px 10px; color: var(--danger); font-size: 13px; }
 .link-notes { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--line); }
 .ai { margin: 0 0 12px; color: var(--muted); font-size: 15.5px; line-height: 1.62; }
 .note .form-field { margin: 0; }

@@ -105,5 +105,25 @@ defmodule AcervoWeb.AddLinkTest do
 
       assert has_element?(view, "#add-pill .field-error")
     end
+
+    test "an over-length URL shows the error, empties the input and saves nothing", %{conn: conn, scope: scope} do
+      {:ok, view, _html} = live(conn, ~p"/")
+      url = "https://example.com/" <> String.duplicate("a", 2100)
+
+      view |> element("#columns") |> render_hook("add_link", %{"url" => url})
+
+      assert has_element?(view, "#add-pill .field-error", "That doesn't look like a link.")
+      assert has_element?(view, "#add-link-form input[name='url'][value='']")
+      assert Library.list_links(scope, filter: :all) == []
+    end
+
+    test "a non-string URL is ignored", %{conn: conn, scope: scope} do
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      render_hook(view, "add_link", %{"url" => %{"a" => "b"}})
+
+      refute has_element?(view, "#add-pill")
+      assert Library.list_links(scope, filter: :all) == []
+    end
   end
 end

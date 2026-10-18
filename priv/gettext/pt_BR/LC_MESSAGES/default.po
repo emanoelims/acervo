@@ -384,7 +384,7 @@ msgstr "Adicionar"
 #: lib/acervo_web/live/archive_live.ex:520
 #, elixir-autogen, elixir-format
 msgid "Add a description"
-msgstr "Adicione uma descrição"
+msgstr "Adicionar uma descrição"
 
 #: lib/acervo_web/components/link_components.ex:247
 #, elixir-autogen, elixir-format

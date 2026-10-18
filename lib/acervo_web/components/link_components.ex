@@ -8,7 +8,7 @@ defmodule AcervoWeb.LinkComponents do
 
   import AcervoWeb.CoreComponents
 
-  alias Acervo.Collections.Collection
+  alias Acervo.Collections
   alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
 
@@ -232,12 +232,18 @@ defmodule AcervoWeb.LinkComponents do
     query = assigns.filter[:query].value || ""
     member_ids = MapSet.new(assigns.link.collections, & &1.id)
 
+    existing = Collections.find_by_name_or_slug(assigns.collections, query)
+    matches = Enum.filter(assigns.collections, &matches_query?(&1, query))
+    # "C++" matches nothing by name but would take the slug of "C": offer that one.
+    options = if existing && String.trim(query) != "" && existing not in matches, do: matches ++ [existing], else: matches
+
     assigns =
       assign(assigns,
         query: String.trim(query),
-        options: Enum.filter(assigns.collections, &matches_query?(&1, query)),
+        options: options,
         member_ids: member_ids,
-        create?: String.trim(query) != "" and is_nil(existing_collection(assigns.collections, query))
+        errors: Enum.map(assigns.filter.errors, fn {_field, {message, _opts}} -> message end),
+        create?: String.trim(query) != "" and is_nil(existing)
       )
 
     ~H"""
@@ -300,8 +306,11 @@ defmodule AcervoWeb.LinkComponents do
           <.icon name="lucide-plus" class="size-[15px]" />
           <span class="pick-name">“{@query}”</span>
         </button>
-        <p :if={@collections == [] and not @create?} class="pick-empty">
+        <p :if={@options == [] and not @create?} class="pick-empty">
           {gettext("No collections yet.")}
+        </p>
+        <p :for={message <- @errors} id="collection-error" class="pick-error" role="alert">
+          {message}
         </p>
       </div>
     </.popover>
@@ -311,16 +320,6 @@ defmodule AcervoWeb.LinkComponents do
   defp close_picker(js), do: JS.remove_attribute(js, "open", to: "#link-collections")
 
   defp matches_query?(collection, query), do: String.contains?(fold(collection.name), fold(query))
-
-  @doc """
-  The collection `name` would collide with: the one with that name, ignoring
-  case, or with the slug it would get. `nil` when it would be new.
-  """
-  def existing_collection(collections, name) do
-    name = String.trim(name)
-    slug = Collection.slugify(name)
-    Enum.find(collections, &(String.downcase(&1.name) == String.downcase(name) or &1.slug == slug))
-  end
 
   defp fold(text) do
     text

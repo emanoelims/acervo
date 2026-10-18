@@ -55,6 +55,17 @@ defmodule Acervo.Collections do
     )
   end
 
+  @doc """
+  Finds, among `collections`, the one `name` would collide with: the one with
+  that name, ignoring case, or with the slug it would get. `nil` when it would
+  be new.
+  """
+  def find_by_name_or_slug(collections, name) do
+    name = String.trim(name)
+    slug = Collection.slugify(name)
+    Enum.find(collections, &(String.downcase(&1.name) == String.downcase(name) or &1.slug == slug))
+  end
+
   def get_collection_by_slug!(%Scope{user: user}, slug) do
     Repo.get_by!(Collection, user_id: user.id, slug: slug)
   end
