@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-18
+
+A calmer, more refined look.
+
 ### Changed
 
 - Typography, spacing, columns and cards refined to match the design reference.
