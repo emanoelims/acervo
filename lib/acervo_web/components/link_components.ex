@@ -14,6 +14,8 @@ defmodule AcervoWeb.LinkComponents do
   alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
 
+  @ibar_chips 3
+
   @months_en ~w(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec)
   @months_pt ~w(jan fev mar abr mai jun jul ago set out nov dez)
 
@@ -82,8 +84,139 @@ defmodule AcervoWeb.LinkComponents do
   end
 
   @doc """
+  Renders an inbox card: the link's `card/1` and, under it in the same
+  surface, its triage bar. The bar shows the link's collections (filled) and
+  pending suggestions (dashed, accepted by a click), at most #{@ibar_chips}
+  chips, a quiet placeholder while enrichment runs, "accept all" when two or
+  more are pending, and ✓.
+
+  `card/1` is a link, so the bar's buttons can't nest in it: the stream DOM
+  id goes on this wrapper and the card takes a derived id.
+  """
+  attr :id, :string, required: true
+  attr :link, :map, required: true
+  attr :patch, :string, required: true
+  attr :selected, :boolean, default: false
+
+  def inbox_item(assigns) do
+    suggestions = Enum.take(assigns.link.suggestions, @ibar_chips)
+    collections = Enum.take(assigns.link.collections, @ibar_chips - length(suggestions))
+
+    assigns =
+      assign(assigns,
+        suggestions: suggestions,
+        collections: collections,
+        waiting?: assigns.link.enrichment_status == :pending and suggestions == []
+      )
+
+    ~H"""
+    <div id={@id} class="inbox-item" phx-remove={JS.transition("is-leaving", time: 380)}>
+      <.card id={"card-#{@link.id}"} link={@link} patch={@patch} selected={@selected} />
+      <div class="ibar">
+        <div class="ibar-chips">
+          <span
+            :for={collection <- @collections}
+            id={"card-chip-#{@link.id}-#{collection.id}"}
+            class="chip chip-sm"
+          >
+            {collection.name}
+          </span>
+          <.suggestion_button
+            :for={suggestion <- @suggestions}
+            id={"suggestion-#{suggestion.id}"}
+            suggestion={suggestion}
+            class="chip chip-sm ai"
+          />
+          <.waiting_chip :if={@waiting?} class="chip-sm" />
+        </div>
+        <div class="ibar-acts">
+          <button
+            :if={length(@link.suggestions) > 1}
+            id={"accept-all-#{@link.id}"}
+            type="button"
+            class="round round-sm"
+            phx-click="accept_all"
+            phx-value-id={@link.id}
+            title={gettext("Accept all and finish")}
+            aria-label={gettext("Accept all and finish")}
+          >
+            <.icon name="lucide-check-check" class="size-[15px]" />
+          </button>
+          <button
+            id={"done-#{@link.id}"}
+            type="button"
+            class="round round-sm"
+            phx-click="finish"
+            phx-value-id={@link.id}
+            title={gettext("Done")}
+            aria-label={gettext("Done")}
+          >
+            <.icon name="lucide-check" class="size-[15px]" />
+          </button>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :suggestion, :map, required: true
+  attr :class, :string, required: true
+
+  # A suggested collection: ✦ and the name of one of the user's collections,
+  # or + and a new name. Clicking accepts it; the reason is its tooltip.
+  defp suggestion_button(assigns) do
+    assigns = assign(assigns, :name, suggestion_name(assigns.suggestion))
+
+    ~H"""
+    <button
+      id={@id}
+      type="button"
+      class={@class}
+      phx-click="accept_suggestion"
+      phx-value-id={@suggestion.id}
+      title={@suggestion.reason}
+      aria-label={gettext("Add to %{name}", name: @name)}
+    >
+      <.suggestion_glyph suggestion={@suggestion} /><span class="chip-name">{@name}</span>
+    </button>
+    """
+  end
+
+  attr :suggestion, :map, required: true
+
+  defp suggestion_glyph(%{suggestion: %{collection_id: nil}} = assigns) do
+    ~H"""
+    <.icon name="lucide-plus" class="chip-glyph size-3" />
+    """
+  end
+
+  defp suggestion_glyph(assigns) do
+    ~H"""
+    <.icon name="lucide-sparkle" class="chip-glyph size-[11px]" />
+    """
+  end
+
+  attr :class, :string, default: nil
+
+  # Holds the suggestions' place while the link is read, so nothing jumps
+  # when they land.
+  defp waiting_chip(assigns) do
+    ~H"""
+    <span class={["chip ai is-waiting", @class]} aria-hidden="true">
+      <.icon name="lucide-sparkle" class="chip-glyph size-[11px]" /><i class="wait-bar"></i>
+    </span>
+    """
+  end
+
+  defp suggestion_name(%{collection: %{name: name}}), do: name
+  defp suggestion_name(%{proposed_name: name}), do: name
+
+  @doc """
   Renders the open link: its visual (every image stacked, the first one in the
-  glow treatment), meta line, collections, description, note and actions.
+  glow treatment), meta line, collections and pending suggestions (each with
+  its reason), the page description, the editable image description, the
+  note and actions.
   The visual, or the globe action when there is no image, patches to
   `web_path`, which opens or closes the web view column.
   """
@@ -93,6 +226,8 @@ defmodule AcervoWeb.LinkComponents do
   attr :collection_filter, Form, required: true
   attr :upload, :map, required: true, doc: "the `:screenshot` upload config"
   attr :note_saved, :boolean, default: false, doc: "shows the brief “Saved” status after a note save"
+  attr :description_form, Form, required: true, doc: "the image description form"
+  attr :description_saved, :boolean, default: false, doc: "the same status after an image description save"
   attr :web_path, :string, required: true, doc: "opens the web view column, or closes it when `web_open`"
   attr :web_open, :boolean, default: false
 
@@ -105,7 +240,8 @@ defmodule AcervoWeb.LinkComponents do
         drop?: images == [] or is_binary(assigns.link.capture_error) or assigns.upload.entries != [],
         image: List.first(images),
         more_images: Enum.drop(images, 1),
-        meta: meta(assigns.link)
+        meta: meta(assigns.link),
+        waiting?: assigns.link.enrichment_status == :pending and assigns.link.suggestions == []
       )
 
     ~H"""
@@ -188,7 +324,7 @@ defmodule AcervoWeb.LinkComponents do
 
       <p class="meta">{@meta}</p>
 
-      <div :if={@link.collections != []} class="chips">
+      <div :if={@link.collections != [] or @waiting?} class="chips">
         <span :for={collection <- @link.collections} id={"link-chip-#{collection.id}"} class="chip">
           <.link patch={~p"/c/#{collection.slug}"} class="chip-link">
             <.icon name="lucide-folder" class="size-[13px]" />{collection.name}
@@ -205,39 +341,78 @@ defmodule AcervoWeb.LinkComponents do
             <.icon name="lucide-x" class="size-3" />
           </button>
         </span>
+        <.waiting_chip :if={@waiting?} />
       </div>
+
+      <ul :if={@link.suggestions != []} id="link-suggestions" class="sugs">
+        <li :for={suggestion <- @link.suggestions} class="sug">
+          <span id={"link-suggestion-#{suggestion.id}"} class="chip ai">
+            <.suggestion_button
+              id={"link-suggestion-accept-#{suggestion.id}"}
+              suggestion={suggestion}
+              class="chip-link"
+            />
+            <button
+              id={"suggestion-dismiss-#{suggestion.id}"}
+              type="button"
+              class="chip-x"
+              phx-click="dismiss_suggestion"
+              phx-value-id={suggestion.id}
+              title={gettext("Dismiss")}
+              aria-label={gettext("Dismiss %{name}", name: suggestion_name(suggestion))}
+            >
+              <.icon name="lucide-x" class="size-3" />
+            </button>
+          </span>
+          <span :if={suggestion.reason} class="sug-why">{suggestion.reason}</span>
+        </li>
+      </ul>
 
       <div class="link-notes">
         <p :if={@kind != :text and is_binary(@link.description)} class="ai">{@link.description}</p>
-        <.form for={@note_form} id="note-form" class="note" phx-submit="save_note">
-          <.input
-            type="textarea"
-            field={@note_form[:note]}
-            id="link-note"
-            class="note-input"
-            rows="1"
-            maxlength="4000"
-            placeholder={gettext("Add a note")}
-            aria-label={gettext("Note")}
-            aria-describedby="note-hint"
-            aria-keyshortcuts="Meta+Enter Control+Enter"
-            phx-blur="save_note"
-            phx-hook=".NoteShortcut"
-          />
-        </.form>
-        <div class="note-foot">
-          <span id="note-hint" class="note-hint">
-            <kbd><.mod_key plus />↩</kbd> {gettext("to save")}
-          </span>
-          <span id="note-status" class="note-status" role="status" aria-live="polite">
-            <span
-              :if={@note_saved}
-              class="note-saved"
-              phx-remove={JS.transition("is-leaving", time: 300)}
-            >
-              <.icon name="lucide-check" class="size-3.5" />{gettext("Saved")}
-            </span>
-          </span>
+        <div :if={@link.images != []} class="edit edit-image">
+          <.form
+            for={@description_form}
+            id="image-description-form"
+            class="note"
+            phx-submit="save_image_description"
+          >
+            <.icon name="lucide-sparkle" class="edit-glyph size-[11px]" />
+            <.input
+              type="textarea"
+              field={@description_form[:image_description]}
+              id="link-image-description"
+              class="note-input image-input"
+              rows="1"
+              maxlength="1000"
+              placeholder={gettext("Describe the image")}
+              aria-label={gettext("Image description")}
+              aria-describedby="image-description-hint"
+              aria-keyshortcuts="Meta+Enter Control+Enter"
+              phx-blur="save_image_description"
+              phx-hook=".SubmitShortcut"
+            />
+          </.form>
+          <.edit_foot id="image-description" saved={@description_saved} />
+        </div>
+        <div class="edit">
+          <.form for={@note_form} id="note-form" class="note" phx-submit="save_note">
+            <.input
+              type="textarea"
+              field={@note_form[:note]}
+              id="link-note"
+              class="note-input"
+              rows="1"
+              maxlength="4000"
+              placeholder={gettext("Add a note")}
+              aria-label={gettext("Note")}
+              aria-describedby="note-hint"
+              aria-keyshortcuts="Meta+Enter Control+Enter"
+              phx-blur="save_note"
+              phx-hook=".SubmitShortcut"
+            />
+          </.form>
+          <.edit_foot id="note" saved={@note_saved} />
         </div>
       </div>
 
@@ -279,11 +454,24 @@ defmodule AcervoWeb.LinkComponents do
           filter={@collection_filter}
         />
         <button
+          :if={is_nil(@link.triaged_at) and length(@link.suggestions) > 1}
+          id="link-accept-all"
+          type="button"
+          class="round"
+          phx-click="accept_all"
+          phx-value-id={@link.id}
+          title={gettext("Accept all and finish")}
+          aria-label={gettext("Accept all and finish")}
+        >
+          <.icon name="lucide-check-check" class="size-4" />
+        </button>
+        <button
           :if={is_nil(@link.triaged_at)}
           id="link-done"
           type="button"
           class="round"
-          phx-click="done"
+          phx-click="finish"
+          phx-value-id={@link.id}
           title={gettext("Done")}
           aria-label={gettext("Done")}
         >
@@ -302,9 +490,10 @@ defmodule AcervoWeb.LinkComponents do
         </button>
       </div>
     </div>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".NoteShortcut">
-      // ⌘↩ (Ctrl+↩ off Apple devices) saves the note and keeps the caret in
-      // it; Enter alone still breaks the line, and leaving the field saves too.
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".SubmitShortcut">
+      // ⌘↩ (Ctrl+↩ off Apple devices) submits the field's form (the note or
+      // the image description) and keeps the caret in it; Enter alone still
+      // breaks the line, and leaving the field saves too.
       export default {
         mounted() {
           this.onKeydown = event => {
@@ -344,6 +533,26 @@ defmodule AcervoWeb.LinkComponents do
         }
       }
     </script>
+    """
+  end
+
+  attr :id, :string, required: true, doc: "prefixes the hint's and status's ids"
+  attr :saved, :boolean, required: true
+
+  # Under an editable field, in the gap below it: the shortcut hint while it
+  # is focused and a brief "Saved".
+  defp edit_foot(assigns) do
+    ~H"""
+    <div class="note-foot">
+      <span id={"#{@id}-hint"} class="note-hint">
+        <kbd><.mod_key plus />↩</kbd> {gettext("to save")}
+      </span>
+      <span id={"#{@id}-status"} class="note-status" role="status" aria-live="polite">
+        <span :if={@saved} class="note-saved" phx-remove={JS.transition("is-leaving", time: 300)}>
+          <.icon name="lucide-check" class="size-3.5" />{gettext("Saved")}
+        </span>
+      </span>
+    </div>
     """
   end
 

@@ -73,6 +73,50 @@ a.card:hover .card-shot { color: var(--muted); }
   .chip:hover .chip-x, .chip:focus-within .chip-x { opacity: 1; }
 }
 
+/* Suggested collections: dashed pills, the same height as the filled ones
+   (1px less padding for the border). ✦ marks one of the user's collections,
+   + a new name. Accepting one turns it into a filled chip, which fades in. */
+.chip.ai { background: transparent; box-shadow: none; border: 1px dashed var(--rule-strong); color: var(--muted); padding: 5px 11px; font: inherit; font-size: 14px; line-height: 20px; cursor: pointer; transition: color .2s var(--ease), border-color .2s var(--ease), transform .2s var(--ease); }
+.chip.ai:hover, .chip.ai:focus-within { color: var(--ink); border-color: var(--faint); }
+button.chip.ai:focus-visible, .chip.ai .chip-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 999px; }
+.chip.ai .chip-link { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.chip-glyph { color: var(--faint); transition: color .2s; }
+.chip.ai:hover .chip-glyph { color: var(--muted); }
+.chip-name { min-width: 0; overflow-wrap: anywhere; text-align: left; }
+.chips > .chip:not(.ai), .ibar-chips > .chip:not(.ai) { animation: chip-solid .32s var(--ease) both; }
+@keyframes chip-solid { from { opacity: .4; transform: scale(.96); box-shadow: 0 0 0 1px var(--rule-strong); } }
+
+/* While Claude reads the link: one quiet dashed chip that holds the row. */
+.chip.ai.is-waiting { cursor: default; animation: wait-pulse 2.4s ease-in-out infinite; }
+.chip.ai.is-waiting:hover { color: var(--muted); border-color: var(--rule-strong); }
+.wait-bar { display: block; width: 52px; height: 6px; border-radius: 3px; background: linear-gradient(100deg, var(--soft) 35%, color-mix(in oklab, var(--soft) 30%, var(--faint)) 50%, var(--soft) 65%); background-size: 300% 100%; animation: shimmer 2.6s ease-in-out infinite; }
+@keyframes wait-pulse { 50% { opacity: .55; } }
+
+/* The link column lists each suggestion with its reason, faint. */
+.sugs { display: flex; flex-direction: column; gap: 10px; margin: 16px 0 0; padding: 0; list-style: none; }
+.sug { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.sug-why { flex: 1 1 200px; min-width: 0; color: var(--faint); font-size: 13px; line-height: 18px; }
+
+/* Inbox cards: the card and its triage bar share one surface. */
+.inbox-item { position: relative; overflow: hidden; border-radius: 32px; background: var(--card); box-shadow: var(--card-shadow); transition: transform .35s var(--ease), box-shadow .35s var(--ease), opacity .35s var(--ease); }
+.inbox-item > .card { border-radius: 0; box-shadow: none; }
+.inbox-item > a.card:hover { transform: none; box-shadow: none; }
+.inbox-item > a.card:focus-visible { outline-offset: -3px; border-radius: 32px 32px 12px 12px; }
+.inbox-item:has(> a.card:hover) { transform: translateY(-2px); box-shadow: var(--card-shadow), 0 14px 30px -12px rgb(0 0 0 / .14); }
+.inbox-item:has(> .card.is-selected) { box-shadow: 0 0 0 1.5px var(--ink), 0 14px 30px -14px rgb(0 0 0 / .16); }
+.inbox-item.is-leaving { animation: inbox-out .38s var(--ease) both; }
+@keyframes inbox-out { to { opacity: 0; transform: translateX(30px); } }
+.ibar { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 0 20px 20px; }
+.inbox-item > .card-image:not(:has(.pad-under)) + .ibar { padding-top: 16px; }
+.ibar-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; padding-top: 2px; }
+.chip.chip-sm { gap: 5px; padding: 4px 10px; font-size: 13px; line-height: 18px; }
+.chip.chip-sm.ai { padding: 3px 9px; }
+.ibar-chips > .chip:not(.ai) { color: var(--body); }
+.ibar-chips > .chip:not(.ai):hover { transform: none; }
+.ibar-acts { display: flex; flex: none; gap: 6px; margin-left: auto; }
+.round.round-sm { width: 30px; height: 30px; border-radius: 10px; }
+.round.round-sm:hover { color: var(--ink); }
+
 /* The "add to collection" picker. */
 .popover > .popover-panel.pick { display: flex; flex-direction: column; width: 264px; padding: 6px; border-radius: 14px; }
 .pick .form-field { margin: 0; }
@@ -95,12 +139,17 @@ a.card:hover .card-shot { color: var(--muted); }
 .note-input::placeholder { color: var(--faint); }
 .note-input:hover { background: color-mix(in oklab, var(--soft) 60%, transparent); }
 .note-input:focus { outline: 0; background: var(--soft); }
-/* Under the note, in the gap above the actions: the shortcut hint while it is
-   focused and a brief "Saved". Absolute, so neither moves the layout. */
-.link-notes { position: relative; }
+/* Under each editable field (the image description, the note): the shortcut
+   hint while it is focused and a brief "Saved". Absolute, so neither moves
+   the layout; the image description leaves room for its own. */
+.edit { position: relative; }
+.edit-image { margin-bottom: 22px; }
+.edit-image .note { position: relative; }
+.edit-glyph { position: absolute; top: 18px; left: 0; color: var(--faint); pointer-events: none; }
+.image-input { text-indent: 18px; }
 .note-foot { position: absolute; top: 100%; left: 0; right: 0; display: flex; align-items: center; gap: 12px; height: 20px; margin-top: 2px; color: var(--faint); font-size: 12px; pointer-events: none; }
 .note-hint { display: inline-flex; align-items: center; gap: 6px; opacity: 0; transition: opacity .2s; }
-.link-notes:focus-within .note-hint { opacity: 1; }
+.edit:focus-within .note-hint { opacity: 1; }
 .note-hint kbd { padding: 0 5px; border-radius: 5px; color: var(--muted); font: 11px/17px var(--font-ui); box-shadow: 0 0 0 1px var(--line); }
 .note-status { margin-left: auto; }
 .note-saved { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); animation: note-saved-in .25s var(--ease) both; }
@@ -192,8 +241,9 @@ a.card:hover .card-shot { color: var(--muted); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card, .chip, .chip-x, .round, .pick-row, .web-toggle .card, .pill-button, .reader a { transition: none; }
-  a.card:hover, .chip:hover, .round:hover, .web-toggle:hover .card, .pill-button:hover { transform: none; }
-  .skeleton, .note-saved, .note-saved.is-leaving { animation: none; }
+  .card, .chip, .chip-x, .round, .pick-row, .web-toggle .card, .pill-button, .reader a, .inbox-item, .chip-glyph { transition: none; }
+  a.card:hover, .chip:hover, .round:hover, .web-toggle:hover .card, .pill-button:hover, .inbox-item:has(> a.card:hover) { transform: none; }
+  .skeleton, .note-saved, .note-saved.is-leaving, .wait-bar, .chip.ai.is-waiting, .chips > .chip, .ibar-chips > .chip { animation: none; }
+  .inbox-item.is-leaving { animation: none; opacity: 0; }
   .note-hint { transition: none; }
 }
