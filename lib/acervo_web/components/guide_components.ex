@@ -44,7 +44,9 @@ defmodule AcervoWeb.GuideComponents do
           {gettext("Click a link's image, or the globe, to open its page in a new column.")}
         </:row>
         <:row icon="lucide-book-open">
-          {gettext("Sites that can't be shown there open as a reader view of the saved text.")}
+          {gettext(
+            "Acervo keeps each page's article, with images, so sites that can't be shown there, or are offline, open as a reader view. Switch between page and reader at the top."
+          )}
         </:row>
       </.guide_section>
 

@@ -9,6 +9,7 @@ defmodule AcervoWeb.WebColumnTest do
   alias Acervo.Collections
   alias Acervo.Library.Link
   alias Acervo.Library.SafeFetch
+  alias Acervo.Library.Sanitizer
   alias Acervo.Repo
 
   setup :register_and_log_in_user
@@ -130,6 +131,112 @@ defmodule AcervoWeb.WebColumnTest do
       {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}/web")
 
       assert has_element?(view, "#web-reader .web-hint")
+      refute has_element?(view, "#web-reader-text")
+    end
+  end
+
+  describe "the reader view" do
+    # As capture stores it: the trusted output of the sanitizer.
+    defp with_content(link, html, source \\ :html) do
+      {sanitized, _images} = Sanitizer.sanitize_html(html, link.canonical_url)
+
+      link
+      |> Link.content_changeset(%{
+        content_html: sanitized,
+        content_source: source,
+        content_extracted_at: DateTime.utc_now(:second)
+      })
+      |> Repo.update!()
+    end
+
+    test "shows the sanitized article when the page can't be framed", %{conn: conn, scope: scope} do
+      link =
+        scope
+        |> link_fixture("https://example.com/a")
+        |> capture(text_excerpt: "Plain excerpt.", embeddable: false)
+        |> with_content(
+          ~s|<h1>Bees</h1><p onclick="alert(1)">They <a href="/hive">live</a> in hives.</p><script>alert(1)</script><pre><code>x = 1</code></pre>|
+        )
+
+      {:ok, view, html} = live(conn, ~p"/all/l/#{link.id}/web")
+
+      assert has_element?(view, "#web-reader-content.reader h2", "Bees")
+
+      assert has_element?(
+               view,
+               ~s|#web-reader-content a[href="https://example.com/hive"][target=_blank][rel="noopener noreferrer nofollow"]|
+             )
+
+      assert has_element?(view, "#web-reader-content pre code", "x = 1")
+      refute html =~ "alert(1)"
+      refute has_element?(view, "#web-reader-text")
+      refute has_element?(view, "#web-reader-toggle")
+      refute has_element?(view, "#web-reader .reader-source")
+    end
+
+    test "marks an article that came from Markdown", %{conn: conn, scope: scope} do
+      link = scope |> link_fixture() |> capture(embeddable: false) |> with_content("<p>Bees.</p>", :markdown)
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}/web")
+      assert has_element?(view, "#web-reader .reader-source", "Markdown")
+    end
+
+    test "a framed page with an article toggles to the reader and back", %{conn: conn, scope: scope} do
+      link =
+        scope
+        |> link_fixture("https://example.com/a")
+        |> capture(embeddable: true)
+        |> with_content("<p>Bees live in hives.</p>")
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}/web")
+      assert has_element?(view, "#web-frame")
+      assert has_element?(view, "#web-reader-toggle .lucide-book-open")
+
+      view |> element("#web-reader-toggle") |> render_click()
+      assert_patch(view, ~p"/all/l/#{link.id}/web?view=reader")
+      assert has_element?(view, "#web-reader-content", "Bees live in hives.")
+      refute has_element?(view, "#web-frame")
+      assert has_element?(view, "#web-reader-toggle .lucide-globe")
+
+      view |> element("#web-reader-toggle") |> render_click()
+      assert_patch(view, ~p"/all/l/#{link.id}/web")
+      assert has_element?(view, "#web-frame")
+    end
+
+    test "the reader toggle survives a reload", %{conn: conn, scope: scope} do
+      link = scope |> link_fixture("https://example.com/a") |> capture(embeddable: true) |> with_content("<p>Bees.</p>")
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}/web?view=reader")
+      assert has_element?(view, "#web-reader-content", "Bees.")
+    end
+
+    test "no toggle without an article, nor for embeds", %{conn: conn, scope: scope} do
+      page = scope |> link_fixture("https://example.com/a") |> capture(embeddable: true)
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{page.id}/web?view=reader")
+      refute has_element?(view, "#web-reader-toggle")
+      assert has_element?(view, "#web-frame")
+
+      video =
+        scope
+        |> link_fixture("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        |> capture(embeddable: false)
+        |> with_content("<p>Video.</p>")
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{video.id}/web?view=reader")
+      refute has_element?(view, "#web-reader-toggle")
+      assert has_element?(view, "#web-frame")
+    end
+
+    test "updates when the backfill fills the article", %{conn: conn, scope: scope} do
+      link = scope |> link_fixture() |> capture(text_excerpt: "Plain excerpt.", embeddable: false)
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}/web")
+      assert has_element?(view, "#web-reader-text", "Plain excerpt.")
+
+      with_content(link, "<p>The whole article.</p>")
+      Acervo.Library.broadcast_updated(scope, link.id)
+
+      assert render(view) =~ "The whole article."
       refute has_element?(view, "#web-reader-text")
     end
   end
