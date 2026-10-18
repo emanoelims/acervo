@@ -83,6 +83,8 @@ defmodule AcervoWeb.Router do
   scope "/", AcervoWeb do
     pipe_through [:browser, :require_authenticated_user]
 
+    get "/images/:id", ImageController, :show
+
     live_session :require_authenticated_user,
       on_mount: [AcervoWeb.Locale, {AcervoWeb.UserAuth, :require_authenticated}] do
       live "/", ArchiveLive, :home
