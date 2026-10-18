@@ -62,23 +62,38 @@ defmodule Acervo.Collections do
     |> broadcast_collections_changed(scope)
   end
 
-  def update_collection(%Scope{user: user} = scope, %Collection{user_id: user_id} = collection, attrs)
-      when user.id == user_id do
-    collection
-    |> Collection.changeset(attrs)
-    |> Repo.update()
-    |> broadcast_collections_changed(scope)
+  @doc """
+  Updates the collection with the same id, re-fetched from the database for the
+  scope's user (the given struct may be stale). Returns `{:ok, collection}`,
+  `{:error, changeset}`, or `{:error, :not_found}` when the collection does not
+  exist or belongs to another user.
+  """
+  @spec update_collection(Scope.t(), Collection.t(), map()) ::
+          {:ok, Collection.t()} | {:error, Ecto.Changeset.t()} | {:error, :not_found}
+  def update_collection(%Scope{} = scope, %Collection{} = collection, attrs) do
+    with {:ok, collection} <- owned(scope, collection) do
+      collection
+      |> Collection.changeset(attrs)
+      |> Repo.update()
+      |> broadcast_collections_changed(scope)
+    end
   end
 
-  def update_collection(%Scope{}, %Collection{}, _attrs), do: {:error, :not_found}
-
-  def delete_collection(%Scope{user: user} = scope, %Collection{user_id: user_id} = collection) when user.id == user_id do
-    collection
-    |> Repo.delete()
-    |> broadcast_collections_changed(scope)
+  @doc """
+  Deletes the collection with the same id, re-fetched from the database for the
+  scope's user. Its links are kept. Returns `{:ok, collection}`,
+  `{:error, changeset}`, or `{:error, :not_found}` when the collection does not
+  exist or belongs to another user.
+  """
+  @spec delete_collection(Scope.t(), Collection.t()) ::
+          {:ok, Collection.t()} | {:error, Ecto.Changeset.t()} | {:error, :not_found}
+  def delete_collection(%Scope{} = scope, %Collection{} = collection) do
+    with {:ok, collection} <- owned(scope, collection) do
+      collection
+      |> Repo.delete()
+      |> broadcast_collections_changed(scope)
+    end
   end
-
-  def delete_collection(%Scope{}, %Collection{}), do: {:error, :not_found}
 
   @doc """
   Adds a link to a collection. Idempotent. Returns `{:error, :not_found}` when
@@ -104,6 +119,14 @@ defmodule Acervo.Collections do
       Repo.delete_all(from cl in CollectionLink, where: cl.collection_id == ^collection.id and cl.link_id == ^link.id)
 
       broadcast_link_updated(scope, link)
+    end
+  end
+
+  # Checks ownership against the database, not the (possibly stale) struct.
+  defp owned(%Scope{user: user}, %Collection{id: id}) do
+    case Repo.get_by(Collection, id: id, user_id: user.id) do
+      %Collection{} = collection -> {:ok, collection}
+      nil -> {:error, :not_found}
     end
   end
 

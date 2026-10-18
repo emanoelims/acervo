@@ -49,6 +49,25 @@ defmodule Acervo.CollectionsTest do
     test "update rejects another user's collection", %{scope: scope} do
       c = collection_fixture(scope)
       assert {:error, :not_found} = Collections.update_collection(user_scope_fixture(), c, %{name: "x"})
+      assert Repo.get(Collection, c.id).name == c.name
+    end
+
+    test "update and delete return not_found for a deleted (stale) struct", %{scope: scope} do
+      c = collection_fixture(scope)
+      {:ok, _} = Collections.delete_collection(scope, c)
+
+      assert {:error, :not_found} = Collections.update_collection(scope, c, %{name: "x"})
+      assert {:error, :not_found} = Collections.delete_collection(scope, c)
+    end
+
+    test "a struct with a forged user_id does not bypass ownership", %{scope: scope} do
+      c = collection_fixture(scope)
+      other = user_scope_fixture()
+      forged = %{c | user_id: other.user.id}
+
+      assert {:error, :not_found} = Collections.update_collection(other, forged, %{name: "x"})
+      assert {:error, :not_found} = Collections.delete_collection(other, forged)
+      assert Repo.get(Collection, c.id).name == c.name
     end
 
     test "delete keeps the links", %{scope: scope} do
@@ -150,12 +169,16 @@ defmodule Acervo.CollectionsTest do
 
     test "counts do not leak across users", %{scope: scope} do
       other = user_scope_fixture()
-      c = collection_fixture(scope)
-      link = collection_link_fixture(scope)
-      :ok = Collections.add_link(scope, c, link)
+      mine = collection_fixture(scope)
+      theirs = collection_fixture(other)
+      :ok = Collections.add_link(scope, mine, collection_link_fixture(scope))
+      :ok = Collections.add_link(other, theirs, collection_link_fixture(other))
+      :ok = Collections.add_link(other, theirs, collection_link_fixture(other))
 
-      assert [%{link_count: 0}] =
-               other |> tap(&collection_fixture/1) |> Collections.list_collections()
+      assert [%{id: id, link_count: 1}] = Collections.list_collections(scope)
+      assert id == mine.id
+      assert [%{id: id, link_count: 2}] = Collections.list_collections(other)
+      assert id == theirs.id
     end
   end
 end
