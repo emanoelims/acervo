@@ -2,6 +2,8 @@ defmodule Acervo.Library.LinkImage do
   @moduledoc false
   use Acervo.Schema
 
+  import Ecto.Changeset
+
   alias Acervo.Library.Link
 
   schema "link_images" do
@@ -16,5 +18,13 @@ defmodule Acervo.Library.LinkImage do
     belongs_to :link, Link
 
     timestamps()
+  end
+
+  def changeset(image, attrs) do
+    image
+    |> cast(attrs, [:position, :kind, :content_type, :bytes, :width, :height, :sha256])
+    |> validate_required([:kind, :content_type, :bytes, :width, :height, :sha256])
+    |> validate_length(:content_type, max: 100)
+    |> validate_length(:sha256, is: 64)
   end
 end
