@@ -10,6 +10,7 @@ defmodule Acervo.Application do
     children = [
       AcervoWeb.Telemetry,
       Acervo.Repo,
+      {Oban, Application.fetch_env!(:acervo, Oban)},
       {DNSCluster, query: Application.get_env(:acervo, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Acervo.PubSub},
       # Start a worker by calling: Acervo.Worker.start_link(arg)

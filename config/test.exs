@@ -23,6 +23,8 @@ config :acervo, AcervoWeb.Endpoint,
   secret_key_base: "Y0+V3B3iczbGpFn/9GDkXXB2aq98IvDQJddiCxX8CYaOn0+zjFlvEDxvgvIvLBbZ",
   server: false
 
+config :acervo, Oban, testing: :manual
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

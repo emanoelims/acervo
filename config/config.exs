@@ -16,6 +16,10 @@ import Config
 # at the `config/runtime.exs`.
 config :acervo, Acervo.Mailer, adapter: Swoosh.Adapters.Local
 
+# Import environment specific config. This must remain at the bottom
+# of this file so it overrides the configuration defined above.
+config :acervo, Acervo.Repo, types: Acervo.PostgrexTypes
+
 # Configure the endpoint
 config :acervo, AcervoWeb.Endpoint,
   url: [host: "localhost"],
@@ -26,6 +30,12 @@ config :acervo, AcervoWeb.Endpoint,
   ],
   pubsub_server: Acervo.PubSub,
   live_view: [signing_salt: "+6cU70Fy"]
+
+config :acervo, Oban,
+  engine: Oban.Engines.Basic,
+  repo: Acervo.Repo,
+  queues: [capture: 4, ai: 2, embed: 4],
+  plugins: [{Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7}]
 
 config :acervo,
   ecto_repos: [Acervo.Repo],
@@ -66,6 +76,4 @@ config :tailwind,
     env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
   ]
 
-# Import environment specific config. This must remain at the bottom
-# of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"
