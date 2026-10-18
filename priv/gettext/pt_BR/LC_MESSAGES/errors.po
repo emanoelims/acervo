@@ -115,3 +115,8 @@ msgstr "não está autorizado a se cadastrar"
 #, elixir-autogen, elixir-format
 msgid "must have the @ sign and no spaces"
 msgstr "deve ter @ e não pode ter espaços"
+
+#: lib/acervo/collections/collection.ex:51
+#, elixir-autogen, elixir-format
+msgid "must contain letters or numbers"
+msgstr "deve conter letras ou números"

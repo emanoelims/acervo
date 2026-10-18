@@ -1,0 +1,63 @@
+defmodule Acervo.Library.Link do
+  @moduledoc false
+  use Acervo.Schema
+
+  import Ecto.Changeset
+
+  alias Acervo.Accounts.User
+  alias Acervo.Collections.Collection
+  alias Acervo.Collections.CollectionLink
+  alias Acervo.Library.LinkImage
+
+  schema "links" do
+    field :url, :string
+    field :canonical_url, :string
+    field :source, Ecto.Enum, values: [:generic, :youtube, :instagram, :x]
+    field :status, Ecto.Enum, values: [:pending, :processing, :ready, :failed], default: :pending
+    field :capture_error, :string
+    field :title, :string
+    field :description, :string
+    field :author, :string
+    field :site_name, :string
+    field :published_at, :utc_datetime
+    field :text_excerpt, :string
+    field :note, :string
+    field :triaged_at, :utc_datetime
+
+    belongs_to :user, User
+    has_many :images, LinkImage, preload_order: [asc: :position]
+    many_to_many :collections, Collection, join_through: CollectionLink
+
+    timestamps()
+  end
+
+  def create_changeset(link, attrs) do
+    link
+    |> cast(attrs, [:url, :canonical_url, :source])
+    |> validate_required([:url, :canonical_url, :source])
+    |> validate_length(:url, max: 2048)
+    |> validate_length(:canonical_url, max: 2048)
+    |> unique_constraint(:canonical_url, name: :links_user_id_canonical_url_index)
+  end
+
+  def capture_changeset(link, attrs) do
+    link
+    |> cast(attrs, [
+      :title,
+      :description,
+      :author,
+      :site_name,
+      :published_at,
+      :text_excerpt,
+      :status,
+      :capture_error
+    ])
+    |> validate_length(:text_excerpt, max: 8000)
+  end
+
+  def note_changeset(link, attrs) do
+    link
+    |> cast(attrs, [:note])
+    |> validate_length(:note, max: 4000)
+  end
+end
