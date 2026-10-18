@@ -87,6 +87,7 @@ defmodule AcervoWeb.LinkComponents do
   attr :note_form, Form, required: true
   attr :collections, :list, required: true, doc: "every collection of the user, for the picker"
   attr :collection_filter, Form, required: true
+  attr :upload, :map, required: true, doc: "the `:screenshot` upload config"
 
   def link_detail(assigns) do
     images = assigns.link.images
@@ -94,6 +95,7 @@ defmodule AcervoWeb.LinkComponents do
     assigns =
       assign(assigns,
         kind: kind(assigns.link),
+        drop?: images == [] or is_binary(assigns.link.capture_error) or assigns.upload.entries != [],
         image: List.first(images),
         more_images: Enum.drop(images, 1),
         meta: meta(assigns.link)
@@ -139,6 +141,39 @@ defmodule AcervoWeb.LinkComponents do
             </div>
         <% end %>
       </div>
+
+      <.form
+        for={%{}}
+        id="screenshot-form"
+        phx-change="validate_screenshot"
+        phx-hook=".ScreenshotPaste"
+      >
+        <.live_file_input upload={@upload} class="sr-only" tabindex="-1" />
+        <label
+          :if={@drop?}
+          id="screenshot-drop"
+          for={@upload.ref}
+          class={["shot-drop", @upload.entries != [] && "is-busy"]}
+          phx-drop-target={@upload.ref}
+        >
+          <.icon name="lucide-camera" class="size-[18px]" />
+          <span class="shot-hint">{gettext("Drop or paste a screenshot")}</span>
+          <span :for={entry <- @upload.entries} class="shot-bar" aria-hidden="true">
+            <i style={"width: #{entry.progress}%"}></i>
+          </span>
+          <span
+            :for={
+              error <-
+                upload_errors(@upload) ++ Enum.flat_map(@upload.entries, &upload_errors(@upload, &1))
+            }
+            id="screenshot-error"
+            class="shot-error"
+            role="alert"
+          >
+            {upload_error(error)}
+          </span>
+        </label>
+      </.form>
 
       <p class="meta">{@meta}</p>
 
@@ -190,6 +225,15 @@ defmodule AcervoWeb.LinkComponents do
         >
           <.icon name="lucide-external-link" class="size-4" />
         </a>
+        <label
+          id="link-screenshot"
+          for={@upload.ref}
+          class="round"
+          title={gettext("Add a screenshot")}
+          aria-label={gettext("Add a screenshot")}
+        >
+          <.icon name="lucide-camera" class="size-4" />
+        </label>
         <.collection_picker
           link={@link}
           collections={@collections}
@@ -219,8 +263,35 @@ defmodule AcervoWeb.LinkComponents do
         </button>
       </div>
     </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".ScreenshotPaste">
+      // Pasting an image while a link is open, outside a field, uploads it as
+      // that link's screenshot. Anything else is left to the link-paste hook.
+      export default {
+        mounted() {
+          this.onPaste = event => {
+            const target = event.target
+            if (target instanceof Element &&
+                (target.closest('input, textarea, [contenteditable]') || target.isContentEditable)) return
+            const files = Array.from(event.clipboardData?.files || [])
+            const image = files.find(file => file.type.startsWith('image/'))
+            if (!image) return
+            event.preventDefault()
+            this.upload('screenshot', [image])
+          }
+          window.addEventListener('paste', this.onPaste)
+        },
+        destroyed() {
+          window.removeEventListener('paste', this.onPaste)
+        }
+      }
+    </script>
     """
   end
+
+  defp upload_error(:not_accepted), do: gettext("That file isn't an image.")
+  defp upload_error(:too_large), do: gettext("That image is too large.")
+  defp upload_error(:too_many_files), do: gettext("Add one image at a time.")
+  defp upload_error(_error), do: gettext("That image couldn't be added.")
 
   attr :link, :map, required: true
   attr :collections, :list, required: true
