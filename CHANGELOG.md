@@ -7,6 +7,7 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- The `studio` theme and leitor's themes, accents and fonts, chosen per browser.
 - Postgres extensions (`citext`, `unaccent`, `vector`) and Oban background
   jobs.
 - Phoenix 1.8 application skeleton with PostgreSQL, LiveView, and Tailwind CSS.

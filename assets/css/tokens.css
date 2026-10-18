@@ -1,0 +1,40 @@
+/* Themes: studio is acervo's default (the approved prototype); the others are
+   leitor's palettes with the same token names. Selected via <html data-theme>. */
+:root {
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --danger: #b4321c;
+  --font-ui: "Inter Variable", system-ui, sans-serif;
+}
+:root, :root[data-theme=studio] {
+  --paper: #fbfbfa; --card: #ffffff; --soft: #f2f2f3;
+  --ink: #1d1d1f; --body: #3a3a3c; --muted: #8e8e93; --faint: #b9b9be;
+  --line: rgb(0 0 0 / .06); --rule-strong: rgb(0 0 0 / .12); --pill: #ffffff;
+  --pop-shadow: 0 0 0 1px rgb(0 0 0 / .06), 0 20px 40px -12px rgb(0 0 0 / .22);
+  --card-shadow: 0 0 0 1px rgb(0 0 0 / .065), 0 1px 2px rgb(0 0 0 / .03);
+  --grain-opacity: 0;
+  --inverse: var(--paper);
+  color-scheme: light;
+}
+:root[data-theme=light] { --paper:#f6f3ec; --card:#fcfaf6; --soft:#ede8dd; --ink:#1d1b18; --body:#4b463f; --muted:#857e72; --faint:#aba394; --line:#e5dfd2; --rule-strong:#d3cab8; --pill:#fffdf9; --pop-shadow:0 1px 1px rgb(40 30 20 / 0.04), 0 14px 36px -14px rgb(40 30 20 / 0.3), 0 3px 8px -3px rgb(40 30 20 / 0.1); --card-shadow:0 1px 1px rgb(40 30 20 / 0.03), 0 10px 26px -16px rgb(40 30 20 / 0.24); --grain-opacity:0.045; --inverse:var(--paper); color-scheme:light; }
+:root[data-theme=sepia] { --paper:#f1e6cf; --card:#f7eedc; --soft:#e7d9bb; --ink:#33281b; --body:#5a4a36; --muted:#8c785c; --faint:#ae9b78; --line:#e0cfad; --rule-strong:#d1bd96; --pill:#fbf5e8; --pop-shadow:0 1px 1px rgb(40 30 20 / 0.04), 0 14px 36px -14px rgb(40 30 20 / 0.3), 0 3px 8px -3px rgb(40 30 20 / 0.1); --card-shadow:0 1px 1px rgb(40 30 20 / 0.03), 0 10px 26px -16px rgb(40 30 20 / 0.24); --grain-opacity:0.06; --inverse:var(--paper); color-scheme:light; }
+:root[data-theme=snow] { --paper:#fdfdfc; --card:#ffffff; --soft:#f1f1ef; --ink:#141518; --body:#45474d; --muted:#82848a; --faint:#abadb3; --line:#e9e9e6; --rule-strong:#d7d7d3; --pill:#ffffff; --pop-shadow:0 1px 1px rgb(15 20 30 / 0.04), 0 14px 36px -14px rgb(15 20 30 / 0.22), 0 3px 8px -3px rgb(15 20 30 / 0.08); --card-shadow:0 1px 1px rgb(15 20 30 / 0.03), 0 10px 26px -16px rgb(15 20 30 / 0.18); --grain-opacity:0.02; --inverse:var(--paper); color-scheme:light; }
+:root[data-theme=dark] { --paper:#151412; --card:#1d1b18; --soft:#24221e; --ink:#e9e3d6; --body:#b6ae9e; --muted:#878073; --faint:#5b564d; --line:#2c2a26; --rule-strong:#3e3a34; --pill:#34312b; --pop-shadow:0 1px 1px rgb(0 0 0 / 0.3), 0 18px 44px -14px rgb(0 0 0 / 0.65), 0 3px 8px -3px rgb(0 0 0 / 0.4); --card-shadow:0 1px 1px rgb(0 0 0 / 0.25), 0 12px 30px -16px rgb(0 0 0 / 0.6); --grain-opacity:0.035; --inverse:var(--paper); color-scheme:dark; }
+:root[data-theme=ink] { --paper:#0f1319; --card:#161b23; --soft:#1c222c; --ink:#e3e8f0; --body:#abb4c1; --muted:#7a8594; --faint:#505a69; --line:#232b36; --rule-strong:#303947; --pill:#2c3441; --pop-shadow:0 1px 1px rgb(0 0 0 / 0.35), 0 18px 44px -14px rgb(0 0 0 / 0.7), 0 3px 8px -3px rgb(0 0 0 / 0.45); --card-shadow:0 1px 1px rgb(0 0 0 / 0.3), 0 12px 30px -16px rgb(0 0 0 / 0.65); --grain-opacity:0.03; --inverse:var(--paper); color-scheme:dark; }
+:root[data-theme=dark], :root[data-theme=ink] { --danger: #ffad94; }
+
+/* Accents: light-scheme value by default, dark-scheme value under dark/ink. */
+:root, :root[data-accent=graphite] { --accent: #4b4a47; --accent-text: #3a3936; }
+:root[data-accent=vermilion] { --accent: #c1401b; --accent-text: #a9361a; }
+:root[data-accent=cobalt]    { --accent: #2c58c9; --accent-text: #234cb4; }
+:root[data-accent=moss]      { --accent: #3b7a3d; --accent-text: #316934; }
+:root[data-accent=graphite]  { --accent: #4b4a47; --accent-text: #3a3936; }
+:is(:root[data-theme=dark], :root[data-theme=ink])[data-accent=vermilion] { --accent: #ef7a50; --accent-text: #f28b65; }
+:is(:root[data-theme=dark], :root[data-theme=ink])[data-accent=cobalt]    { --accent: #86a8ff; --accent-text: #9bb7ff; }
+:is(:root[data-theme=dark], :root[data-theme=ink])[data-accent=moss]      { --accent: #8fc68c; --accent-text: #a2d29f; }
+:is(:root[data-theme=dark], :root[data-theme=ink])[data-accent=graphite]  { --accent: #cfc9bd; --accent-text: #ddd7cb; }
+
+/* Fonts */
+:root[data-font=inter]      { --font-ui: "Inter Variable", system-ui, sans-serif; }
+:root[data-font=schibsted]  { --font-ui: "Schibsted Grotesk", system-ui, sans-serif; }
+:root[data-font=atkinson]   { --font-ui: "Atkinson Hyperlegible Next", system-ui, sans-serif; }
+:root[data-font=newsreader] { --font-ui: "Newsreader", Georgia, serif; }

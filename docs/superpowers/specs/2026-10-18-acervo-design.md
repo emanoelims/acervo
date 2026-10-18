@@ -276,7 +276,9 @@ transitions with leitor's ease curve.
 - Accents: `vermilion`, `cobalt`, `moss`, `graphite`.
 - Fonts: Inter (default), Schibsted Grotesk, Atkinson Hyperlegible Next and
   Newsreader, all self-hosted.
-- Stored in `localStorage` (`acervo:appearance`) and applied before first paint.
+- Stored in `localStorage` (`acervo:appearance`). The server renders the default
+  appearance on `<html>`, so default users never see a flash. Saved choices apply
+  as soon as `app.js` runs, without an inline script, per AGENTS.md.
 - The theme switch keeps leitor's circular View Transition.
 
 **`studio` tokens:** `--paper #fbfbfa`, `--card #ffffff`, `--soft #f2f2f3`,
