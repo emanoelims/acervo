@@ -19,8 +19,21 @@ defmodule Acervo.Library.HtmlMeta do
   """
   @spec parse(binary(), String.t(), String.t() | nil) :: Capture.t()
   def parse(html, base_url, content_type \\ nil) when is_binary(html) and is_binary(base_url) do
-    doc = html |> decode(content_type) |> LazyHTML.from_document()
+    html |> document(content_type) |> parse_document(base_url)
+  end
 
+  @doc """
+  Parses `html` into a `LazyHTML` document, decoding it by the charset in
+  `content_type` or its `<meta charset>`.
+  """
+  @spec document(binary(), String.t() | nil) :: LazyHTML.t()
+  def document(html, content_type \\ nil) when is_binary(html) do
+    html |> decode(content_type) |> LazyHTML.from_document()
+  end
+
+  @doc "Like `parse/3`, for a document already parsed by `document/2`."
+  @spec parse_document(LazyHTML.t(), String.t()) :: Capture.t()
+  def parse_document(%LazyHTML{} = doc, base_url) when is_binary(base_url) do
     scrub(%Capture{
       title: first_meta(doc, [{"property", "og:title"}, {"name", "twitter:title"}]) || title_tag(doc),
       description:

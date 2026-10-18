@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+<head><title>Lazy images</title></head>
+<body>
+  <main>
+    <p>This gallery loads its images lazily, as many blogs and news sites do to save bandwidth on long pages full of photos.</p>
+    <p><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/img/one.jpg" alt="One"></p>
+    <p><img src="/assets/placeholder.png" data-srcset="/img/two-400.jpg 400w, /img/two-1600.jpg 1600w, /img/two-3200.jpg 3200w" alt="Two"></p>
+    <picture><source srcset="/img/three.avif" type="image/avif"><img src="/img/three.jpg" alt="Three"></picture>
+    <p><img src="/pixel.gif" width="1" height="1" alt=""></p>
+    <noscript><img src="/img/noscript.jpg"></noscript>
+    <p>That is all for today, thanks for reading through the whole gallery of photos.</p>
+  </main>
+</body>
+</html>

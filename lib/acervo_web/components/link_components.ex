@@ -371,13 +371,21 @@ defmodule AcervoWeb.LinkComponents do
   @doc """
   Renders the web view column's body: the page or its official embed in a
   sandboxed frame, a quiet placeholder while its embeddability is checked,
-  or a reader view of the captured text when it can't be framed.
+  or the reader view when it can't be framed or `reader` asks for it.
+
+  The reader view shows the article captured as `content`, HTML sanitized at
+  capture by `Acervo.Library.Sanitizer`, or else the captured text.
   """
   attr :link, :map, required: true
   attr :check, :any, default: nil, doc: "`{:checking | :failed, link_id}` while or after a background check"
+  attr :content, :string, default: nil, doc: "the article's sanitized HTML"
+  attr :reader, :boolean, default: false, doc: "show a framed page's article instead"
 
   def web_view(assigns) do
-    assigns = assign(assigns, :view, web_state(Embed.frame(assigns.link), assigns.check, assigns.link.id))
+    frame = Embed.frame(assigns.link)
+    view = if assigns.reader and is_binary(assigns.content) and match?({:page, _}, frame), do: :reader, else: frame
+
+    assigns = assign(assigns, :view, web_state(view, assigns.check, assigns.link.id))
 
     ~H"""
     <%= case @view do %>
@@ -405,6 +413,11 @@ defmodule AcervoWeb.LinkComponents do
           aria-label={gettext("Loading")}
         >
           <div class="skeleton" aria-hidden="true"></div>
+        </div>
+      <% :reader when is_binary(@content) -> %>
+        <div id="web-reader" class="web-reader">
+          <p :if={@link.content_source == :markdown} class="reader-source">Markdown</p>
+          <article id="web-reader-content" class="reader">{Phoenix.HTML.raw(@content)}</article>
         </div>
       <% :reader -> %>
         <div id="web-reader" class="web-reader">
@@ -469,6 +482,7 @@ defmodule AcervoWeb.LinkComponents do
   defp referrer_policy(:video), do: "strict-origin"
   defp referrer_policy(_kind), do: "no-referrer"
 
+  defp web_state(:reader, _check, _id), do: :reader
   defp web_state({:embed, kind, url}, _check, _id), do: {:frame, kind, url}
   defp web_state({:page, url}, _check, _id), do: {:frame, :page, url}
   defp web_state(:unknown, {:failed, id}, id), do: :reader

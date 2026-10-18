@@ -5,6 +5,14 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Reader mode keeps each page's article, with images, so it can be read in Acervo even when the site blocks embedding or goes offline. Pages that publish a Markdown version are read from it.
+
+### Migration
+
+- After deploying, run the one-off backfill so links saved before this get their article: `fly ssh console -a acervo-app -C "/app/bin/acervo eval 'Acervo.Release.backfill_reader_content()'"`.
+
 ## [0.6.0] - 2026-10-18
 
 Read a link's page without leaving Acervo.

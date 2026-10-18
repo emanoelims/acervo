@@ -10,8 +10,9 @@ defmodule AcervoWeb.ArchiveLive do
   a column describing every feature and shortcut, also opened with `?`.
 
   `…/l/:id/web` opens one more column with the link's page, framed when it
-  allows it (see `Acervo.Library.Embed`) and as a reader view of its captured
-  text otherwise. Links captured before capture recorded whether their page
+  allows it (see `Acervo.Library.Embed`) and as a reader view of its article
+  otherwise. A framed page with an article toggles to the reader view with
+  `?view=reader`. Links captured before capture recorded whether their page
   may be framed are checked once, in the background, when this column opens.
   """
   use AcervoWeb, :live_view
@@ -36,7 +37,7 @@ defmodule AcervoWeb.ArchiveLive do
      socket
      |> assign(filter: nil, collection: nil, link: nil, note_form: nil, note_saved: nil, screenshot_link_id: nil)
      |> assign(add_form: nil, new_collection_form: nil, editing: nil, collection_form: nil)
-     |> assign(web?: false, web_check: nil)
+     |> assign(web?: false, web_check: nil, reader_view?: false, reader: nil)
      |> assign(:collection_filter, collection_filter(""))
      |> allow_upload(:screenshot,
        accept: ~w(.png .jpg .jpeg .webp .heic),
@@ -59,7 +60,12 @@ defmodule AcervoWeb.ArchiveLive do
          reset? = filter != socket.assigns.filter or renamed?(socket.assigns.collection, collection),
          socket = socket |> stop_editing(collection) |> assign(:collection, collection) |> apply_filter(filter, reset?),
          {:ok, link} <- fetch_link(socket, params) do
-      {:noreply, socket |> select_link(link, reset?) |> assign_web() |> assign_page_title()}
+      {:noreply,
+       socket
+       |> select_link(link, reset?)
+       |> assign(:reader_view?, params["view"] == "reader")
+       |> assign_web()
+       |> assign_page_title()}
     else
       {:error, :not_found, to} ->
         {:noreply, socket |> put_flash(:error, gettext("Not found.")) |> push_patch(to: to)}
@@ -155,8 +161,19 @@ defmodule AcervoWeb.ArchiveLive do
     socket = assign(socket, :web?, socket.assigns.live_action in @web_actions)
 
     case socket.assigns do
-      %{web?: true, link: %{} = link} -> maybe_check_embeddable(socket, link)
-      _closed -> socket
+      %{web?: true, link: %{} = link} -> socket |> load_reader(link) |> maybe_check_embeddable(link)
+      _closed -> assign(socket, :reader, nil)
+    end
+  end
+
+  # The article's HTML is only read while the column is open, and again only
+  # when its extraction changes.
+  defp load_reader(socket, link) do
+    key = {link.id, link.content_extracted_at}
+
+    case socket.assigns.reader do
+      %{key: ^key} -> socket
+      _other -> assign(socket, :reader, %{key: key, html: Library.reader_content(socket.assigns.current_scope, link)})
     end
   end
 
@@ -556,9 +573,12 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp refresh_open(socket, link) do
     if open?(socket, link),
-      do: socket |> assign(link: link, note_form: note_form(link)) |> assign_page_title(),
+      do: socket |> assign(link: link, note_form: note_form(link)) |> refresh_reader(link) |> assign_page_title(),
       else: socket
   end
+
+  defp refresh_reader(%{assigns: %{web?: true}} = socket, link), do: load_reader(socket, link)
+  defp refresh_reader(socket, _link), do: socket
 
   defp open?(socket, link), do: selected?(socket.assigns.link, link)
 
@@ -749,6 +769,19 @@ defmodule AcervoWeb.ArchiveLive do
         >
           <:actions>
             <div class="head-acts">
+              <.link
+                :if={reader_toggle?(@link, @reader)}
+                id="web-reader-toggle"
+                patch={reader_toggle_path(assigns, @link)}
+                class="head-button"
+                title={reader_toggle_label(@reader_view?)}
+                aria-label={reader_toggle_label(@reader_view?)}
+              >
+                <.icon
+                  name={if @reader_view?, do: "lucide-globe", else: "lucide-book-open"}
+                  class="size-4"
+                />
+              </.link>
               <a
                 id="web-open"
                 href={Embed.original_url(@link)}
@@ -771,7 +804,12 @@ defmodule AcervoWeb.ArchiveLive do
               </.link>
             </div>
           </:actions>
-          <.web_view link={@link} check={@web_check} />
+          <.web_view
+            link={@link}
+            check={@web_check}
+            content={@reader && @reader.html}
+            reader={@reader_view?}
+          />
         </.column>
 
         <.column :if={@live_action == :guide} id="column-guide" title={gettext("Guide")}>
@@ -881,6 +919,18 @@ defmodule AcervoWeb.ArchiveLive do
   # The link column's image opens the web view column, and closes it again.
   defp web_toggle_path(%{web?: true} = assigns, link), do: link_path(assigns.filter, assigns.collection, link)
   defp web_toggle_path(assigns, link), do: web_path(assigns.filter, assigns.collection, link)
+
+  # A framed page with an article toggles between the two, by `?view=reader`.
+  defp reader_toggle?(link, %{html: html}) when is_binary(html), do: match?({:page, _url}, Embed.frame(link))
+  defp reader_toggle?(_link, _reader), do: false
+
+  defp reader_toggle_path(%{reader_view?: true} = assigns, link), do: web_path(assigns.filter, assigns.collection, link)
+
+  defp reader_toggle_path(assigns, link),
+    do: web_path(assigns.filter, assigns.collection, link) <> "?" <> URI.encode_query(view: "reader")
+
+  defp reader_toggle_label(true = _reader_view?), do: gettext("Show page")
+  defp reader_toggle_label(false), do: gettext("Show reader view")
 
   defp selected?(%{id: id}, %{id: id}), do: true
   defp selected?(_open, _link), do: false

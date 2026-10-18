@@ -33,7 +33,7 @@ config :acervo, AcervoWeb.Gettext, default_locale: "pt_BR", locales: ~w(pt_BR en
 config :acervo, Oban,
   engine: Oban.Engines.Basic,
   repo: Acervo.Repo,
-  queues: [capture: 2, ai: 2, embed: 4],
+  queues: [capture: 2, ai: 2, embed: 4, content: 1],
   # Below the 30 s kill_timeout in fly.toml, so jobs can finish before SIGKILL.
   shutdown_grace_period: to_timeout(second: 20),
   plugins: [

@@ -6,6 +6,8 @@ defmodule Acervo.Library.Capture do
   the URL the page was fetched from after redirects. `embeddable` says
   whether that page may be framed, read from its response headers by
   `Acervo.Library.FramePolicy`; `nil` when the page itself wasn't fetched.
+  `document` is the parsed page, kept for `Acervo.Library.Reader`; `nil` when
+  the page itself wasn't fetched.
   """
 
   @type t :: %__MODULE__{
@@ -18,7 +20,8 @@ defmodule Acervo.Library.Capture do
           image_urls: [String.t()],
           canonical_url: String.t() | nil,
           final_url: String.t() | nil,
-          embeddable: boolean() | nil
+          embeddable: boolean() | nil,
+          document: LazyHTML.t() | nil
         }
 
   defstruct title: nil,
@@ -30,5 +33,6 @@ defmodule Acervo.Library.Capture do
             image_urls: [],
             canonical_url: nil,
             final_url: nil,
-            embeddable: nil
+            embeddable: nil,
+            document: nil
 end

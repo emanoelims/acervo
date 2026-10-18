@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head><title>Totally normal article</title><style>body{background:url(javascript:alert(1))}</style></head>
+<body onload="alert(1)">
+<article>
+  <h1 onclick="alert(1)">A perfectly normal article</h1>
+  <p style="position:fixed;top:0">This article has a lot of words so that it is long enough to be read as an article by the extractor, even though it is mostly traps.</p>
+  <p><a href="javascript:alert(1)">js</a> <a href="JaVaScRiPt:alert(1)">mixed</a> <a href="&#106;&#97;vascript:alert(1)">entities</a> <a href="java&#x09;script:alert(1)">tab</a> <a href=" javascript:alert(1)">space</a> <a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">data</a> <a href="vbscript:msgbox(1)">vbs</a> <a href="//evil.example/x">proto</a> <a href="/safe">safe</a></p>
+  <p><img src="x" onerror="alert(1)"> <img src="javascript:alert(1)"> <img src="/ok.png" srcset="javascript:alert(1) 2x" onload="alert(1)" style="width:1px"></p>
+  <svg><script>alert(1)</script><a xlink:href="javascript:alert(1)"><text>svg</text></a></svg>
+  <math><mtext><table><mglyph><style><img src=x onerror=alert(1)></style></mglyph></table></mtext></math>
+  <!-- <img src=x onerror=alert(1)> -->
+  <![CDATA[ <script>alert(1)</script> ]]>
+  <a href="https://outer.example"><span>outer <a href="https://inner.example">inner</a></span></a>
+  <iframe src="https://evil.example"></iframe>
+  <object data="evil.swf"></object><embed src="evil.swf">
+  <form action="https://evil.example"><input name="q"><button>Go</button></form>
+  <p hidden>secret hidden</p>
+  <div aria-hidden="true">aria hidden</div>
+  <div style="display: none">display none</div>
+  <p>&lt;script&gt;alert(1)&lt;/script&gt; and "quotes" & 'apostrophes'</p>
+  <textarea><script>alert(1)</script></textarea>
+  <noscript><p>noscript</p></noscript>
+  <template><p>template</p></template>
+  <details><summary>More</summary><p>Inside details.</p></details>
+  <td onclick="x">stray cell</td>
+</article>
+<script>alert(1)</script>
+</body>
+</html>

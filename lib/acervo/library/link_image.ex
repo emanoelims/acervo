@@ -1,5 +1,9 @@
 defmodule Acervo.Library.LinkImage do
-  @moduledoc false
+  @moduledoc """
+  A captured image, stored as WebP. `:preview` and `:screenshot` images
+  illustrate the link's card, by `position`; `:content` images belong to the
+  reader view's article, which links them by id, and never show on cards.
+  """
   use Acervo.Schema
 
   import Ecto.Changeset
@@ -8,7 +12,7 @@ defmodule Acervo.Library.LinkImage do
 
   schema "link_images" do
     field :position, :integer, default: 0
-    field :kind, Ecto.Enum, values: [:preview, :screenshot]
+    field :kind, Ecto.Enum, values: [:preview, :screenshot, :content]
     field :content_type, :string
     field :bytes, :binary
     field :width, :integer

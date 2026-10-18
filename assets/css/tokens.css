@@ -4,6 +4,7 @@
   --ease: cubic-bezier(.22, 1, .36, 1);
   --danger: #b4321c;
   --font-ui: "Inter Variable", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }
 :root, :root[data-theme=studio] {
   --paper: #fafafa; --card: #ffffff; --soft: #f2f2f2;

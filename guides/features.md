@@ -50,8 +50,27 @@ uses them. Their names start with a dot.
   `embeddable`. Links captured before that are checked once when the column
   opens (`Acervo.Library.check_embeddable/2`, run with `start_async`).
 - **Reader view.** Pages that can't be framed, or whose check failed, show the
-  captured text (`#web-reader`) with a faint hint and an “Open original”
-  button.
+  page's article (`#web-reader-content`, a `.reader` at most 680px wide). A
+  framed page with an article gets a head button (`#web-reader-toggle`,
+  book ⇄ globe) that patches to `?view=reader` and back, so a reload keeps it.
+  Without an article, the column falls back to the captured text
+  (`#web-reader-text`) with a faint hint and an “Open original” button.
+- **Article capture.** For web pages, capture keeps the article as sanitized
+  HTML in `content_html` (`Acervo.Library.Reader`). It first looks for a
+  Markdown version (`Acervo.Library.MarkdownSource`): a
+  `<link rel="alternate" type="text/markdown">`, the URL with `.md`, or a
+  matching `.md` in the site's `/llms.txt`, at most three requests of 1 MB.
+  Markdown is rendered by MDEx with raw HTML escaped; otherwise
+  `Acervo.Library.Article` picks the longest `article`/`main` block, or the
+  element with the most paragraph text, and drops navigation, sharing,
+  comments and signup blocks. Either way `Acervo.Library.Sanitizer` rebuilds
+  it from an allowlist of tags and attributes, links open in a new tab, and
+  the output stops before 300 KB. A faint “Markdown” marks articles that came
+  from Markdown. Up to 20 inline images are downloaded through `SafeFetch`,
+  stored as WebP link images of kind `:content` and served from
+  `/images/:id`. YouTube, X and Instagram keep their embeds. Links captured
+  before this get their article from a one-off backfill
+  (`Acervo.Release.backfill_reader_content/0`, see the deployment guide).
 
 ## Organize
 
