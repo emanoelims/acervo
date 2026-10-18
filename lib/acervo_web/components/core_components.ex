@@ -254,7 +254,7 @@ defmodule AcervoWeb.CoreComponents do
 
   attr :type, :string,
     default: "text",
-    values: ~w(checkbox color date datetime-local email file month number password
+    values: ~w(checkbox color date datetime-local email file month number
                search select tel text textarea time url week hidden range)
 
   attr :field, FormField, doc: "a form field struct retrieved from the form, for example: @form[:email]"
@@ -388,7 +388,7 @@ defmodule AcervoWeb.CoreComponents do
     """
   end
 
-  # All other inputs text, datetime-local, url, password, etc. are handled here...
+  # All other inputs text, datetime-local, url, etc. are handled here...
   def input(assigns) do
     assigns = field_state(assigns)
 

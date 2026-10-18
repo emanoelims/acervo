@@ -73,6 +73,27 @@ defmodule AcervoWeb.Layouts do
   end
 
   @doc """
+  Renders the centered layout shared by the sign-in, registration and
+  account pages.
+  """
+  attr :flash, :map, required: true, doc: "the map of flash messages"
+  slot :inner_block, required: true
+
+  def auth(assigns) do
+    ~H"""
+    <main id="auth-main" class="auth-main">
+      <div class="auth-card">
+        <.link navigate={~p"/"} id="auth-home" class="auth-mark" title={gettext("Acervo")}>
+          <.icon name="acervo-mark" class="size-8" />
+        </.link>
+        {render_slot(@inner_block)}
+      </div>
+    </main>
+    <.flash_group flash={@flash} />
+    """
+  end
+
+  @doc """
   Shows the flash group with standard titles and content.
 
   ## Examples

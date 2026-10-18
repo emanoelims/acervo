@@ -3,6 +3,7 @@
 @import "./tokens.css";
 @import "./base.css";
 @import "./components.css";
+@import "./auth.css";
 @import "phoenix-colocated/acervo/colocated.css";
 @source "../css";
 @source "../js";

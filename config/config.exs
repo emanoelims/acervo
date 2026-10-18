@@ -34,6 +34,24 @@ config :acervo, Oban,
   queues: [capture: 4, ai: 2, embed: 4],
   plugins: [{Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7}]
 
+# Registration is open in dev and test; production restricts it to
+# ACERVO_ALLOWED_EMAILS (see config/runtime.exs).
+config :acervo, :allowed_emails, :all
+config :acervo, :mail_from, {"Acervo", "contato@localhost"}
+
+config :acervo, :scopes,
+  user: [
+    default: true,
+    module: Acervo.Accounts.Scope,
+    assign_key: :current_scope,
+    access_path: [:user, :id],
+    schema_key: :user_id,
+    schema_type: :binary_id,
+    schema_table: :users,
+    test_data_fixture: Acervo.AccountsFixtures,
+    test_setup_helper: :register_and_log_in_user
+  ]
+
 config :acervo,
   ecto_repos: [Acervo.Repo],
   generators: [timestamp_type: :utc_datetime, binary_id: true]
