@@ -212,15 +212,20 @@ schema.
 
 `Search.search(scope, query, opts)`:
 - Options: `collection_id`, `source`, and `limit` (default 60).
-- **Text:** `websearch_to_tsquery('simple', acervo_unaccent(query))`, ranked with
-  `ts_rank_cd`, top 50.
+- **Text:** over title, description, site, author, note and image description.
+  The query's words (three letters or more, minus common Portuguese and
+  English function words, at most eight) are unaccented and quoted in
+  Postgres and ORed as prefixes; a link must match at least half of them.
+  Ranked with `ts_rank_cd`, top 50.
 - **Vector:** embeds the query and returns the top 50 by
-  `embedding <=> query_vector`.
+  `embedding <=> query_vector` among links embedded with the configured model,
+  dropping hits under 0.27 cosine similarity. The embedded document adds the
+  link's collection names and about 2,000 tokens of article text.
 - **Fusion:** `score = Σ 1 / (60 + rank)` across both lists, sorted by score
   descending, with ties broken by `inserted_at` descending.
 - **Fallback:** if embedding fails or times out (3 s), it returns text-only
   results flagged `partial: true`. The UI shows a subtle icon.
-- The LiveView debounces input by 400 ms. Queries shorter than 2 characters
+- The LiveView debounces input by 250 ms. Queries shorter than 2 characters
   show recent links instead.
 
 ## Interface

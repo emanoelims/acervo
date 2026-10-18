@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-18
+
+Find anything you saved, in your own words.
+
 ### Added
 
 - Search everything you saved in your own words: by title, text, notes, collections or what an image shows. Open it with / or ⌘K.
