@@ -30,7 +30,7 @@ defmodule Acervo.AI.EnrichLink do
   use Oban.Worker,
     queue: :ai,
     max_attempts: 4,
-    unique: [period: 300, keys: [:link_id], states: [:available, :scheduled, :retryable]]
+    unique: [period: :infinity, keys: [:link_id], states: [:available, :scheduled, :retryable]]
 
   import Ecto.Query
 
@@ -51,16 +51,18 @@ defmodule Acervo.AI.EnrichLink do
   @transient_statuses [408, 409]
 
   @doc """
-  Enqueues the enrichment of `link` and marks it `:pending` (on the link row
-  only, `updated_at` untouched). Call it inside the transaction that changed
-  what the model reads, if there is one.
+  Marks `link` `:pending` (on the link row only, `updated_at` untouched) and
+  enqueues its enrichment, in one transaction: the mark lands before any job
+  can finish. When a job for the link is already waiting, Oban returns it
+  with `conflict?: true` and the link is still `:pending`. Call it inside the
+  transaction that changed what the model reads, if there is one.
   """
   @spec enqueue(Link.t()) :: {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t() | term()}
   def enqueue(%Link{id: link_id}) do
-    with {:ok, job} <- Oban.insert(new(%{"link_id" => link_id})) do
+    Repo.transact(fn ->
       Repo.update_all(from(l in Link, where: l.id == ^link_id), set: [enrichment_status: :pending])
-      {:ok, job}
-    end
+      Oban.insert(new(%{"link_id" => link_id}))
+    end)
   end
 
   @impl Oban.Worker
@@ -122,7 +124,9 @@ defmodule Acervo.AI.EnrichLink do
   end
 
   defp store_output(scope, link, input, output) do
-    case Repo.one(from l in Link, where: l.id == ^link.id and l.user_id == ^scope.user.id, lock: "FOR UPDATE") do
+    # Same lock as `Acervo.Collections.finish_triage/2`, so a link triaged
+    # meanwhile is seen as triaged.
+    case Repo.one(from l in Link, where: l.id == ^link.id and l.user_id == ^scope.user.id, lock: "FOR NO KEY UPDATE") do
       nil -> {:error, :not_found}
       %Link{} = fresh -> update_and_suggest(scope, fresh, input, output)
     end

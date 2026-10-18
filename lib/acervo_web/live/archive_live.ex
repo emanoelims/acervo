@@ -401,6 +401,7 @@ defmodule AcervoWeb.ArchiveLive do
       {:noreply, triaged(socket, link)}
     else
       {:error, :not_found} -> {:noreply, gone(socket)}
+      {:error, _changeset} -> {:noreply, put_flash(socket, :error, gettext("Couldn't finish this link."))}
     end
   end
 

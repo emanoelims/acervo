@@ -154,6 +154,29 @@ defmodule Acervo.Collections.SuggestionsTest do
       assert statuses(link) == [:dismissed, :dismissed]
       assert_receive {:link_updated, %Link{triaged_at: %DateTime{}}}
     end
+
+    test "after finish_triage the link has no pending suggestions and gets no new ones",
+         %{scope: scope, link: link} do
+      collection = collection_fixture(scope)
+      suggestion_fixture(scope, link, %{proposed_name: "Receitas"})
+
+      assert {:ok, _} = Collections.finish_triage(scope, link)
+      refute :pending in statuses(link)
+
+      assert {:ok, []} =
+               Collections.replace_suggestions(scope, link, [
+                 %{collection_id: collection.id, reason: "r"},
+                 %{proposed_name: "Nova", reason: "r"}
+               ])
+
+      refute :pending in statuses(link)
+    end
+
+    test "finish_triage on a deleted link is not found", %{scope: scope, link: link} do
+      Repo.delete!(link)
+      assert {:error, :not_found} = Collections.finish_triage(scope, link)
+      refute_receive {:link_updated, _}
+    end
   end
 
   describe "isolation" do

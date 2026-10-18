@@ -270,6 +270,17 @@ defmodule Acervo.LibraryTest do
       assert %Link{enrichment_status: :pending} = Repo.get!(Link, link.id)
     end
 
+    test "returns and broadcasts the link as pending, so its placeholder shows", %{scope: scope} do
+      link = link_fixture(scope)
+      Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [enrichment_status: :ready])
+
+      assert {:ok, %Link{enrichment_status: :pending}} =
+               Library.attach_screenshot(scope, link, image_fixture("photo.jpg"))
+
+      id = link.id
+      assert_receive {:link_updated, %Link{id: ^id, enrichment_status: :pending}}
+    end
+
     test "enqueues nothing when the image is rejected", %{scope: scope} do
       link = link_fixture(scope)
       assert {:error, :not_an_image} = Library.attach_screenshot(scope, link, image_fixture("not_image.txt"))

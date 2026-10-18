@@ -8,6 +8,7 @@ defmodule Acervo.AI.EnrichLinkTest do
 
   alias Acervo.AI.Call
   alias Acervo.AI.EnrichLink
+  alias Acervo.Collections
   alias Acervo.Collections.Suggestion
   alias Acervo.FakeAIClient
   alias Acervo.Library
@@ -120,6 +121,18 @@ defmodule Acervo.AI.EnrichLinkTest do
       link = ready_link(scope)
       {:ok, link} = Library.mark_triaged(scope, link)
       collection_fixture(scope, %{name: "Receitas"})
+      stub_ok()
+
+      assert :ok = perform(link)
+
+      assert %Link{language: "pt", enrichment_status: :ready} = Repo.get!(Link, link.id)
+      assert suggestions(link) == []
+    end
+
+    test "a link triaged before the run finishes gets no suggestions", %{scope: scope} do
+      link = ready_link(scope)
+      collection_fixture(scope, %{name: "Receitas"})
+      {:ok, _} = Collections.finish_triage(scope, link)
       stub_ok()
 
       assert :ok = perform(link)
@@ -261,6 +274,37 @@ defmodule Acervo.AI.EnrichLinkTest do
       assert {:ok, _job} = EnrichLink.enqueue(link)
 
       assert [_] = all_enqueued(worker: EnrichLink, args: %{"link_id" => link.id})
+      assert %Link{enrichment_status: :pending} = Repo.get!(Link, link.id)
+    end
+
+    test "a second enqueue while the first job is available conflicts", %{scope: scope} do
+      link = ready_link(scope)
+
+      assert {:ok, %Oban.Job{conflict?: false, state: "available"} = first} = EnrichLink.enqueue(link)
+      assert {:ok, %Oban.Job{conflict?: true, id: id}} = EnrichLink.enqueue(link)
+      assert id == first.id
+    end
+
+    test "the uniqueness never expires while the job waits", %{scope: scope} do
+      link = ready_link(scope)
+      {:ok, first} = EnrichLink.enqueue(link)
+
+      # A backfill can keep a job waiting for far longer than any period.
+      Repo.update_all(from(j in Oban.Job, where: j.id == ^first.id),
+        set: [inserted_at: DateTime.shift(DateTime.utc_now(), day: -1)]
+      )
+
+      assert {:ok, %Oban.Job{conflict?: true}} = EnrichLink.enqueue(link)
+      assert [_] = all_enqueued(worker: EnrichLink, args: %{"link_id" => link.id})
+    end
+
+    test "a conflicting enqueue still marks the link pending", %{scope: scope} do
+      link = ready_link(scope)
+      {:ok, _first} = EnrichLink.enqueue(link)
+      # The waiting job's link was settled meanwhile (say, by a finished run).
+      Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [enrichment_status: :ready])
+
+      assert {:ok, %Oban.Job{conflict?: true}} = EnrichLink.enqueue(link)
       assert %Link{enrichment_status: :pending} = Repo.get!(Link, link.id)
     end
   end

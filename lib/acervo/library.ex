@@ -250,7 +250,14 @@ defmodule Acervo.Library do
     Repo.update_all(from(i in LinkImage, where: i.link_id == ^link.id and i.kind != :content), inc: [position: 1])
 
     with {:ok, _image} <- Storage.put(scope, link, Map.merge(image, %{kind: :screenshot, position: 0})) do
-      with {:ok, link} <- link |> Link.capture_changeset(%{status: :ready, capture_error: nil}) |> Repo.update(),
+      # `enqueue/1` marks the row `:pending`; the struct must say so too, or
+      # the broadcast hides the waiting placeholder.
+      changeset =
+        link
+        |> Link.capture_changeset(%{status: :ready, capture_error: nil})
+        |> Ecto.Changeset.change(enrichment_status: :pending)
+
+      with {:ok, link} <- Repo.update(changeset),
            {:ok, _job} <- EnrichLink.enqueue(link) do
         {:ok, link}
       end
@@ -283,6 +290,16 @@ defmodule Acervo.Library do
       nil ->
         :error
     end
+  end
+
+  @doc false
+  # Preloads a link just written by the caller, broadcasts
+  # `{:link_updated, link}` and returns it. Used by `Acervo.Collections`
+  # after its transactions commit.
+  @spec broadcast_link(Scope.t(), Link.t()) :: Link.t()
+  def broadcast_link(%Scope{} = scope, %Link{} = link) do
+    {:ok, link} = updated({:ok, link}, scope)
+    link
   end
 
   # Checks ownership against the database, not the (possibly stale) struct.

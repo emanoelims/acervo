@@ -195,16 +195,17 @@ defmodule Acervo.Collections do
   the target, when the owner already accepted or dismissed that target for
   this link, or when they repeat an earlier entry. A `proposed_name` that
   matches one of the user's collections by name or slug becomes that
-  collection. At most #{@max_suggestions} are kept. Broadcasts nothing; the
-  caller does.
+  collection. At most #{@max_suggestions} are kept. A triaged link gets none.
+  Broadcasts nothing; the caller does.
   """
   @spec replace_suggestions(Scope.t(), Link.t(), [suggestion_attrs()]) ::
           {:ok, [Suggestion.t()]} | {:error, :not_found}
   def replace_suggestions(%Scope{user: user}, %Link{id: link_id}, entries) when is_list(entries) do
     Repo.transact(fn ->
-      # The lock serializes concurrent replacements for the same link.
-      case Repo.one(from l in Link, where: l.id == ^link_id and l.user_id == ^user.id, lock: "FOR UPDATE") do
+      case lock_link(user, link_id) do
         nil -> {:error, :not_found}
+        # Triaged links are out of the inbox: no new suggestions for them.
+        %Link{triaged_at: %DateTime{}} -> {:ok, []}
         %Link{} = link -> {:ok, insert_suggestions(user, link, entries)}
       end
     end)
@@ -358,7 +359,9 @@ defmodule Acervo.Collections do
             s.user_id == ^user.id and s.status == :pending and is_nil(s.collection_id) and
               s.normalized_name in ^names and s.id != ^suggestion.id,
           order_by: [asc: s.inserted_at, asc: s.id],
-          lock: "FOR UPDATE"
+          # Another session accepting one of these holds its lock; waiting
+          # for it could deadlock, so that one is left as it is.
+          lock: "FOR UPDATE SKIP LOCKED"
       )
 
     taken =
@@ -441,21 +444,39 @@ defmodule Acervo.Collections do
   end
 
   @doc """
-  Finishes the link's triage: dismisses its remaining pending suggestions and
-  takes it out of the inbox (`Acervo.Library.mark_triaged/2`).
+  Finishes the link's triage in one transaction: locks the link (as
+  `replace_suggestions/3` does, so a concurrent enrichment cannot add
+  suggestions), dismisses its remaining pending suggestions and takes it out
+  of the inbox. Broadcasts the link after commit.
   """
-  @spec finish_triage(Scope.t(), Link.t()) :: {:ok, Link.t()} | {:error, :not_found}
-  def finish_triage(%Scope{user: user} = scope, %Link{id: link_id} = link) do
-    if Repo.exists?(from l in Link, where: l.id == ^link_id and l.user_id == ^user.id) do
-      Repo.update_all(
-        from(s in Suggestion, where: s.link_id == ^link_id and s.user_id == ^user.id and s.status == :pending),
-        set: [status: :dismissed, updated_at: DateTime.utc_now(:second)]
-      )
+  @spec finish_triage(Scope.t(), Link.t()) :: {:ok, Link.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def finish_triage(%Scope{user: user} = scope, %Link{id: link_id}) do
+    fn ->
+      case lock_link(user, link_id) do
+        nil ->
+          {:error, :not_found}
 
-      Library.mark_triaged(scope, link)
-    else
-      {:error, :not_found}
+        %Link{} = link ->
+          Repo.update_all(
+            from(s in Suggestion, where: s.link_id == ^link.id and s.user_id == ^user.id and s.status == :pending),
+            set: [status: :dismissed, updated_at: DateTime.utc_now(:second)]
+          )
+
+          link |> Ecto.Changeset.change(triaged_at: DateTime.utc_now(:second)) |> Repo.update()
+      end
     end
+    |> Repo.transact()
+    |> case do
+      {:ok, link} -> {:ok, Library.broadcast_link(scope, link)}
+      {:error, _} = error -> error
+    end
+  end
+
+  # Serializes the writers of a link's suggestions and triage. `NO KEY
+  # UPDATE` still lets `accept_suggestion/2` add the link to a collection
+  # (a foreign key check takes `KEY SHARE`), so the two cannot deadlock.
+  defp lock_link(user, link_id) do
+    Repo.one(from l in Link, where: l.id == ^link_id and l.user_id == ^user.id, lock: "FOR NO KEY UPDATE")
   end
 
   # Checks ownership against the database, not the (possibly stale) struct.

@@ -213,6 +213,29 @@ defmodule AcervoWeb.InboxTriageTest do
       assert status(suggestion) == :pending
       assert Collections.list_collections(other) == []
     end
+
+    test "forged ids for another user's link never touch it", %{conn: conn, scope: scope} do
+      other = Acervo.AccountsFixtures.user_scope_fixture()
+      theirs = other |> link_fixture() |> ready()
+      existing = collection_fixture(other, %{name: "Deles"})
+      a = suggestion_fixture(other, theirs, %{collection_id: existing.id})
+      b = suggestion_fixture(other, theirs, %{proposed_name: "Alheia"})
+      mine = scope |> link_fixture() |> ready()
+
+      {:ok, view, _html} = live(conn, ~p"/inbox/l/#{mine.id}")
+
+      assert render_click(view, "finish", %{"id" => theirs.id}) =~ "Not found."
+      assert render_click(view, "accept_all", %{"id" => theirs.id}) =~ "Not found."
+      assert render_click(view, "finish", %{"id" => "not-a-uuid"}) =~ "Not found."
+      assert render_click(view, "accept_all", %{"id" => "not-a-uuid"}) =~ "Not found."
+
+      assert status(a) == :pending
+      assert status(b) == :pending
+      refute Repo.get!(Link, theirs.id).triaged_at
+      assert other |> Collections.list_collections() |> Enum.map(& &1.name) == ["Deles"]
+      assert collection_names(other, theirs) == []
+      assert has_element?(view, "#link-#{mine.id}")
+    end
   end
 
   describe "live updates" do
