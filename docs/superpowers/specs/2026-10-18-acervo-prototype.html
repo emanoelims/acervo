@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acervo · protótipo de colunas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#fbfbfa;--card:#fff;--ink:#1d1d1f;--body:#3a3a3c;--muted:#8e8e93;--faint:#b9b9be;--rule:rgba(0,0,0,.06);--edge:rgba(0,0,0,.065);
+  --ease:cubic-bezier(.22,1,.36,1)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:Inter,system-ui,sans-serif;font-feature-settings:"cv11","ss01";color:var(--ink);
+  background:linear-gradient(160deg,#dfe3e6,#c9cfd3 45%,#b7bfc4);-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+
+/* barra do protótipo */
+.proto{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;color:#2b2f33}
+.proto b{font-weight:600;font-size:14px}
+.proto small{color:#5b6268;font-size:13px;margin-left:10px}
+.modes{display:flex;gap:4px;padding:4px;border-radius:999px;background:rgba(255,255,255,.45);backdrop-filter:blur(10px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.5)}
+.modes button{padding:8px 16px;border-radius:999px;font-size:13.5px;color:#454b50;transition:background .2s}
+.modes button.selected,.modes button.on{background:#fff;color:#111;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+
+/* janela */
+.win{position:relative;margin:0 22px;height:calc(100vh - 86px);background:var(--bg);border-radius:20px;overflow:hidden;
+  box-shadow:0 0 0 1px rgba(0,0,0,.06),0 40px 80px -30px rgba(20,30,40,.45)}
+.cols{display:flex;height:100%;overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;scrollbar-width:none}
+.cols::-webkit-scrollbar{display:none}
+.col{position:relative;height:100%;flex:0 0 auto;border-right:1px solid var(--rule);transition:flex-basis .5s var(--ease),width .5s var(--ease)}
+.col:last-child{border-right:0}
+.scroll{height:100%;overflow-y:auto;padding:46px 40px 140px;scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.12) transparent}
+.enter .scroll{animation:enter .55s var(--ease) both}
+@keyframes enter{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+
+/* modo A: colunas iguais */
+.mode-a .col{width:max(340px,calc((100vw - 44px)/3))}
+/* modo B */
+.mode-b .col.root{width:310px}
+.mode-b .col.grow{flex:1 1 auto;min-width:520px}
+.mode-b .col.compact{width:330px}
+
+h1,h2{margin:0;font-weight:600;letter-spacing:-.025em;line-height:1.12}
+h1{font-size:30px;margin-bottom:24px}
+.chead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px}
+.chead h2{font-size:28px;display:flex;align-items:center;gap:8px;min-width:0}
+.chead h2 span.t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chev{color:var(--faint);font-weight:400;font-size:24px;flex:0 0 auto}
+.round{width:38px;height:38px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;color:var(--muted);background:var(--card);
+  box-shadow:0 0 0 1px var(--edge);transition:transform .2s var(--ease),box-shadow .2s}
+.round:hover{transform:translateY(-1px);box-shadow:0 0 0 1px rgba(0,0,0,.1),0 4px 12px rgba(0,0,0,.06)}
+.round svg{width:16px;height:16px}
+.lead{font-size:16.5px;line-height:1.62;color:var(--body);margin:0}
+.lead u{text-decoration-color:rgba(0,0,0,.28);text-underline-offset:3px;color:var(--ink);cursor:pointer}
+.lead+.lead{margin-top:18px}
+.desc{font-size:16.5px;line-height:1.6;color:var(--body);margin:0 0 28px;padding-bottom:28px;border-bottom:1px solid var(--rule)}
+
+.nav{list-style:none;margin:46px 0 0;padding:0}
+.nav li{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:17px;color:var(--muted);cursor:pointer;transition:color .2s}
+.nav li:hover{color:var(--ink)}
+.nav li.on{color:var(--ink);font-weight:500}
+.nav li.on::before{content:"";width:3px;height:19px;border-radius:2px;background:var(--ink);margin:0 -3px 0 -14px}
+.nav .n{margin-left:auto;font-size:13px;color:var(--faint);font-variant-numeric:tabular-nums;font-weight:400}
+.nav .dot{width:7px;height:7px;border-radius:50%;background:#f2b84b}
+.nav .sep{height:22px;padding:0;cursor:default}
+
+/* cards */
+.card{position:relative;background:var(--card);border-radius:22px;overflow:hidden;margin-bottom:22px;cursor:pointer;
+  box-shadow:0 0 0 1px var(--edge),0 1px 2px rgba(0,0,0,.03);transition:transform .35s var(--ease),box-shadow .35s var(--ease)}
+.card:hover{transform:translateY(-2px);box-shadow:0 0 0 1px rgba(0,0,0,.08),0 14px 30px -12px rgba(0,0,0,.14)}
+.card.sel{box-shadow:0 0 0 1.5px var(--ink),0 14px 30px -14px rgba(0,0,0,.16)}
+.pad{padding:22px 24px 24px}
+.date{font-size:13.5px;color:var(--muted);margin-bottom:10px}
+.ttl{font-size:17px;line-height:1.5}
+.sub{font-size:15.5px;line-height:1.55;color:var(--muted);margin-top:4px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.glow{position:relative;padding:24px 28px;overflow:hidden;background:#e9e9ea}
+.glow .bg{position:absolute;inset:-40px;background-size:cover;background-position:center;filter:blur(28px) saturate(1.15);opacity:.85;transform:scale(1.1)}
+.glow img{position:relative;display:block;width:100%;border-radius:10px;box-shadow:0 14px 32px -8px rgba(0,0,0,.35);background:#ddd}
+.media{margin:0 16px 16px;border-radius:14px;overflow:hidden;position:relative;background:#eee}
+.media img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover}
+.play{position:absolute;inset:0;display:grid;place-items:center}
+.play i{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.9);display:grid;place-items:center;box-shadow:0 6px 18px rgba(0,0,0,.2)}
+.src{position:absolute;top:18px;right:18px;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.95);z-index:2;
+  display:grid;place-items:center;box-shadow:0 0 0 1px var(--edge),0 2px 6px rgba(0,0,0,.08)}
+.src svg{width:13px;height:13px}
+.text .src{top:20px}
+.masonry{columns:4 250px;column-gap:22px}
+.masonry .card{break-inside:avoid}
+
+/* lista compacta (modo B) */
+.row{display:flex;align-items:center;gap:12px;padding:9px 10px;border-radius:14px;cursor:pointer;transition:background .2s}
+.row:hover{background:rgba(0,0,0,.03)}
+.row.sel{background:var(--card);box-shadow:0 0 0 1px var(--edge)}
+.row .th{width:46px;height:46px;border-radius:10px;flex:0 0 auto;background:#ececed center/cover;display:grid;place-items:center}
+.row .th svg{width:16px;height:16px}
+.row .tt{font-size:14.5px;font-weight:500;line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.row .mm{font-size:12.5px;color:var(--muted);margin-top:2px}
+
+/* detalhe do link */
+.meta{font-size:14px;color:var(--muted);margin:18px 0 0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;padding:7px 12px;border-radius:999px;background:var(--card);
+  box-shadow:0 0 0 1px var(--edge);color:var(--body);cursor:pointer;transition:all .2s var(--ease)}
+.chip svg{width:13px;height:13px}
+.chip.ai{background:transparent;box-shadow:none;border:1px dashed rgba(0,0,0,.2);color:var(--muted);padding:6px 11px}
+.chip.ai:hover{border-color:var(--ink);color:var(--ink)}
+.chip.ok{background:var(--ink);color:#fff;box-shadow:none;border:0}
+.ai{font-size:15.5px;line-height:1.62;color:var(--muted);margin-top:22px;padding-top:22px;border-top:1px solid var(--rule)}
+.acts{display:flex;gap:8px;margin-top:24px}
+.detail-b{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:34px;align-items:start}
+
+/* caixa de entrada */
+.ibar{display:flex;align-items:center;justify-content:space-between;margin-top:14px}
+.done{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;box-shadow:0 0 0 1px var(--edge);background:var(--card);color:var(--muted);transition:all .2s}
+.done:hover{background:var(--ink);color:#fff;box-shadow:none}
+.done svg{width:15px;height:15px}
+
+/* pílula ↑ */
+.up{position:absolute;top:16px;left:50%;transform:translate(-50%,-14px);opacity:0;pointer-events:none;z-index:5;display:flex;align-items:center;gap:6px;
+  font-size:14px;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,.85);backdrop-filter:blur(14px);
+  box-shadow:0 0 0 1px var(--edge),0 6px 18px rgba(0,0,0,.08);transition:all .35s var(--ease);white-space:nowrap;max-width:80%}
+.up span{overflow:hidden;text-overflow:ellipsis}
+.up.show{transform:translate(-50%,0);opacity:1;pointer-events:auto}
+.up svg{width:14px;height:14px;flex:0 0 auto}
+
+/* dock */
+.dock{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:4px;padding:6px;border-radius:999px;
+  background:rgba(58,58,62,.6);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.15),0 12px 34px rgba(0,0,0,.2)}
+.dock button{height:44px;min-width:44px;border-radius:999px;display:flex;align-items:center;justify-content:center;gap:8px;color:#f3f3f5;position:relative;transition:background .25s,padding .35s var(--ease)}
+.dock button:hover{background:rgba(255,255,255,.1)}
+.dock button.on{background:rgba(255,255,255,.17);padding:0 17px 0 14px}
+.dock button .lb{display:none;font-size:14.5px;font-weight:500}
+.dock button.on .lb{display:inline}
+.dock svg{width:19px;height:19px}
+.dock .bd{position:absolute;top:10px;right:10px;width:7px;height:7px;border-radius:50%;background:#f2b84b}
+.float{position:absolute;left:50%;bottom:92px;transform:translate(-50%,10px);opacity:0;pointer-events:none;z-index:19;width:min(560px,80%);
+  display:flex;align-items:center;gap:10px;padding:14px 18px;border-radius:18px;background:rgba(255,255,255,.9);backdrop-filter:blur(18px);
+  box-shadow:0 0 0 1px var(--edge),0 20px 40px -10px rgba(0,0,0,.25);transition:all .35s var(--ease)}
+.float.show{transform:translate(-50%,0);opacity:1;pointer-events:auto}
+.float svg{width:18px;height:18px;color:var(--muted);flex:0 0 auto}
+.float input{flex:1;border:0;outline:0;background:none;font:inherit;font-size:16px;color:var(--ink)}
+.float kbd{font:12px Inter;color:var(--muted);padding:3px 7px;border-radius:6px;box-shadow:0 0 0 1px var(--edge)}
+.empty{color:var(--muted);font-size:15px;line-height:1.6}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="x" viewBox="0 0 24 24"><path fill="currentColor" d="M17.8 3h3.1l-6.8 7.7L22 21h-6.2l-4.9-6.3L5.3 21H2.2l7.3-8.3L2 3h6.4l4.4 5.8L17.8 3Zm-1.1 16.2h1.7L7.4 4.7H5.6l11.1 14.5Z"/></symbol>
+  <symbol id="yt" viewBox="0 0 24 24"><path fill="#e2342b" d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12c0 1.6.2 3.2.5 4.8a3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1c.3-1.6.5-3.2.5-4.8s-.2-3.2-.5-4.8Z"/><path fill="#fff" d="m9.8 15.1 5.8-3.1-5.8-3.1v6.2Z"/></symbol>
+  <symbol id="ig" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="#c13584" stroke-width="2.2"/><circle cx="12" cy="12" r="4" fill="none" stroke="#c13584" stroke-width="2.2"/><circle cx="17.3" cy="6.7" r="1.3" fill="#c13584"/></symbol>
+  <symbol id="web" viewBox="0 0 24 24"><g fill="none" stroke="#5a5a5e" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/></g></symbol>
+  <symbol id="home" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1v-9.5Z"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></g></symbol>
+  <symbol id="inbox" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3.5 13.5 6 5h12l2.5 8.5V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-5.5Z"/><path d="M3.5 13.5H8l1.2 2.5h5.6l1.2-2.5h4.5"/></g></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></g></symbol>
+  <symbol id="open" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="folder" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3.5 7a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V7Z"/></symbol>
+  <symbol id="note" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M5 5h14M5 10h14M5 15h9"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3"/></symbol>
+  <symbol id="spark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3l1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6L12 3Z"/></symbol>
+  <symbol id="up" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="dots" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></g></symbol>
+  <symbol id="link" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M10 14a4 4 0 0 0 5.7 0l3-3A4 4 0 0 0 13 5.3l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+</svg>
+
+<div class="proto">
+  <div><b>Acervo</b><small>protótipo clicável · imagens aleatórias</small></div>
+  <div class="modes">
+    <button data-choice="a" onclick="window.toggleSelect && toggleSelect(this); setMode('a')" class="on" id="ma">A · Colunas iguais</button>
+    <button data-choice="b" onclick="window.toggleSelect && toggleSelect(this); setMode('b')" id="mb">B · Última se expande</button>
+  </div>
+</div>
+
+<div class="win">
+  <div class="cols mode-a" id="cols"></div>
+  <div class="float" id="fsearch"><svg><use href="#search"/></svg><input placeholder="Descreva o que você procura…"><kbd>esc</kbd></div>
+  <div class="float" id="fadd"><svg><use href="#link"/></svg><input placeholder="Cole um link"><kbd>↵</kbd></div>
+  <div class="dock" id="dock">
+    <button data-k="home" class="on" title="Acervo"><svg><use href="#home"/></svg><span class="lb">Acervo</span></button>
+    <button data-k="search" title="Buscar"><svg><use href="#search"/></svg><span class="lb">Buscar</span></button>
+    <button data-k="inbox" title="Caixa de entrada"><svg><use href="#inbox"/></svg><span class="lb">Entrada</span><i class="bd"></i></button>
+    <button data-k="gear" title="Ajustes"><svg><use href="#gear"/></svg><span class="lb">Ajustes</span></button>
+    <button data-k="add" title="Adicionar"><svg><use href="#plus"/></svg><span class="lb">Adicionar</span></button>
+  </div>
+</div>
+
+<script>
+const P = (s,w,h)=>`https://picsum.photos/seed/${s}/${w}/${h}`;
+const C = [
+  {id:'ui',name:'Inspiração de UI',desc:'Interfaces, animações e detalhes que valem copiar algum dia.'},
+  {id:'later',name:'Assistir depois',desc:'Vídeos e talks para quando sobrar uma hora.'},
+  {id:'food',name:'Receitas',desc:'Coisas para cozinhar no fim de semana.'},
+  {id:'ex',name:'Elixir',desc:'Artigos, libs e ideias do ecossistema BEAM.'},
+  {id:'trip',name:'Viagem',desc:'Lugares para conhecer, com calma.'}
+];
+const L = [
+  {id:1,c:['ui'],src:'x',kind:'glow',img:'acv1',h:450,title:'Layout morph — every card flies to its new spot',short:'Layout morph',sub:'Uma coleção, seis jeitos de navegar.',by:'@uiarc',site:'x.com',date:'12 out 2026',ai:'Grade de cards de produtos que se reorganiza com animação entre grade, alvenaria, lista, pilha, carrossel e hélice.'},
+  {id:2,c:['ui'],src:'web',kind:'text',title:'Miller columns are back',short:'Miller columns',sub:'Por que a navegação do Finder ainda funciona tão bem na web, e como adaptar para telas pequenas.',by:'Che Wei Lee',site:'chewei.design',date:'3 out 2026',ai:'Ensaio sobre navegação em colunas: contexto sempre visível, profundidade sem perder o caminho.'},
+  {id:3,c:['ui'],src:'ig',kind:'glow',img:'acv3',h:560,title:'Glass dock com estado ativo expandido',short:'Glass dock',sub:'',by:'@motion.daily',site:'instagram.com',date:'28 set 2026',ai:'Barra de navegação flutuante em vidro fosco; o item ativo mostra ícone e rótulo, os outros só o ícone.'},
+  {id:4,c:['ui'],src:'web',kind:'glow',img:'acv4',h:420,title:'Flashnet — powering ambitious teams',short:'Flashnet',sub:'Grade de painéis com chips de rótulo e objetos flutuando sobre fotos.',by:'flashnet.xyz',site:'flashnet.xyz',date:'21 set 2026',ai:'Landing com grade de seis painéis, cada um com um chip de ícone e rótulo.'},
+  {id:5,c:['ui','later'],src:'yt',kind:'video',img:'acv5',title:'Spring physics, explained',short:'Spring physics',sub:'',by:'Design Code',site:'youtube.com',date:'14 set 2026',ai:'Vídeo de 18 minutos sobre animações com molas: rigidez, amortecimento e quando usar.'},
+  {id:6,c:['ui'],src:'web',kind:'text',title:'The quiet power of soft borders',short:'Soft borders',sub:'Bordas com 6% de opacidade e sombras de 1px: o que separa sem pesar.',by:'Rauno',site:'rauno.me',date:'2 set 2026',ai:'Nota curta sobre separar áreas com bordas quase invisíveis.'},
+  {id:7,c:['ui'],src:'x',kind:'glow',img:'acv7',h:500,title:'Fan stack hover interaction',short:'Fan stack',sub:'',by:'@uiarc',site:'x.com',date:'28 ago 2026',ai:'Cards em leque; passar o mouse puxa um card para cima.'},
+  {id:8,c:['later'],src:'yt',kind:'video',img:'acv8',title:'ElixirConf keynote: the BEAM in 2026',short:'ElixirConf keynote',sub:'',by:'ElixirConf',site:'youtube.com',date:'10 out 2026',ai:'Palestra de abertura sobre o futuro da BEAM e do Elixir.'},
+  {id:9,c:['later'],src:'yt',kind:'video',img:'acv9',title:'How great typography works',short:'Typography',sub:'',by:'Satori Graphics',site:'youtube.com',date:'1 out 2026',ai:'Vídeo sobre hierarquia tipográfica e espaçamento.'},
+  {id:10,c:['food'],src:'ig',kind:'glow',img:'acv10',h:620,title:'Focaccia de alecrim em 3 passos',short:'Focaccia',sub:'',by:'@panificadora',site:'instagram.com',date:'9 out 2026',ai:'Focaccia dourada com alecrim e sal grosso, massa de longa fermentação.'},
+  {id:11,c:['food'],src:'web',kind:'text',title:'Ramen caseiro, sem atalhos',short:'Ramen caseiro',sub:'Caldo, tare, óleo aromático e macarrão — um fim de semana inteiro.',by:'Serious Eats',site:'seriouseats.com',date:'20 set 2026',ai:'Receita longa de ramen tonkotsu feito em casa.'},
+  {id:12,c:['ex'],src:'web',kind:'text',title:'pgvector + Ecto: hybrid search in practice',short:'Hybrid search',sub:'Reciprocal Rank Fusion entre busca textual e vetores, com Ecto puro.',by:'Dashbit',site:'dashbit.co',date:'7 out 2026',ai:'Artigo sobre busca híbrida com pgvector e full-text do Postgres usando Ecto.'},
+  {id:13,c:['ex'],src:'x',kind:'glow',img:'acv13',h:430,title:'LiveView streams with view transitions',short:'Streams + transitions',sub:'',by:'@chris_mccord',site:'x.com',date:'30 set 2026',ai:'Demonstração de streams do LiveView com View Transitions API.'},
+  {id:14,c:['trip'],src:'ig',kind:'glow',img:'acv14',h:600,title:'Lisboa ao amanhecer',short:'Lisboa',sub:'',by:'@luz.lisboa',site:'instagram.com',date:'15 set 2026',ai:'Telhados de Lisboa ao amanhecer, luz rosada sobre o Tejo.'}
+];
+const INBOX = [
+  {id:101,src:'x',kind:'glow',img:'acv20',h:440,title:'Command palette with live previews',short:'Command palette',sub:'',by:'@raycast',site:'x.com',date:'hoje',ai:'Paleta de comandos com prévia ao vivo ao navegar.',sug:[{c:'ui'},{n:'Ferramentas'}]},
+  {id:102,src:'yt',kind:'video',img:'acv21',title:'Why Postgres is all you need',short:'Postgres',sub:'',by:'Hussein Nasser',site:'youtube.com',date:'hoje',ai:'Vídeo argumentando que o Postgres resolve filas, busca e cache.',sug:[{c:'later'},{c:'ex'}]},
+  {id:103,src:'ig',kind:'glow',img:'acv22',h:560,title:'Pão de fermentação natural',short:'Fermentação natural',sub:'',by:'@fornocaseiro',site:'instagram.com',date:'ontem',ai:'Pão de casca crocante com miolo aberto.',sug:[{c:'food'}]},
+  {id:104,src:'web',kind:'text',title:'Designing calm software',short:'Calm software',sub:'Notificações que esperam, interfaces que somem quando não são necessárias.',by:'Amber Case',site:'calmtech.com',date:'ontem',ai:'Ensaio sobre tecnologia calma e interfaces discretas.',sug:[{c:'ui'},{n:'Leituras'}]}
+];
+const all = [...INBOX,...L];
+const find = id => all.find(l=>l.id==id);
+const coll = id => C.find(c=>c.id==id);
+
+let mode="a", path=[{t:"c",id:"ui"},{t:"l",id:1}], prevLen=0;
+
+function srcIcon(s){return `<span class="src"><svg><use href="#${s}"/></svg></span>`}
+function card(l,sel){
+  const cls = `card ${l.kind=='text'?'text':''} ${sel?'sel':''}`;
+  let body='';
+  if(l.kind=='glow') body=`<div class="glow"><div class="bg" style="background-image:url(${P(l.img,700,l.h)})"></div><img src="${P(l.img,700,l.h)}" alt=""></div>${l.sub?`<div class="pad" style="padding-top:18px"><div class="ttl">${l.title}</div><div class="sub">${l.sub}</div></div>`:''}`;
+  else if(l.kind=='video') body=`<div class="pad" style="padding-bottom:16px"><div class="date">${l.date}</div><div class="ttl">${l.title}</div></div><div class="media"><img src="${P(l.img,800,450)}" alt=""><div class="play"><i><svg width="16" height="16"><use href="#yt"/></svg></i></div></div>`;
+  else body=`<div class="pad"><div class="date">${l.date}</div><div class="ttl">${l.title}</div><div class="sub">${l.sub}</div></div>`;
+  return `<div class="${cls}" data-open="${l.id}">${srcIcon(l.src)}${body}${l.sug?inboxBar(l):''}</div>`;
+}
+function inboxBar(l){
+  const chips = l.sug.map(s=> s.c?`<span class="chip ai" data-acc="${l.id}"><svg><use href="#spark"/></svg>${coll(s.c).name}</span>`:`<span class="chip ai" data-acc="${l.id}"><svg><use href="#plus"/></svg>${s.n}</span>`).join('');
+  return `<div class="pad" style="padding-top:0"><div class="ibar"><div class="chips" style="margin:0">${chips}</div><button class="done" data-done="${l.id}" title="Concluir"><svg><use href="#check"/></svg></button></div></div>`;
+}
+function row(l,sel){
+  const th = l.img?`style="background-image:url(${P(l.img,120,120)})"`:'';
+  return `<div class="row ${sel?'sel':''}" data-open="${l.id}"><div class="th" ${th}>${l.img?'':`<svg><use href="#${l.src}"/></svg>`}</div><div style="min-width:0"><div class="tt">${l.title}</div><div class="mm">${l.site}</div></div></div>`;
+}
+function head(title,more=true){return `<div class="chead"><h2><span class="t">${title}</span><span class="chev">›</span></h2>${more?`<button class="round" title="Mais"><svg><use href="#dots"/></svg></button>`:''}</div>`}
+
+function rootCol(){
+  const cur = path[0]||{};
+  const nb = INBOX.length;
+  const li = (key,label,n,extra='')=>`<li class="${(cur.t==key.t&&cur.id==key.id)?'on':''}" data-nav='${JSON.stringify(key)}'>${label}${extra}<span class="n">${n}</span></li>`;
+  return `<h1>Acervo</h1>
+    <p class="lead">Coisas boas que eu encontro pela internet. São <u data-navk='{"t":"all"}'>${L.length} links</u> em <u>${C.length} coleções</u>, e <u data-navk='{"t":"inbox"}'>${nb} esperam</u> na caixa de entrada.</p>
+    <p class="lead">Cole um link em qualquer lugar. Para achar algo, descreva com suas palavras.</p>
+    <ul class="nav">
+      ${li({t:'inbox'},'Caixa de entrada',nb,'<span class="dot"></span>')}
+      ${li({t:'all'},'Tudo',L.length)}
+      <li class="sep"></li>
+      ${C.map(c=>li({t:'c',id:c.id},c.name,L.filter(l=>l.c.includes(c.id)).length)).join('')}
+    </ul>`;
+}
+function listItems(p){
+  if(p.t=='inbox') return INBOX;
+  if(p.t=='all') return L;
+  return L.filter(l=>l.c.includes(p.id));
+}
+function listCol(p,openId,isLast){
+  const items=listItems(p);
+  const title = p.t=='inbox'?'Caixa de entrada':p.t=='all'?'Tudo':coll(p.id).name;
+  const desc = p.t=='inbox'?'Links esperando um lugar. A IA já sugeriu onde guardar; toque para aceitar.':p.t=='all'?'Tudo o que você guardou, do mais recente ao mais antigo.':coll(p.id).desc;
+  if(mode=='b' && !isLast){
+    return head(title,false)+`<div>${items.map(l=>row(l,l.id==openId)).join('')}</div>`;
+  }
+  const inner = items.length? items.map(l=>card(l,l.id==openId)).join('') : `<p class="empty">Nada por aqui. ✓</p>`;
+  return head(title)+`<p class="desc">${desc}</p>`+(mode=='b'?`<div class="masonry">${inner}</div>`:inner);
+}
+function linkCol(id){
+  const l=find(id);
+  const visual = l.kind=='text'
+    ? `<div class="card text" style="cursor:default">${srcIcon(l.src)}<div class="pad"><div class="date">${l.date}</div><div class="ttl" style="font-size:19px">${l.title}</div><div class="sub" style="-webkit-line-clamp:unset">${l.sub}</div></div></div>`
+    : l.kind=='video'
+    ? `<div class="card" style="cursor:default">${srcIcon(l.src)}<div class="media" style="margin:16px"><img src="${P(l.img,800,450)}"><div class="play"><i><svg width="16" height="16"><use href="#yt"/></svg></i></div></div></div>`
+    : `<div class="card" style="cursor:default">${srcIcon(l.src)}<div class="glow"><div class="bg" style="background-image:url(${P(l.img,700,l.h)})"></div><img src="${P(l.img,700,l.h)}"></div></div>`;
+  const colls = (l.c||[]).map(c=>`<span class="chip"><svg><use href="#folder"/></svg>${coll(c).name}</span>`).join('');
+  const sugs = (l.sug||[{n:'Animação'}]).map(s=>`<span class="chip ai"><svg><use href="#spark"/></svg>${s.c?coll(s.c).name:s.n}</span>`).join('');
+  const info = `<p class="meta" style="${mode=='b'?'margin-top:0':''}">${l.by} · ${l.site} · ${l.date}</p>
+    <div class="chips">${colls}${sugs}</div>
+    <p class="ai">${l.ai}</p>
+    <div class="acts"><button class="round" title="Abrir original"><svg><use href="#open"/></svg></button><button class="round" title="Nota"><svg><use href="#note"/></svg></button><button class="round" title="Excluir"><svg><use href="#trash"/></svg></button></div>`;
+  if(mode=='b') return head(l.title)+`<div class="detail-b"><div>${visual}</div><div>${info}</div></div>`;
+  return head(l.short)+visual+info;
+}
+
+function render(){
+  const cols=document.getElementById('cols');
+  cols.className='cols mode-'+mode;
+  const out=[`<div class="col root" data-title="Acervo"><div class="up"><svg><use href="#up"/></svg><span>Acervo</span></div><div class="scroll">${rootCol()}</div></div>`];
+  path.forEach((p,i)=>{
+    const isLast=i==path.length-1;
+    const next=path[i+1];
+    let html,title,cls='';
+    if(p.t=='l'){html=linkCol(p.id);title=find(p.id).short;}
+    else{html=listCol(p,next&&next.id,isLast);title=p.t=='inbox'?'Caixa de entrada':p.t=='all'?'Tudo':coll(p.id).name;}
+    if(mode=='b') cls = isLast?'grow':'compact';
+    if(isLast && path.length>prevLen) cls+=' enter';
+    out.push(`<div class="col ${cls}"><div class="up"><svg><use href="#up"/></svg><span>${title}</span></div><div class="scroll">${html}</div></div>`);
+  });
+  cols.innerHTML=out.join('');
+  prevLen=path.length;
+  cols.querySelectorAll('.scroll').forEach(s=>{
+    const up=s.parentElement.querySelector('.up');
+    s.addEventListener('scroll',()=>up.classList.toggle('show',s.scrollTop>150));
+    up.onclick=()=>s.scrollTo({top:0,behavior:'smooth'});
+  });
+  requestAnimationFrame(()=>cols.scrollTo({left:cols.scrollWidth,behavior:'smooth'}));
+  document.querySelectorAll('#dock button').forEach(b=>b.classList.toggle('on',
+    (b.dataset.k=='inbox'&&path[0]&&path[0].t=='inbox')||(b.dataset.k=='home'&&!(path[0]&&path[0].t=='inbox'))));
+}
+
+document.addEventListener('click',e=>{
+  const nav=e.target.closest('[data-nav],[data-navk]');
+  if(nav){path=[JSON.parse(nav.dataset.nav||nav.dataset.navk)];prevLen=0;render();return;}
+  const done=e.target.closest('[data-done]');
+  if(done){const i=INBOX.findIndex(l=>l.id==done.dataset.done);const c=done.closest('.card');c.style.transition='all .4s cubic-bezier(.22,1,.36,1)';c.style.opacity=0;c.style.transform='translateX(30px)';
+    setTimeout(()=>{INBOX.splice(i,1);path=path.filter(p=>p.id!=done.dataset.done);render();},380);e.stopPropagation();return;}
+  const acc=e.target.closest('[data-acc]');
+  if(acc){acc.classList.remove('ai');acc.classList.add('ok');acc.querySelector('use').setAttribute('href','#check');e.stopPropagation();return;}
+  const op=e.target.closest('[data-open]');
+  if(op){const id=+op.dataset.open;const ci=[...op.closest('.cols').children].indexOf(op.closest('.col'));
+    path=path.slice(0,ci);path.push({t:'l',id});render();return;}
+  const db=e.target.closest('#dock button');
+  if(db){const k=db.dataset.k;
+    document.getElementById('fsearch').classList.toggle('show',k=='search'&&!document.getElementById('fsearch').classList.contains('show'));
+    document.getElementById('fadd').classList.toggle('show',k=='add'&&!document.getElementById('fadd').classList.contains('show'));
+    if(k=='home'){path=[{t:'c',id:'ui'}];prevLen=0;render();}
+    if(k=='inbox'){path=[{t:'inbox'}];prevLen=0;render();}
+    const f=document.querySelector('.float.show input'); if(f) setTimeout(()=>f.focus(),50);
+    return;}
+});
+document.addEventListener('keydown',e=>{if(e.key=='Escape')document.querySelectorAll('.float').forEach(f=>f.classList.remove('show'))});
+function setMode(m){mode=m;document.getElementById('ma').classList.toggle('on',m=='a');document.getElementById('mb').classList.toggle('on',m=='b');prevLen=0;render();}
+render();
+</script>
+</body>
+</html>
