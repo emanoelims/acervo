@@ -212,6 +212,34 @@ defmodule Acervo.SearchTest do
                Repo.all(from c in Call, where: c.user_id == ^scope.user.id)
     end
 
+    test "emits a telemetry event with the result count and flags, never the query", %{scope: scope} do
+      Acervo.TelemetryHelpers.attach_own([[:acervo, :search, :stop]])
+      link(scope, title: "Bees")
+
+      Search.search(scope, "bees")
+      assert_received {[:acervo, :search, :stop], %{duration: duration, results: 1}, metadata}
+      assert is_integer(duration) and duration >= 0
+      assert metadata == %{partial: false, cached: false, scoped: false}
+
+      Search.search(scope, "bees", source: :youtube)
+      assert_received {[:acervo, :search, :stop], %{results: 0}, %{partial: false, cached: true, scoped: true}}
+    end
+
+    test "emits a partial search", %{scope: scope} do
+      Acervo.TelemetryHelpers.attach_own([[:acervo, :search, :stop]])
+      FakeEmbedder.stub(fn _model, _text, _opts -> {:error, {:http, 500}} end)
+
+      Search.search(scope, "bees")
+      assert_received {[:acervo, :search, :stop], %{results: 0}, %{partial: true, cached: false}}
+    end
+
+    test "emits nothing for a query under 2 characters", %{scope: scope} do
+      Acervo.TelemetryHelpers.attach_own([[:acervo, :search, :stop]])
+
+      Search.search(scope, "a")
+      refute_received {[:acervo, :search, :stop], _measurements, _metadata}
+    end
+
     test "respects the limit", %{scope: scope} do
       for _i <- 1..3, do: link(scope, title: "Bees")
 

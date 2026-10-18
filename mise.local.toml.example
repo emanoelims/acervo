@@ -13,3 +13,5 @@ OPENROUTER_API_KEY = ""
 # only, e.g. acervo@yourdomain.com; the display name is added by the app)
 # RESEND_API_KEY = ""
 # MAIL_FROM = "acervo@yourdomain.com"
+# Optional: the port of the Prometheus metrics endpoint (defaults to 9568)
+# METRICS_PORT = ""

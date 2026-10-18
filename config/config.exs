@@ -54,6 +54,10 @@ config :acervo, :allowed_emails, :all
 config :acervo, :embedder, Acervo.AI.OpenRouterEmbedder
 config :acervo, :mail_from, {"Acervo", "contato@localhost"}
 
+# Prometheus metrics (`AcervoWeb.Metrics`): localhost only, except in
+# production (see config/runtime.exs, which also reads METRICS_PORT).
+config :acervo, :metrics, ip: {127, 0, 0, 1}, port: 9568
+
 config :acervo, :scopes,
   user: [
     default: true,

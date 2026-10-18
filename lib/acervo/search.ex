@@ -28,6 +28,11 @@ defmodule Acervo.Search do
   Every query is scoped to the user, and to one of the user's collections
   when asked. Every user value reaches Postgres as a bound parameter. Logs
   carry counts, timings and flags, never the query.
+
+  Each search (of at least 2 characters, with valid filters) emits
+  `[:acervo, :search, :stop]` with `duration` (native units) and `results`,
+  and the `partial`, `cached` and `scoped` (a collection or source filter)
+  flags as metadata, never the query.
   """
   import Ecto.Query
 
@@ -100,7 +105,8 @@ defmodule Acervo.Search do
   end
 
   defp run(scope, query, opts) do
-    started = System.monotonic_time(:millisecond)
+    started_native = System.monotonic_time()
+    started = System.convert_time_unit(started_native, :native, :millisecond)
     deadline = started + config(:embed_timeout, 3_000)
 
     pending = start_query_vector(scope, query)
@@ -121,6 +127,12 @@ defmodule Acervo.Search do
     Logger.info(
       "search ms=#{System.monotonic_time(:millisecond) - started} text=#{length(text)} " <>
         "vector=#{if partial?, do: "-", else: length(vector)} partial=#{partial?} cached=#{cached?}"
+    )
+
+    :telemetry.execute(
+      [:acervo, :search, :stop],
+      %{duration: System.monotonic_time() - started_native, results: length(links)},
+      %{partial: partial?, cached: cached?, scoped: not is_nil(opts[:collection_id] || opts[:source])}
     )
 
     %{links: links, partial: partial?}

@@ -136,7 +136,8 @@ Rotate it before expiry and replace the GitHub secret. Never paste its output
 into logs, release notes, or source files.
 
 Non-secret settings live in `fly.toml` (`PHX_HOST`, `PORT`, `POOL_SIZE`,
-`ECTO_IPV6`, `DNS_CLUSTER_QUERY`).
+`ECTO_IPV6`, `DNS_CLUSTER_QUERY`). `METRICS_PORT` is optional (9568 by
+default); if it changes, change `[metrics]` in `fly.toml` with it.
 
 ## Image and health check
 
@@ -149,6 +150,55 @@ The public `/health` route has no pipeline and no browser session, because Fly's
 check sends no cookies or CSRF token. It runs `SELECT 1` and reports only
 `{"status":"ok"}` (200) or `{"status":"unavailable"}` (503). Never enable
 development routes on Fly.
+
+## Metrics
+
+The app exports Prometheus metrics at `/metrics` on port 9568
+(`METRICS_PORT`), declared under `[metrics]` in `fly.toml`. Fly scrapes it
+every 15 seconds over its private network; the port is not in
+`http_service`, so it is not public. In development it listens on
+`localhost:9568` while `mix phx.server` runs: `curl -s localhost:9568/metrics`.
+Tests, mix tasks and `bin/acervo eval` don't start it.
+
+What is exported (`AcervoWeb.Metrics`):
+
+- **AI:** `acervo_ai_calls_total` by operation, model and status; input and
+  output tokens; the estimated cost as `acervo_ai_cost_nanousd_total`
+  (billionths of a dollar, so divide by `1e9`); latency as a histogram.
+  `ai_calls` stays the exact record (see "AI costs" below).
+- **Search:** latency histogram, `acervo_search_total` by `partial`,
+  `cached` and `scoped`, and the results returned.
+- **Background jobs:** Oban jobs by queue, worker and state, their duration and
+  time in queue, and queue depth (available, scheduled, retryable, executing)
+  every 30 seconds.
+- **Links:** totals by `status`, `enrichment_status` and `embedding_status`,
+  every 30 seconds.
+- **Standard:** Phoenix request and route duration, LiveView mount and event
+  duration, Ecto query time, and VM memory, run queues and process count.
+
+Counters restart from zero on every deploy; query them with `increase()` or
+`rate()`, never their raw value.
+
+### Dashboard
+
+Open [fly-metrics.net](https://fly-metrics.net) (or **Metrics** in the Fly
+dashboard) and pick the `personal` organization. To add Acervo's dashboard, go
+to **Dashboards → New → Import**, upload `infra/grafana/acervo.json` and choose
+the **Prometheus on Fly** data source. It shows the AI cost per day and over
+the selected range, calls and latency by operation, search latency, partial
+and cache hit rates, jobs by state, queue depth, links by status, and VM memory
+against the 1 GB limit, all filtered to `app="acervo-app"`. Import it again,
+overwriting, after it changes in the repository.
+
+### Labels never carry user data
+
+Fly adds `app`, `region`, `host` and `instance`. The app's own labels come only
+from bounded sets: operation, model, status, queue, worker, state, route (the
+route pattern such as `/links/:id`, never the path), and the
+`partial`/`cached`/`scoped` flags. Never add a label holding a user id, a
+query, a URL, a title or an error message: each value creates a new series in
+Fly's Prometheus and would publish that data to anyone with metrics access.
+`AcervoWeb.MetricsTest` fails when a metric uses a tag outside the allowlist.
 
 ## One-off tasks
 
