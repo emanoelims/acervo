@@ -16,11 +16,6 @@ msgstr ""
 msgid "A link to confirm the new email was sent."
 msgstr "Enviamos um link para confirmar o novo e-mail."
 
-#: lib/acervo_web/live/user_live/registration.ex:56
-#, elixir-autogen, elixir-format
-msgid "A sign-in link was sent to %{email}."
-msgstr "Enviamos um link de acesso para %{email}."
-
 #: lib/acervo_web/components/layouts.ex:53
 #, elixir-autogen, elixir-format
 msgid "Acervo"
@@ -52,14 +47,7 @@ msgstr "Confirmar"
 msgid "Confirming..."
 msgstr "Confirmando..."
 
-#: lib/acervo_web/live/user_live/login.ex:30
-#: lib/acervo_web/live/user_live/registration.ex:23
-#, elixir-autogen, elixir-format
-msgid "Create account"
-msgstr "Criar conta"
-
 #: lib/acervo_web/live/user_live/login.ex:16
-#: lib/acervo_web/live/user_live/registration.ex:16
 #: lib/acervo_web/live/user_live/settings.ex:17
 #, elixir-autogen, elixir-format
 msgid "Email"
@@ -75,13 +63,12 @@ msgstr "O link de alteração de e-mail é inválido ou expirou."
 msgid "Email changed."
 msgstr "E-mail alterado."
 
-#: lib/acervo_web/live/user_live/login.ex:63
+#: lib/acervo_web/live/user_live/login.ex:52
 #, elixir-autogen, elixir-format
 msgid "If your email is registered, a sign-in link is on its way."
 msgstr "Se o e-mail estiver cadastrado, um link de acesso está a caminho."
 
 #: lib/acervo_web/live/user_live/confirmation.ex:54
-#: lib/acervo_web/live/user_live/registration.ex:30
 #, elixir-autogen, elixir-format
 msgid "Log in"
 msgstr "Entrar"
@@ -102,7 +89,7 @@ msgstr "Você saiu."
 msgid "Logging in..."
 msgstr "Entrando..."
 
-#: lib/acervo_web/live/user_live/login.ex:36
+#: lib/acervo_web/live/user_live/login.ex:30
 #, elixir-autogen, elixir-format
 msgid "Mailbox"
 msgstr "Caixa de entrada"
@@ -314,11 +301,6 @@ msgstr "Olá, %{email},\n\nAbra o link abaixo para confirmar sua conta:\n\n%{url
 #, elixir-autogen, elixir-format
 msgid "Hi %{email},\n\nOpen the link below to sign in:\n\n%{url}\n\nIf you didn't ask for this, you can ignore this message.\n"
 msgstr "Olá, %{email},\n\nAbra o link abaixo para entrar:\n\n%{url}\n\nSe não foi você, ignore esta mensagem.\n"
-
-#: lib/acervo_web/live/user_live/registration.ex:62
-#, elixir-autogen, elixir-format
-msgid "We couldn't send the email. Try again in a moment."
-msgstr "Não foi possível enviar o e-mail. Tente de novo em instantes."
 
 #: lib/acervo/accounts/user_notifier.ex:68
 #, elixir-autogen, elixir-format

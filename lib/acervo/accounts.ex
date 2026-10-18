@@ -6,6 +6,7 @@ defmodule Acervo.Accounts do
   import Ecto.Query, warn: false
 
   ## Database getters
+  alias Acervo.Accounts.Allowlist
   alias Acervo.Accounts.User
   alias Acervo.Accounts.UserNotifier
   alias Acervo.Accounts.UserToken
@@ -235,6 +236,39 @@ defmodule Acervo.Accounts do
             t.inserted_at > ago(@login_throttle_seconds, "second")
       )
     )
+  end
+
+  @doc """
+  Handles a sign-in request for the given email without revealing whether an
+  account exists, so it always returns `:ok`.
+
+  An existing user is sent a login link (subject to the throttle). An unknown
+  email on the allowlist gets its account created first. Anything else is
+  ignored.
+  """
+  def request_login_link(email, magic_link_url_fun) when is_binary(email) and is_function(magic_link_url_fun, 1) do
+    # Delivery failures are already logged by the notifier.
+    with %User{} = user <- find_or_register_user(email) do
+      deliver_login_instructions(user, magic_link_url_fun)
+    end
+
+    :ok
+  end
+
+  defp find_or_register_user(email) do
+    case get_user_by_email(email) do
+      %User{} = user -> user
+      nil -> register_allowed_user(email)
+    end
+  end
+
+  defp register_allowed_user(email) do
+    with true <- Allowlist.allowed?(email),
+         {:ok, user} <- register_user(%{email: email}) do
+      user
+    else
+      _ -> nil
+    end
   end
 
   @doc """

@@ -40,7 +40,7 @@ defmodule AcervoWeb.Layouts do
   end
 
   @doc """
-  Renders the centered layout shared by the sign-in, registration and
+  Renders the centered layout shared by the sign-in and
   account pages.
   """
   attr :flash, :map, required: true, doc: "the map of flash messages"

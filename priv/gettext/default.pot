@@ -16,11 +16,6 @@ msgstr ""
 msgid "A link to confirm the new email was sent."
 msgstr ""
 
-#: lib/acervo_web/live/user_live/registration.ex:56
-#, elixir-autogen, elixir-format
-msgid "A sign-in link was sent to %{email}."
-msgstr ""
-
 #: lib/acervo_web/components/layouts.ex:53
 #, elixir-autogen, elixir-format
 msgid "Acervo"
@@ -52,14 +47,7 @@ msgstr ""
 msgid "Confirming..."
 msgstr ""
 
-#: lib/acervo_web/live/user_live/login.ex:30
-#: lib/acervo_web/live/user_live/registration.ex:23
-#, elixir-autogen, elixir-format
-msgid "Create account"
-msgstr ""
-
 #: lib/acervo_web/live/user_live/login.ex:16
-#: lib/acervo_web/live/user_live/registration.ex:16
 #: lib/acervo_web/live/user_live/settings.ex:17
 #, elixir-autogen, elixir-format
 msgid "Email"
@@ -75,13 +63,12 @@ msgstr ""
 msgid "Email changed."
 msgstr ""
 
-#: lib/acervo_web/live/user_live/login.ex:63
+#: lib/acervo_web/live/user_live/login.ex:52
 #, elixir-autogen, elixir-format
 msgid "If your email is registered, a sign-in link is on its way."
 msgstr ""
 
 #: lib/acervo_web/live/user_live/confirmation.ex:54
-#: lib/acervo_web/live/user_live/registration.ex:30
 #, elixir-autogen, elixir-format
 msgid "Log in"
 msgstr ""
@@ -102,7 +89,7 @@ msgstr ""
 msgid "Logging in..."
 msgstr ""
 
-#: lib/acervo_web/live/user_live/login.ex:36
+#: lib/acervo_web/live/user_live/login.ex:30
 #, elixir-autogen, elixir-format
 msgid "Mailbox"
 msgstr ""
@@ -313,11 +300,6 @@ msgstr ""
 #: lib/acervo/accounts/user_notifier.ex:69
 #, elixir-autogen, elixir-format
 msgid "Hi %{email},\n\nOpen the link below to sign in:\n\n%{url}\n\nIf you didn't ask for this, you can ignore this message.\n"
-msgstr ""
-
-#: lib/acervo_web/live/user_live/registration.ex:62
-#, elixir-autogen, elixir-format
-msgid "We couldn't send the email. Try again in a moment."
 msgstr ""
 
 #: lib/acervo/accounts/user_notifier.ex:68
