@@ -21,7 +21,6 @@ defmodule AcervoWeb.Router do
   scope "/", AcervoWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
     get "/locale/:locale", LocaleController, :update
   end
 
@@ -54,6 +53,9 @@ defmodule AcervoWeb.Router do
 
     live_session :require_authenticated_user,
       on_mount: [{AcervoWeb.UserAuth, :require_authenticated}, AcervoWeb.Locale] do
+      live "/", ArchiveLive, :home
+      live "/inbox", ArchiveLive, :inbox
+      live "/all", ArchiveLive, :all
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end

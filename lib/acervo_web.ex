@@ -82,6 +82,8 @@ defmodule AcervoWeb do
       # Translation
       use Gettext, backend: AcervoWeb.Gettext
 
+      import AcervoWeb.ArchiveComponents
+
       # Core UI components
       import AcervoWeb.CoreComponents
 
