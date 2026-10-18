@@ -60,6 +60,29 @@ defmodule Acervo.AITest do
       assert call.duration_ms >= 0
     end
 
+    test "emits a telemetry event with tokens, cost and bounded labels", %{scope: scope, context: context} do
+      Acervo.TelemetryHelpers.attach_own([[:acervo, :ai, :call, :stop]])
+      FakeAIClient.stub(fn _model, _context, _schema, _opts -> {:ok, %{"language" => "pt"}} end)
+
+      assert {:ok, _object} = AI.generate_object(scope, %{operation: "enrich_link", link_id: nil}, context, @schema)
+
+      assert_received {[:acervo, :ai, :call, :stop], measurements, metadata}
+      assert %{input_tokens: 1200, output_tokens: 80, cost_usd: 0.0064, duration: duration} = measurements
+      assert is_integer(duration) and duration >= 0
+      assert metadata == %{operation: "enrich_link", model: "anthropic:claude-opus-5-5", status: :ok}
+    end
+
+    test "emits zeros for a failed call without usage", %{scope: scope, context: context} do
+      Acervo.TelemetryHelpers.attach_own([[:acervo, :ai, :call, :stop]])
+      FakeAIClient.stub(fn _model, _context, _schema, _opts -> {:error, :unavailable} end, usage: %{})
+
+      assert {:error, :unavailable} =
+               AI.generate_object(scope, %{operation: "enrich_link", link_id: nil}, context, @schema)
+
+      assert_received {[:acervo, :ai, :call, :stop], %{input_tokens: 0, output_tokens: 0, cost_usd: +0.0},
+                       %{status: :error}}
+    end
+
     test "records a failed call with its error code", %{scope: scope, context: context} do
       FakeAIClient.stub(fn _model, _context, _schema, _opts -> {:error, {:http, 500}} end)
 

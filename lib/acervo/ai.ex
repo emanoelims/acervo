@@ -7,6 +7,10 @@ defmodule Acervo.AI do
   the configured `Acervo.AI.Embedder` (`config :acervo, :embedder`). Each
   records one `Acervo.AI.Call` per call, success or not. Logs carry only ids,
   the model, token counts, cost, duration and an error code, never content.
+
+  Each call also emits `[:acervo, :ai, :call, :stop]` with `duration`
+  (native units), `input_tokens`, `output_tokens` and `cost_usd` (a float,
+  the estimate), and the `operation`, `model` and `status` as metadata.
   """
   import Ecto.Query
 
@@ -95,7 +99,8 @@ defmodule Acervo.AI do
 
     started = System.monotonic_time()
     result = fun.(fn usage -> send(caller, {ref, usage}) end)
-    duration_ms = System.convert_time_unit(System.monotonic_time() - started, :native, :millisecond)
+    duration = System.monotonic_time() - started
+    duration_ms = System.convert_time_unit(duration, :native, :millisecond)
 
     usage = receive_usage(ref)
 
@@ -117,7 +122,23 @@ defmodule Acervo.AI do
 
     record(user, attrs)
     log(attrs)
+    emit(attrs, duration)
     result
+  end
+
+  # For the metrics endpoint: labels are only the operation, the model and
+  # the status, never the user, the link or the error.
+  defp emit(attrs, duration) do
+    :telemetry.execute(
+      [:acervo, :ai, :call, :stop],
+      %{
+        duration: duration,
+        input_tokens: attrs.input_tokens || 0,
+        output_tokens: attrs.output_tokens || 0,
+        cost_usd: if(attrs.cost_usd, do: Decimal.to_float(attrs.cost_usd), else: 0.0)
+      },
+      %{operation: attrs.operation, model: attrs.model, status: attrs.status}
+    )
   end
 
   # The usage callback runs once per completed response; keep the last one.
