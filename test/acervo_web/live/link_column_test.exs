@@ -141,6 +141,35 @@ defmodule AcervoWeb.LinkColumnTest do
       assert Library.get_link!(scope, link.id).note == "On blur"
     end
 
+    test "saving a note confirms it briefly, an unchanged one doesn't", %{conn: conn, scope: scope} do
+      link = scope |> link_fixture() |> then(&Library.update_note(scope, &1, %{note: "Kept"})) |> elem(1)
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+      assert has_element?(view, "#note-status[role=status][aria-live=polite]")
+      assert has_element?(view, "#note-hint")
+
+      view |> element("#note-form textarea") |> render_blur(%{"value" => "Kept"})
+      refute has_element?(view, "#note-status .note-saved")
+
+      view |> form("#note-form", link: %{note: "Changed"}) |> render_submit()
+      assert has_element?(view, "#note-status .note-saved", "Saved")
+
+      send(view.pid, {:clear_note_saved, make_ref()})
+      assert has_element?(view, "#note-status .note-saved")
+    end
+
+    test "the saved status clears itself", %{conn: conn, scope: scope} do
+      link = link_fixture(scope)
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+      view |> form("#note-form", link: %{note: "Soon gone"}) |> render_submit()
+      assert has_element?(view, "#note-status .note-saved")
+
+      %{assigns: %{note_saved: ref}} = :sys.get_state(view.pid).socket
+      send(view.pid, {:clear_note_saved, ref})
+      refute has_element?(view, "#note-status .note-saved")
+    end
+
     test "a note over 4000 characters shows its error inline", %{conn: conn, scope: scope} do
       link = link_fixture(scope)
 

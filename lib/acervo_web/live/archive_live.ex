@@ -17,6 +17,7 @@ defmodule AcervoWeb.ArchiveLive do
   alias Acervo.Library
 
   @max_screenshot_bytes 15_000_000
+  @note_saved_ms 1500
 
   @impl true
   def mount(_params, _session, socket) do
@@ -24,7 +25,7 @@ defmodule AcervoWeb.ArchiveLive do
 
     {:ok,
      socket
-     |> assign(filter: nil, collection: nil, link: nil, note_form: nil, screenshot_link_id: nil)
+     |> assign(filter: nil, collection: nil, link: nil, note_form: nil, note_saved: nil, screenshot_link_id: nil)
      |> assign(add_form: nil, new_collection_form: nil, editing: nil, collection_form: nil)
      |> assign(:collection_filter, collection_filter(""))
      |> allow_upload(:screenshot,
@@ -125,7 +126,12 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   defp assign_link_fields(socket, link) do
-    assign(socket, link: link, note_form: link && note_form(link), collection_filter: collection_filter(""))
+    assign(socket,
+      link: link,
+      note_form: link && note_form(link),
+      note_saved: nil,
+      collection_filter: collection_filter("")
+    )
   end
 
   defp restream_existing(socket, nil), do: socket
@@ -410,11 +416,19 @@ defmodule AcervoWeb.ArchiveLive do
       {:noreply, socket}
     else
       case Library.update_note(socket.assigns.current_scope, link, %{note: note}) do
-        {:ok, link} -> {:noreply, assign(socket, link: link, note_form: note_form(link))}
+        {:ok, link} -> {:noreply, socket |> assign(link: link, note_form: note_form(link)) |> show_note_saved()}
         {:error, :not_found} -> {:noreply, gone(socket)}
         {:error, changeset} -> {:noreply, assign(socket, :note_form, to_form(changeset, as: :link, action: :validate))}
       end
     end
+  end
+
+  # "Saved" shows briefly; a newer save restarts the timer, so only the
+  # latest one clears it.
+  defp show_note_saved(socket) do
+    ref = make_ref()
+    Process.send_after(self(), {:clear_note_saved, ref}, @note_saved_ms)
+    assign(socket, :note_saved, ref)
   end
 
   defp gone(socket) do
@@ -462,6 +476,11 @@ defmodule AcervoWeb.ArchiveLive do
         end
     end
   end
+
+  def handle_info({:clear_note_saved, ref}, %{assigns: %{note_saved: ref}} = socket),
+    do: {:noreply, assign(socket, :note_saved, nil)}
+
+  def handle_info({:clear_note_saved, _stale}, socket), do: {:noreply, socket}
 
   defp renamed_path(%{link: nil} = assigns, collection), do: list_path(%{assigns | collection: collection})
 
@@ -651,6 +670,7 @@ defmodule AcervoWeb.ArchiveLive do
             collections={@collections}
             collection_filter={@collection_filter}
             upload={@uploads.screenshot}
+            note_saved={!!@note_saved}
           />
         </.column>
       </div>

@@ -6,6 +6,7 @@ defmodule AcervoWeb.LinkComponents do
   use Gettext, backend: AcervoWeb.Gettext
   use AcervoWeb, :verified_routes
 
+  import AcervoWeb.ArchiveComponents, only: [mod_key: 1]
   import AcervoWeb.CoreComponents
 
   alias Acervo.Collections
@@ -88,6 +89,7 @@ defmodule AcervoWeb.LinkComponents do
   attr :collections, :list, required: true, doc: "every collection of the user, for the picker"
   attr :collection_filter, Form, required: true
   attr :upload, :map, required: true, doc: "the `:screenshot` upload config"
+  attr :note_saved, :boolean, default: false, doc: "shows the brief “Saved” status after a note save"
 
   def link_detail(assigns) do
     images = assigns.link.images
@@ -208,9 +210,26 @@ defmodule AcervoWeb.LinkComponents do
             maxlength="4000"
             placeholder={gettext("Add a note")}
             aria-label={gettext("Note")}
+            aria-describedby="note-hint"
+            aria-keyshortcuts="Meta+Enter Control+Enter"
             phx-blur="save_note"
+            phx-hook=".NoteShortcut"
           />
         </.form>
+        <div class="note-foot">
+          <span id="note-hint" class="note-hint">
+            <kbd><.mod_key plus />↩</kbd> {gettext("to save")}
+          </span>
+          <span id="note-status" class="note-status" role="status" aria-live="polite">
+            <span
+              :if={@note_saved}
+              class="note-saved"
+              phx-remove={JS.transition("is-leaving", time: 300)}
+            >
+              <.icon name="lucide-check" class="size-3.5" />{gettext("Saved")}
+            </span>
+          </span>
+        </div>
       </div>
 
       <div class="acts">
@@ -263,6 +282,25 @@ defmodule AcervoWeb.LinkComponents do
         </button>
       </div>
     </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".NoteShortcut">
+      // ⌘↩ (Ctrl+↩ off Apple devices) saves the note and keeps the caret in
+      // it; Enter alone still breaks the line, and leaving the field saves too.
+      export default {
+        mounted() {
+          this.onKeydown = event => {
+            if (event.key !== 'Enter' || event.isComposing || event.shiftKey || event.altKey) return
+            const mac = document.documentElement.dataset.platform === 'mac'
+            if (!(mac ? event.metaKey : event.ctrlKey)) return
+            event.preventDefault()
+            this.el.form?.requestSubmit()
+          }
+          this.el.addEventListener('keydown', this.onKeydown)
+        },
+        destroyed() {
+          this.el.removeEventListener('keydown', this.onKeydown)
+        }
+      }
+    </script>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".ScreenshotPaste">
       // Pasting an image while a link is open, outside a field, uploads it as
       // that link's screenshot. It adds another one even when the link already

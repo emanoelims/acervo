@@ -366,6 +366,19 @@ defmodule AcervoWeb.ArchiveComponents do
     """
   end
 
+  @doc """
+  Renders the platform's modifier key: ⌘ on Apple devices, Ctrl elsewhere.
+  Both are rendered; CSS keeps the one matching `<html data-platform>`, which
+  `app.js` sets. With `plus`, Ctrl is followed by "+" (⌘↩ but Ctrl+↩).
+  """
+  attr :plus, :boolean, default: false
+
+  def mod_key(assigns) do
+    ~H"""
+    <span class="key-mac">⌘</span><span class="key-other">Ctrl{if @plus, do: "+"}</span>
+    """
+  end
+
   defp locale_code("pt_BR"), do: "PT"
   defp locale_code("en"), do: "EN"
 

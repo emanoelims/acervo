@@ -91,6 +91,9 @@
 .desc-input::placeholder { color: var(--faint); }
 .desc-form .field-errors { margin-top: 16px; }
 
+/* Key labels: ⌘ on Apple devices, Ctrl elsewhere (app.js sets data-platform). */
+:root[data-platform=mac] .key-other, :root:not([data-platform=mac]) .key-mac { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   .column-scroll, .float, .float.is-leaving { animation: none; }
   .column-up, .dock-item, .swatch, .dot, .font-chip, .lang-chip, .nav-add { transition: none; }
