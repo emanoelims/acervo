@@ -26,6 +26,15 @@ config :acervo, AcervoWeb.Endpoint, http: [port: String.to_integer(System.get_en
 # (see `mise.local.toml.example`); it is required in production.
 config :acervo, :anthropic, api_key: System.get_env("ANTHROPIC_API_KEY")
 
+if config_env() != :test do
+  if allowed = System.get_env("ACERVO_ALLOWED_EMAILS") do
+    emails =
+      allowed |> String.split(",") |> Enum.map(&(&1 |> String.trim() |> String.downcase())) |> Enum.reject(&(&1 == ""))
+
+    config :acervo, :allowed_emails, emails
+  end
+end
+
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :acervo, AcervoWeb.Endpoint,
@@ -79,7 +88,14 @@ if config_env() == :prod do
     Get one at https://console.anthropic.com/settings/keys
     """
 
+  System.get_env("ACERVO_ALLOWED_EMAILS") ||
+    raise "environment variable ACERVO_ALLOWED_EMAILS is missing (comma-separated emails allowed to register)"
+
   host = System.get_env("PHX_HOST") || "example.com"
+
+  config :acervo, Acervo.Mailer,
+    adapter: Swoosh.Adapters.Resend,
+    api_key: System.fetch_env!("RESEND_API_KEY")
 
   config :acervo, AcervoWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
@@ -93,6 +109,7 @@ if config_env() == :prod do
     secret_key_base: secret_key_base
 
   config :acervo, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
+  config :acervo, :mail_from, {"Acervo", System.fetch_env!("MAIL_FROM")}
 
   # ## SSL Support
   #
@@ -125,22 +142,4 @@ if config_env() == :prod do
   #       force_ssl: [hsts: true]
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
-
-  # ## Configuring the mailer
-  #
-  # In production you need to configure the mailer to use a different adapter.
-  # Here is an example configuration for Mailgun:
-  #
-  #     config :acervo, Acervo.Mailer,
-  #       adapter: Swoosh.Adapters.Mailgun,
-  #       api_key: System.get_env("MAILGUN_API_KEY"),
-  #       domain: System.get_env("MAILGUN_DOMAIN")
-  #
-  # Most non-SMTP adapters require an API client. Swoosh supports Req, Hackney,
-  # and Finch out-of-the-box. This configuration is typically done at
-  # compile-time in your config/prod.exs:
-  #
-  #     config :swoosh, :api_client, Swoosh.ApiClient.Req
-  #
-  # See https://swoosh.hexdocs.pm/Swoosh.html#module-installation for details.
 end
