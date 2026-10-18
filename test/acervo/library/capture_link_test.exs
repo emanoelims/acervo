@@ -6,6 +6,7 @@ defmodule Acervo.Library.CaptureLinkTest do
   import Acervo.LibraryFixtures
   import ExUnit.CaptureLog
 
+  alias Acervo.AI.EnrichLink
   alias Acervo.Library
   alias Acervo.Library.CaptureLink
   alias Acervo.Library.Link
@@ -294,6 +295,39 @@ defmodule Acervo.Library.CaptureLinkTest do
       assert log =~ "reader content of link #{link.id} crashed"
       assert %Link{status: :ready, title: "Bees", capture_error: nil} = Repo.get!(Link, link.id)
       assert %{content_extracted_at: nil} = reader_link(link)
+    end
+  end
+
+  describe "enrichment" do
+    test "a saved capture enqueues it and marks the link pending", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+      stub_site(page_html([]), %{})
+
+      assert :ok = perform(link)
+
+      assert_enqueued(worker: EnrichLink, args: %{"link_id" => link.id})
+      assert %Link{enrichment_status: :pending} = Repo.get!(Link, link.id)
+    end
+
+    test "a blocked or failed capture does not", %{scope: scope} do
+      blocked = link_fixture(scope, "https://internal.test/admin")
+      gone = link_fixture(scope, "https://example.com/posts/gone")
+      Req.Test.stub(SafeFetch, &Plug.Conn.send_resp(&1, 404, ""))
+
+      assert :ok = perform(blocked)
+      assert :ok = perform(gone)
+
+      refute_enqueued(worker: EnrichLink)
+      assert %Link{enrichment_status: nil} = Repo.get!(Link, blocked.id)
+    end
+
+    test "a re-capture of an enriched link does not enqueue it again", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+      Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [enriched_at: DateTime.utc_now(:second)])
+      stub_site(page_html([]), %{})
+
+      assert :ok = perform(link)
+      refute_enqueued(worker: EnrichLink)
     end
   end
 

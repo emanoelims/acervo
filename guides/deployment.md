@@ -99,6 +99,9 @@ deployment policy:
   `fly secrets set --stage --app acervo-app RESEND_API_KEY=...` (read from
   stdin or a variable, never echoed). `MAIL_FROM` is the verified sender address
   only, without a display name.
+- `ACERVO_CHAT_MODEL` (optional): the Claude model that enriches links, such as
+  `anthropic:claude-haiku-5-5` to spend less. Without it, Opus 5.5
+  (`anthropic:claude-opus-5-5`) is used.
 - `ACERVO_ALLOWED_EMAILS`: the owner's address (comma-separated allowlist for
   magic-link sign-in).
 
@@ -143,3 +146,44 @@ article's images; titles, notes, collections and preview images are untouched.
 Rerunning it skips links already extracted, and rerunning a job replaces that
 link's previous article images. Watch progress in the logs or with
 `SELECT count(*) FROM links WHERE content_extracted_at IS NULL AND source = 'generic'`.
+
+### Enrichment backfill
+
+Links saved before enrichment have no image description, language or
+suggestions. Run the reader content backfill above first and let the `content`
+queue finish (the SQL check above shows when it is empty), so the model reads
+each article. Then enqueue one `Acervo.AI.EnrichLink` job per ready link that
+was never enriched or whose enrichment failed, newest first:
+
+```sh
+fly ssh console -a acervo-app -C "/app/bin/acervo eval 'Acervo.Release.backfill_enrichment()'"
+```
+
+It prints how many links were enqueued. Each link costs one model call, made by
+the running app's `ai` queue, two at a time; a rate limit delays the job and a
+failure retries up to three times before the link is marked failed. Every link
+gets its image description and language; only links still in the inbox get
+collection suggestions. Rerunning it enqueues only links that are still missing
+enrichment. Watch progress with
+`SELECT enrichment_status, count(*) FROM links GROUP BY 1`.
+
+### AI costs
+
+Every model call is recorded in `ai_calls` with its tokens and an estimated
+cost (`Acervo.AI.Rates`, at Anthropic's published prices). Print the last 30
+days per day, or pass another number of days:
+
+```sh
+fly ssh console -a acervo-app -C "/app/bin/acervo eval 'Acervo.Release.ai_costs()'"
+```
+
+The same numbers in SQL:
+
+```sql
+SELECT inserted_at::date AS day, count(*) AS calls,
+       sum(input_tokens) AS tokens_in, sum(output_tokens) AS tokens_out,
+       sum(cost_usd) AS usd
+FROM ai_calls
+WHERE inserted_at > now() - interval '30 days'
+GROUP BY 1 ORDER BY 1;
+```

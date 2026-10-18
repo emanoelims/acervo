@@ -5,6 +5,8 @@ defmodule Acervo.Release do
   """
   import Ecto.Query
 
+  alias Acervo.AI
+  alias Acervo.AI.EnrichLink
   alias Acervo.Library.ExtractContent
   alias Acervo.Library.Link
 
@@ -74,6 +76,106 @@ defmodule Acervo.Release do
         select: l.id
     )
   end
+
+  @doc """
+  Enqueues `Acervo.AI.EnrichLink` for every ready link that was never
+  enriched or whose enrichment failed, newest first, marks them `:pending`
+  and returns how many were enqueued. The running app's `ai` queue works
+  through them. Every link gets its image description and language; only
+  links still in the inbox get suggestions.
+
+  Each link costs one model call. Run `backfill_reader_content/0` first, so
+  the model reads the article. Starts only the repository and an Oban
+  instance that runs no queues:
+
+      bin/acervo eval 'Acervo.Release.backfill_enrichment()'
+  """
+  @spec backfill_enrichment() :: non_neg_integer()
+  def backfill_enrichment do
+    load_app()
+    {:ok, _started} = Application.ensure_all_started(:oban)
+    [repo] = repos()
+
+    {:ok, count, _apps} =
+      Ecto.Migrator.with_repo(repo, fn repo ->
+        name = Acervo.Release.Oban
+        config = Keyword.merge(Application.fetch_env!(@app, Oban), name: name, queues: false, plugins: false, peer: false)
+        {:ok, oban} = Oban.start_link(config)
+
+        try do
+          repo
+          |> missing_enrichment()
+          |> Enum.count(fn id ->
+            case Oban.insert(name, EnrichLink.new(%{"link_id" => id})) do
+              {:ok, _job} ->
+                repo.update_all(from(l in Link, where: l.id == ^id), set: [enrichment_status: :pending])
+                true
+
+              _ ->
+                false
+            end
+          end)
+        after
+          Supervisor.stop(oban)
+        end
+      end)
+
+    IO.puts("Enqueued enrichment for #{count} links.")
+    count
+  end
+
+  @doc false
+  @spec missing_enrichment(module()) :: [Ecto.UUID.t()]
+  def missing_enrichment(repo) do
+    repo.all(
+      from l in Link,
+        where: l.status == :ready and (is_nil(l.enrichment_status) or l.enrichment_status == :failed),
+        order_by: [desc: l.inserted_at],
+        select: l.id
+    )
+  end
+
+  @doc """
+  Prints the model calls of the last `days` days (default 30) per day: calls,
+  tokens in and out, and USD, with a total. Costs are estimates from
+  `Acervo.AI.Rates`.
+
+      bin/acervo eval 'Acervo.Release.ai_costs()'
+  """
+  @spec ai_costs(pos_integer()) :: :ok
+  def ai_costs(days \\ 30) do
+    load_app()
+    [repo] = repos()
+    {:ok, rows, _apps} = Ecto.Migrator.with_repo(repo, fn _repo -> AI.cost_summary(days) end)
+
+    lines =
+      Enum.map(rows, fn row ->
+        cost_line(Date.to_iso8601(row.day), row.calls, row.input_tokens, row.output_tokens, row.cost_usd)
+      end)
+
+    total =
+      cost_line(
+        "total",
+        rows |> Enum.map(& &1.calls) |> Enum.sum(),
+        rows |> Enum.map(& &1.input_tokens) |> Enum.sum(),
+        rows |> Enum.map(& &1.output_tokens) |> Enum.sum(),
+        rows |> Enum.map(& &1.cost_usd) |> Enum.reject(&is_nil/1) |> Enum.reduce(Decimal.new(0), &Decimal.add/2)
+      )
+
+    IO.puts(cost_line("day", "calls", "tokens in", "tokens out", "USD"))
+    Enum.each(lines, &IO.puts/1)
+    IO.puts(total)
+  end
+
+  defp cost_line(day, calls, input, output, cost) do
+    [day, calls, input, output, format_cost(cost)]
+    |> Enum.zip([10, 7, 12, 12, 10])
+    |> Enum.map_join("  ", fn {value, width} -> value |> to_string() |> String.pad_leading(width) end)
+  end
+
+  defp format_cost(nil), do: "-"
+  defp format_cost(%Decimal{} = cost), do: cost |> Decimal.round(4) |> Decimal.to_string(:normal)
+  defp format_cost(cost), do: cost
 
   defp repos do
     Application.fetch_env!(@app, :ecto_repos)

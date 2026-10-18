@@ -6,7 +6,10 @@ defmodule Acervo.LibraryTest do
   import Acervo.CollectionsFixtures, only: [collection_fixture: 1]
   import Acervo.LibraryFixtures
 
+  alias Acervo.AI.EnrichLink
   alias Acervo.Collections
+  alias Acervo.Collections.Collection
+  alias Acervo.Collections.Suggestion
   alias Acervo.Library
   alias Acervo.Library.CaptureLink
   alias Acervo.Library.Link
@@ -145,6 +148,39 @@ defmodule Acervo.LibraryTest do
     end
   end
 
+  describe "pending suggestions" do
+    setup %{scope: scope} do
+      link = link_fixture(scope)
+      collection = collection_fixture(scope)
+
+      pending = insert_suggestion(scope, link, %{collection_id: collection.id}, :pending, ~U[2026-01-02 00:00:00Z])
+      newest = insert_suggestion(scope, link, %{proposed_name: "Receitas"}, :pending, ~U[2026-01-03 00:00:00Z])
+      insert_suggestion(scope, link, %{proposed_name: "Pães"}, :dismissed, ~U[2026-01-01 00:00:00Z])
+      insert_suggestion(scope, link, %{proposed_name: "Bolos"}, :accepted, ~U[2026-01-01 00:00:00Z])
+
+      %{link: link, collection: collection, pending: pending, newest: newest}
+    end
+
+    test "list_links/2 preloads only pending suggestions, oldest first, with their collection",
+         %{scope: scope, collection: collection, pending: pending, newest: newest} do
+      assert [%Link{suggestions: [first, second]}] = Library.list_links(scope)
+
+      assert first.id == pending.id
+      assert first.collection.id == collection.id
+      assert second.id == newest.id
+      assert second.collection == nil
+    end
+
+    test "get_link!/2 and broadcasts carry the same suggestions",
+         %{scope: scope, link: link, pending: pending, newest: newest} do
+      assert [%{id: a, collection: %Collection{}}, %{id: b}] = Library.get_link!(scope, link.id).suggestions
+      assert [a, b] == [pending.id, newest.id]
+
+      Library.broadcast_updated(scope, link.id)
+      assert_receive {:link_updated, %Link{suggestions: [_, _]}}
+    end
+  end
+
   describe "update_note/3 and mark_triaged/2" do
     test "update_note saves the note and broadcasts", %{scope: scope} do
       link = link_fixture(scope)
@@ -164,6 +200,34 @@ defmodule Acervo.LibraryTest do
 
       assert {:ok, %Link{triaged_at: %DateTime{}}} = Library.mark_triaged(scope, link)
       assert_receive {:link_updated, %Link{triaged_at: %DateTime{}}}
+    end
+  end
+
+  describe "update_image_description/3" do
+    test "saves the edit, stamps edited_at and broadcasts", %{scope: scope} do
+      link = link_fixture(scope)
+
+      assert {:ok, %Link{image_description: "Um gato", image_description_edited_at: %DateTime{}}} =
+               Library.update_image_description(scope, link, %{"image_description" => "  Um gato "})
+
+      assert_receive {:link_updated, %Link{image_description: "Um gato"}}
+      assert %Link{image_description_edited_at: %DateTime{}} = Repo.get!(Link, link.id)
+    end
+
+    test "another user gets not_found", %{scope: scope} do
+      link = link_fixture(scope)
+
+      assert {:error, :not_found} =
+               Library.update_image_description(user_scope_fixture(), link, %{"image_description" => "x"})
+
+      refute Repo.get!(Link, link.id).image_description
+    end
+
+    test "change_image_description/2 validates the length", %{scope: scope} do
+      changeset =
+        Library.change_image_description(link_fixture(scope), %{"image_description" => String.duplicate("a", 1001)})
+
+      refute changeset.valid?
     end
   end
 
@@ -191,6 +255,36 @@ defmodule Acervo.LibraryTest do
                updated.images
 
       assert_receive {:link_updated, %Link{status: :ready}}
+    end
+
+    test "enqueues enrichment, even for an enriched link", %{scope: scope} do
+      link = link_fixture(scope)
+
+      Repo.update_all(from(l in Link, where: l.id == ^link.id),
+        set: [enrichment_status: :ready, enriched_at: DateTime.utc_now(:second)]
+      )
+
+      assert {:ok, %Link{}} = Library.attach_screenshot(scope, link, image_fixture("photo.jpg"))
+
+      assert_enqueued(worker: EnrichLink, args: %{"link_id" => link.id})
+      assert %Link{enrichment_status: :pending} = Repo.get!(Link, link.id)
+    end
+
+    test "returns and broadcasts the link as pending, so its placeholder shows", %{scope: scope} do
+      link = link_fixture(scope)
+      Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [enrichment_status: :ready])
+
+      assert {:ok, %Link{enrichment_status: :pending}} =
+               Library.attach_screenshot(scope, link, image_fixture("photo.jpg"))
+
+      id = link.id
+      assert_receive {:link_updated, %Link{id: ^id, enrichment_status: :pending}}
+    end
+
+    test "enqueues nothing when the image is rejected", %{scope: scope} do
+      link = link_fixture(scope)
+      assert {:error, :not_an_image} = Library.attach_screenshot(scope, link, image_fixture("not_image.txt"))
+      refute_enqueued(worker: EnrichLink)
     end
 
     @tag :capture_log
@@ -244,6 +338,12 @@ defmodule Acervo.LibraryTest do
       height: 1,
       sha256: String.duplicate(char, 64)
     })
+    |> Repo.insert!()
+  end
+
+  defp insert_suggestion(scope, link, attrs, status, inserted_at) do
+    %Suggestion{user_id: scope.user.id, link_id: link.id, status: status, inserted_at: inserted_at}
+    |> Suggestion.changeset(attrs)
     |> Repo.insert!()
   end
 end

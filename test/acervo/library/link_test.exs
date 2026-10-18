@@ -123,4 +123,85 @@ defmodule Acervo.Library.LinkTest do
       assert [_] = errors_on(changeset).note
     end
   end
+
+  describe "enrichment_changeset/2" do
+    test "casts the enrichment fields" do
+      now = DateTime.utc_now(:second)
+
+      changeset =
+        Link.enrichment_changeset(%Link{}, %{
+          image_description: "A red square",
+          language: "pt",
+          enrichment_status: :ready,
+          enriched_at: now
+        })
+
+      assert changeset.valid?
+
+      assert %{image_description: "A red square", language: "pt", enrichment_status: :ready, enriched_at: ^now} =
+               changeset.changes
+    end
+
+    test "clips the description to 1000 characters and strips NUL bytes" do
+      changeset = Link.enrichment_changeset(%Link{}, %{image_description: "a" <> <<0>> <> String.duplicate("b", 2000)})
+
+      description = Ecto.Changeset.get_change(changeset, :image_description)
+      assert String.length(description) == 1000
+      refute description =~ <<0>>
+    end
+
+    test "accepts language tags and rejects anything else" do
+      for language <- ~w(pt en pt-BR zh-Hant) do
+        assert Link.enrichment_changeset(%Link{}, %{language: language}).valid?, language
+      end
+
+      for language <- ["português", "x", "PT", "pt_BR", "en-", "pt-BR-x"] do
+        assert %{language: [_]} = errors_on(Link.enrichment_changeset(%Link{}, %{language: language})), language
+      end
+    end
+
+    test "clips the language to 16 characters before validating it" do
+      changeset = Link.enrichment_changeset(%Link{}, %{language: String.duplicate("a", 40)})
+      assert String.length(Ecto.Changeset.get_change(changeset, :language)) == 16
+      refute changeset.valid?
+    end
+
+    test "rejects an unknown enrichment status" do
+      assert %{enrichment_status: ["is invalid"]} =
+               errors_on(Link.enrichment_changeset(%Link{}, %{enrichment_status: :done}))
+    end
+  end
+
+  describe "image_description_changeset/2" do
+    test "trims the description and stamps the edit" do
+      changeset = Link.image_description_changeset(%Link{}, %{image_description: "  A red square  "})
+
+      assert changeset.changes.image_description == "A red square"
+      assert %DateTime{} = changeset.changes.image_description_edited_at
+    end
+
+    test "turns a blank description into nil" do
+      changeset = Link.image_description_changeset(%Link{image_description: "old"}, %{image_description: "   "})
+
+      assert Map.fetch(changeset.changes, :image_description) == {:ok, nil}
+      assert %DateTime{} = changeset.changes.image_description_edited_at
+    end
+
+    test "does not stamp the edit when the description is unchanged" do
+      link = %Link{image_description: "same"}
+
+      assert Link.image_description_changeset(link, %{image_description: " same "}).changes == %{}
+      assert Link.image_description_changeset(%Link{}, %{image_description: ""}).changes == %{}
+    end
+
+    test "limits the description to 1000 characters" do
+      changeset = Link.image_description_changeset(%Link{}, %{image_description: String.duplicate("a", 1001)})
+      assert [_] = errors_on(changeset).image_description
+    end
+
+    test "casts nothing else" do
+      changeset = Link.image_description_changeset(%Link{}, %{image_description: "x", language: "pt", note: "n"})
+      assert Map.keys(changeset.changes) -- [:image_description, :image_description_edited_at] == []
+    end
+  end
 end

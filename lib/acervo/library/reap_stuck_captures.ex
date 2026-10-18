@@ -7,6 +7,11 @@ defmodule Acervo.Library.ReapStuckCaptures do
   than 30 minutes with no live (available, scheduled, retryable or
   executing) `Acervo.Library.CaptureLink` job. That happens when Oban kills
   the last attempt, by its timeout, before the worker can record the failure.
+
+  A second pass does the same for enrichment: a link `enrichment_status:
+  :pending` for longer than 30 minutes with no live `Acervo.AI.EnrichLink`
+  job becomes `enrichment_status: :failed`. The capture is left alone.
+
   Runs from `Oban.Plugins.Cron` every 10 minutes.
   """
   use Oban.Worker, queue: :capture, max_attempts: 3
@@ -14,6 +19,7 @@ defmodule Acervo.Library.ReapStuckCaptures do
   import Ecto.Query
 
   alias Acervo.Accounts.Scope
+  alias Acervo.AI.EnrichLink
   alias Acervo.Library
   alias Acervo.Library.CaptureLink
   alias Acervo.Library.Link
@@ -26,24 +32,41 @@ defmodule Acervo.Library.ReapStuckCaptures do
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
     cutoff = DateTime.shift(DateTime.utc_now(:second), minute: -@stuck_after_minutes)
+    reap_captures(cutoff)
+    reap_enrichments(cutoff)
+    :ok
+  end
 
-    live_jobs =
-      from j in Oban.Job,
-        where:
-          j.worker == ^Oban.Worker.to_string(CaptureLink) and j.state in @live_job_states and
-            fragment("?->>'link_id' = ?::text", j.args, parent_as(:link).id)
-
+  defp reap_captures(cutoff) do
     stuck =
       from l in Link,
         as: :link,
-        where: l.status in @stuck_statuses and l.updated_at < ^cutoff and not exists(live_jobs),
+        where: l.status in @stuck_statuses and l.updated_at < ^cutoff and not exists(live_jobs(CaptureLink)),
         select: l
 
-    {_count, links} =
-      Repo.update_all(stuck,
-        set: [status: :failed, capture_error: "timed out", updated_at: DateTime.utc_now(:second)]
-      )
+    stuck
+    |> Repo.update_all(set: [status: :failed, capture_error: "timed out", updated_at: DateTime.utc_now(:second)])
+    |> broadcast()
+  end
 
+  defp reap_enrichments(cutoff) do
+    stuck =
+      from l in Link,
+        as: :link,
+        where: l.enrichment_status == :pending and l.updated_at < ^cutoff and not exists(live_jobs(EnrichLink)),
+        select: l
+
+    stuck |> Repo.update_all(set: [enrichment_status: :failed]) |> broadcast()
+  end
+
+  defp live_jobs(worker) do
+    from j in Oban.Job,
+      where:
+        j.worker == ^Oban.Worker.to_string(worker) and j.state in @live_job_states and
+          fragment("?->>'link_id' = ?::text", j.args, parent_as(:link).id)
+  end
+
+  defp broadcast({_count, links}) do
     links
     |> Repo.preload(:user)
     |> Enum.each(&Library.broadcast_updated(Scope.for_user(&1.user), &1.id))

@@ -15,6 +15,7 @@ defmodule Acervo.Library.ExtractContent do
   use Oban.Worker, queue: :content, max_attempts: 3, unique: [period: 300, keys: [:link_id]]
 
   alias Acervo.Accounts.Scope
+  alias Acervo.AI.EnrichLink
   alias Acervo.Library
   alias Acervo.Library.CaptureLink
   alias Acervo.Library.Embed
@@ -49,11 +50,23 @@ defmodule Acervo.Library.ExtractContent do
     with {:ok, uri} <- parse(Embed.original_url(link)),
          {:ok, capture, final_url} <- Generic.fetch_page(uri, []) do
       content = Reader.build(capture.document, final_url, deadline: deadline)
-      done(Reader.store(scope, link, content, deadline: deadline))
+      scope |> Reader.store(link, content, deadline: deadline) |> enrich() |> done()
     else
       {:error, reason} -> failed(scope, link, reason)
     end
   end
+
+  # A link never enriched is worth enriching with the better text; one that
+  # already was would gain little from a second paid call.
+  defp enrich({:ok, %Link{content_html: html, enriched_at: nil, enrichment_status: status} = link})
+       when is_binary(html) and status != :pending do
+    case EnrichLink.enqueue(link) do
+      {:ok, _job} -> {:ok, link}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp enrich(result), do: result
 
   defp parse(url) do
     case URI.new(url) do

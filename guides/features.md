@@ -89,19 +89,74 @@ uses them. Their names start with a dot.
 
 ## Inbox
 
-- **Done.** ✓ (`#link-done`) marks the link as triaged
-  (`Acervo.Library.mark_triaged/2`). That removes it from the inbox.
+- **Cards.** On `/inbox` each card is wrapped by `LinkComponents.inbox_item/1`
+  (the stream id `#link-<id>` moves to the wrapper, the card becomes
+  `#card-<id>`), which adds a triage bar (`.ibar`) inside the same surface:
+  the link's collections as filled chips and its pending suggestions as
+  dashed ones, at most three chips, then the actions.
+- **Suggestions.** Each saved link is read by Claude in the background (see
+  Enrichment below), which suggests up to three collections: one of yours
+  (✦) or a new name (+). The reason is the chip's tooltip on cards, and a
+  faint line beside it in the link column. Suggestions never apply on their
+  own.
+- **Accepting.** Click a chip (`#suggestion-<id>` on cards,
+  `#link-suggestion-accept-<id>` in the link column) to add the link to that
+  collection, creating it for a new name (`Collections.accept_suggestion/2`).
+  It becomes a filled chip. Pending suggestions with the same new name on
+  other links are repointed to the collection just created.
+- **Dismissing.** The ✕ on a suggestion in the link column
+  (`#suggestion-dismiss-<id>`) dismisses it; it is never suggested again for
+  that link.
+- **Accept all.** With two or more suggestions, the double check
+  (`#accept-all-<link>` on cards, `#link-accept-all` in the link column)
+  accepts them all and finishes the link
+  (`Collections.accept_all_suggestions/2`).
+- **Done.** ✓ (`#done-<link>` on cards, `#link-done` in the link column)
+  finishes the link (`Collections.finish_triage/2`): its leftover
+  suggestions are dismissed and it leaves the inbox, sliding out
+  (`phx-remove` on the wrapper). If it was open, its column closes.
+- **While reading.** While enrichment is `:pending`, a faint dashed chip with
+  a shimmer (`.chip.ai.is-waiting`) holds the row, so nothing jumps when the
+  suggestions land through `{:link_updated, link}`. A failed or skipped
+  enrichment shows no chips; ✓ still works.
+
+## Enrichment
+
+- **Worker.** `Acervo.AI.EnrichLink` (Oban, queue `ai`) runs after a capture,
+  after reader content is extracted, and again when a screenshot is attached.
+  One Claude call per link (`Acervo.AI.Enrichment`) gets the page's title,
+  description, site, article text, first image and the user's collections
+  (up to 50, with three example titles each).
+- **Output.** An image description, the page's language and 1–3 collection
+  suggestions with short reasons, stored as `collection_suggestions`.
+  Triaged links get no new suggestions.
+- **Untrusted content.** Everything captured from the web goes into the
+  prompt as one JSON data block inside a random per-call delimiter, which the
+  system prompt says is data, never instructions. The output is validated:
+  unknown collection slugs are dropped, lengths are clamped and control
+  characters stripped.
+- **Image description.** Shown in the link column under the page
+  description, with a faint ✦ (`#image-description-form`,
+  `#link-image-description`). Edit it like the note: it saves on blur or
+  ⌘↩ (Ctrl+↩), shows a brief “Saved” in `#image-description-status`, and
+  `Library.update_image_description/3` stamps `image_description_edited_at`
+  so enrichment never overwrites it.
+- **Failures.** Rate limits snooze, transient errors retry, and the last
+  attempt marks the link `:failed`. A failure never blocks triage.
+- **Costs.** Every call's tokens and estimated cost go to `ai_calls`;
+  `Acervo.Release.ai_costs/1` reports them per day.
 
 ## Notes
 
 - **Saving.** A note saves when you leave the field (`phx-blur`) or press
-  ⌘↩ on macOS (Ctrl+↩ elsewhere). The `.NoteShortcut` hook on `#link-note`
-  submits `#note-form`. Enter alone inserts a newline.
+  ⌘↩ on macOS (Ctrl+↩ elsewhere). The `.SubmitShortcut` hook on `#link-note`
+  submits `#note-form`; the image description uses the same hook. Enter alone
+  inserts a newline.
 - **Hint.** A faint hint below the note (`#note-hint`) shows the shortcut
   while the note is focused.
 - **Saved status.** After a save that changed the note, a brief “Saved”
   status appears in `#note-status` (`role="status"`). `ArchiveLive` clears it
-  after 1.5 s with `{:clear_note_saved, ref}`. A save that changes nothing
+  after 1.5 s with `{:clear_saved, :note_saved, ref}`. A save that changes nothing
   shows nothing.
 
 ## Appearance and language
@@ -126,7 +181,7 @@ and hooks use it to pick the modifier key.
 | ↩            | add pill          | saves the link                       | `#add-link-form` submit               |
 | Esc          | add pill, popover | closes it                            | `close_add`; `assets/js/floating.js`  |
 | Esc          | page column open  | closes the page column               | `.Shortcuts` → `close_web` event      |
-| ⌘/Ctrl ↩     | in a note         | saves the note                       | `.NoteShortcut` (`LinkComponents`)    |
+| ⌘/Ctrl ↩     | note, description | saves the field                      | `.SubmitShortcut` (`LinkComponents`)  |
 | ?            | outside fields    | opens the guide (`/guide`)           | `.Shortcuts` → `open_guide` event     |
 
 Page-wide keys do nothing while you type in an input, a textarea or a

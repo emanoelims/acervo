@@ -5,6 +5,7 @@ defmodule Acervo.Library.ReapStuckCapturesTest do
   import Acervo.AccountsFixtures
   import Acervo.LibraryFixtures
 
+  alias Acervo.AI.EnrichLink
   alias Acervo.Library
   alias Acervo.Library.CaptureLink
   alias Acervo.Library.Link
@@ -64,5 +65,48 @@ defmodule Acervo.Library.ReapStuckCapturesTest do
     assert %Link{status: :pending} = Repo.get!(Link, queued.id)
     assert %Link{status: :ready} = Repo.get!(Link, ready.id)
     refute_receive {:link_updated, _}
+  end
+
+  describe "enrichment" do
+    defp put_enrichment(link, status, minutes_ago) do
+      updated_at = DateTime.shift(DateTime.utc_now(:second), minute: -minutes_ago)
+
+      Repo.update_all(from(l in Link, where: l.id == ^link.id),
+        set: [status: :ready, enrichment_status: status, updated_at: updated_at]
+      )
+    end
+
+    test "fails a stale pending enrichment with no live job and leaves the capture alone", %{scope: scope} do
+      link = link_fixture(scope)
+      put_enrichment(link, :pending, 31)
+      finish_job(link)
+
+      assert :ok = perform_job(ReapStuckCaptures, %{})
+
+      assert %Link{enrichment_status: :failed, status: :ready, capture_error: nil} = Repo.get!(Link, link.id)
+      id = link.id
+      assert_receive {:link_updated, %Link{id: ^id, enrichment_status: :failed}}
+    end
+
+    test "leaves fresh, live and finished enrichments alone", %{scope: scope} do
+      fresh = link_fixture(scope)
+      put_enrichment(fresh, :pending, 5)
+      finish_job(fresh)
+
+      live = link_fixture(scope)
+      put_enrichment(live, :pending, 45)
+      finish_job(live)
+      {:ok, _job} = EnrichLink.enqueue(live)
+
+      done = link_fixture(scope)
+      put_enrichment(done, :ready, 45)
+      finish_job(done)
+
+      assert :ok = perform_job(ReapStuckCaptures, %{})
+
+      assert %Link{enrichment_status: :pending} = Repo.get!(Link, fresh.id)
+      assert %Link{enrichment_status: :pending} = Repo.get!(Link, live.id)
+      assert %Link{enrichment_status: :ready} = Repo.get!(Link, done.id)
+    end
   end
 end

@@ -24,6 +24,7 @@ defmodule AcervoWeb.ArchiveLive do
   alias Acervo.Collections.Collection
   alias Acervo.Library
   alias Acervo.Library.Embed
+  alias Ecto.Query.CastError
 
   @max_screenshot_bytes 15_000_000
   @note_saved_ms 1500
@@ -35,7 +36,8 @@ defmodule AcervoWeb.ArchiveLive do
 
     {:ok,
      socket
-     |> assign(filter: nil, collection: nil, link: nil, note_form: nil, note_saved: nil, screenshot_link_id: nil)
+     |> assign(filter: nil, collection: nil, link: nil, screenshot_link_id: nil)
+     |> assign(note_form: nil, note_saved: nil, description_form: nil, description_saved: nil)
      |> assign(add_form: nil, new_collection_form: nil, editing: nil, collection_form: nil)
      |> assign(web?: false, web_check: nil, reader_view?: false, reader: nil)
      |> assign(:collection_filter, collection_filter(""))
@@ -87,7 +89,7 @@ defmodule AcervoWeb.ArchiveLive do
   defp fetch_link(socket, %{"id" => id}) do
     {:ok, Library.get_link!(socket.assigns.current_scope, id)}
   rescue
-    _ in [Ecto.NoResultsError, Ecto.Query.CastError] -> {:error, :not_found, list_path(socket.assigns)}
+    _ in [Ecto.NoResultsError, CastError] -> {:error, :not_found, list_path(socket.assigns)}
   end
 
   defp fetch_link(_socket, _params), do: {:ok, nil}
@@ -149,6 +151,8 @@ defmodule AcervoWeb.ArchiveLive do
       link: link,
       note_form: link && note_form(link),
       note_saved: nil,
+      description_form: link && description_form(link),
+      description_saved: nil,
       collection_filter: collection_filter("")
     )
   end
@@ -198,13 +202,16 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp note_form(link, attrs \\ %{}), do: to_form(Library.change_note(link, attrs), as: :link)
 
+  defp description_form(link), do: to_form(Library.change_image_description(link), as: :link)
+
   defp collection_filter(query), do: to_form(%{"query" => query})
 
   defp picker_error(query),
     do: to_form(%{"query" => query}, errors: [query: {gettext("Couldn't create that collection."), []}])
 
   @max_url_bytes 2048
-  @link_events ~w(save_note done delete add_to_collection remove_from_collection create_collection_for_link pick_collection)
+  @link_events ~w(save_note save_image_description delete add_to_collection remove_from_collection
+                  create_collection_for_link pick_collection)
   @collection_events ~w(edit_collection validate_collection save_collection delete_collection)
 
   @impl true
@@ -356,18 +363,45 @@ defmodule AcervoWeb.ArchiveLive do
   def handle_event("save_note", %{"link" => %{"note" => note}}, socket), do: save_note(socket, note)
   def handle_event("save_note", %{"value" => note}, socket), do: save_note(socket, note)
 
-  def handle_event("done", _params, socket) do
-    inbox? = socket.assigns.live_action in [:inbox_link, :inbox_link_web]
+  def handle_event("save_image_description", %{"link" => %{"image_description" => text}}, socket),
+    do: save_image_description(socket, text)
 
-    case Library.mark_triaged(socket.assigns.current_scope, socket.assigns.link) do
-      {:ok, link} when inbox? ->
-        {:noreply, socket |> stream_delete(:links, link) |> refresh_counts() |> push_patch(to: ~p"/inbox")}
+  def handle_event("save_image_description", %{"value" => text}, socket), do: save_image_description(socket, text)
 
-      {:ok, link} ->
-        {:noreply, socket |> assign(:link, link) |> stream_insert(:links, link, update_only: true) |> refresh_counts()}
+  # Triage: suggestions are accepted or dismissed one by one, from a card or
+  # the link column; "accept all" and ✓ finish the link.
+  def handle_event("accept_suggestion", %{"id" => id}, socket) do
+    case Collections.accept_suggestion(socket.assigns.current_scope, id) do
+      {:ok, _collection} -> {:noreply, socket}
+      {:error, :not_found} -> {:noreply, put_flash(socket, :error, gettext("Not found."))}
+      {:error, _changeset} -> {:noreply, put_flash(socket, :error, gettext("Couldn't create that collection."))}
+    end
+  end
 
-      {:error, :not_found} ->
-        {:noreply, gone(socket)}
+  def handle_event("dismiss_suggestion", %{"id" => id}, socket) do
+    case Collections.dismiss_suggestion(socket.assigns.current_scope, id) do
+      :ok -> {:noreply, socket}
+      {:error, :not_found} -> {:noreply, put_flash(socket, :error, gettext("Not found."))}
+    end
+  end
+
+  def handle_event("accept_all", %{"id" => id}, socket) do
+    with {:ok, link} <- own_link(socket, id),
+         {:ok, link} <- Collections.accept_all_suggestions(socket.assigns.current_scope, link) do
+      {:noreply, triaged(socket, link)}
+    else
+      {:error, :not_found} -> {:noreply, gone(socket)}
+      {:error, _changeset} -> {:noreply, put_flash(socket, :error, gettext("Couldn't create that collection."))}
+    end
+  end
+
+  def handle_event("finish", %{"id" => id}, socket) do
+    with {:ok, link} <- own_link(socket, id),
+         {:ok, link} <- Collections.finish_triage(socket.assigns.current_scope, link) do
+      {:noreply, triaged(socket, link)}
+    else
+      {:error, :not_found} -> {:noreply, gone(socket)}
+      {:error, _changeset} -> {:noreply, put_flash(socket, :error, gettext("Couldn't finish this link."))}
     end
   end
 
@@ -423,6 +457,24 @@ defmodule AcervoWeb.ArchiveLive do
   # A new link waits in the inbox; a saved one opens where it lives.
   defp existing_path(%{triaged_at: nil} = link), do: ~p"/inbox/l/#{link.id}"
   defp existing_path(link), do: ~p"/all/l/#{link.id}"
+
+  defp own_link(socket, id) do
+    {:ok, Library.get_link!(socket.assigns.current_scope, id)}
+  rescue
+    _ in [Ecto.NoResultsError, CastError] -> {:error, :not_found}
+  end
+
+  # A finished link leaves the inbox (sliding out, see `inbox_item/1`), and
+  # its column closes; elsewhere it just updates in place.
+  defp triaged(socket, link) do
+    socket = socket |> restream(link) |> refresh_counts()
+
+    cond do
+      socket.assigns.filter == :inbox and open?(socket, link) -> push_patch(socket, to: ~p"/inbox")
+      open?(socket, link) -> refresh_open(socket, link)
+      true -> socket
+    end
+  end
 
   defp own_collection(socket, id), do: Enum.find(socket.assigns.collections, &(&1.id == id))
 
@@ -491,12 +543,32 @@ defmodule AcervoWeb.ArchiveLive do
     end
   end
 
+  defp save_image_description(%{assigns: %{link: link}} = socket, text) do
+    if text == (link.image_description || "") do
+      {:noreply, socket}
+    else
+      case Library.update_image_description(socket.assigns.current_scope, link, %{image_description: text}) do
+        {:ok, link} ->
+          {:noreply,
+           socket |> assign(link: link, description_form: description_form(link)) |> show_saved(:description_saved)}
+
+        {:error, :not_found} ->
+          {:noreply, gone(socket)}
+
+        {:error, changeset} ->
+          {:noreply, assign(socket, :description_form, to_form(changeset, as: :link, action: :validate))}
+      end
+    end
+  end
+
   # "Saved" shows briefly; a newer save restarts the timer, so only the
   # latest one clears it.
-  defp show_note_saved(socket) do
+  defp show_note_saved(socket), do: show_saved(socket, :note_saved)
+
+  defp show_saved(socket, key) do
     ref = make_ref()
-    Process.send_after(self(), {:clear_note_saved, ref}, @note_saved_ms)
-    assign(socket, :note_saved, ref)
+    Process.send_after(self(), {:clear_saved, key, ref}, @note_saved_ms)
+    assign(socket, key, ref)
   end
 
   defp gone(socket) do
@@ -545,10 +617,9 @@ defmodule AcervoWeb.ArchiveLive do
     end
   end
 
-  def handle_info({:clear_note_saved, ref}, %{assigns: %{note_saved: ref}} = socket),
-    do: {:noreply, assign(socket, :note_saved, nil)}
-
-  def handle_info({:clear_note_saved, _stale}, socket), do: {:noreply, socket}
+  def handle_info({:clear_saved, key, ref}, socket) when key in [:note_saved, :description_saved] do
+    if socket.assigns[key] == ref, do: {:noreply, assign(socket, key, nil)}, else: {:noreply, socket}
+  end
 
   @impl true
   def handle_async(:embeddable, {:ok, {:ok, link}}, socket),
@@ -573,7 +644,11 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp refresh_open(socket, link) do
     if open?(socket, link),
-      do: socket |> assign(link: link, note_form: note_form(link)) |> refresh_reader(link) |> assign_page_title(),
+      do:
+        socket
+        |> assign(link: link, note_form: note_form(link), description_form: description_form(link))
+        |> refresh_reader(link)
+        |> assign_page_title(),
       else: socket
   end
 
@@ -731,13 +806,22 @@ defmodule AcervoWeb.ArchiveLive do
           </p>
           <div id="links" class="cards" phx-update="stream">
             <.empty id="links-empty" class="hidden only:block">{empty_text(@filter)}</.empty>
-            <.card
-              :for={{id, link} <- @streams.links}
-              id={id}
-              link={link}
-              patch={link_path(@filter, @collection, link)}
-              selected={selected?(@link, link)}
-            />
+            <%= for {id, link} <- @streams.links do %>
+              <.inbox_item
+                :if={@filter == :inbox}
+                id={id}
+                link={link}
+                patch={link_path(@filter, @collection, link)}
+                selected={selected?(@link, link)}
+              />
+              <.card
+                :if={@filter != :inbox}
+                id={id}
+                link={link}
+                patch={link_path(@filter, @collection, link)}
+                selected={selected?(@link, link)}
+              />
+            <% end %>
           </div>
         </.column>
 
@@ -755,6 +839,8 @@ defmodule AcervoWeb.ArchiveLive do
             collection_filter={@collection_filter}
             upload={@uploads.screenshot}
             note_saved={!!@note_saved}
+            description_form={@description_form}
+            description_saved={!!@description_saved}
             web_path={web_toggle_path(assigns, @link)}
             web_open={@web?}
           />

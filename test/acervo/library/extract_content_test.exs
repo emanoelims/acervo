@@ -6,6 +6,7 @@ defmodule Acervo.Library.ExtractContentTest do
   import Acervo.CollectionsFixtures
   import Acervo.LibraryFixtures
 
+  alias Acervo.AI.EnrichLink
   alias Acervo.Collections
   alias Acervo.Library
   alias Acervo.Library.ExtractContent
@@ -91,6 +92,39 @@ defmodule Acervo.Library.ExtractContentTest do
     assert_receive {:link_updated, %Link{id: id}} when id == link.id
   end
 
+  test "enqueues enrichment for a never-enriched link that gained content", %{scope: scope} do
+    link = captured_link(scope)
+    stub_page("/img/a.png", png(40))
+
+    assert :ok = perform_job(ExtractContent, %{"link_id" => link.id})
+
+    assert_enqueued(worker: EnrichLink, args: %{"link_id" => link.id})
+    assert %Link{enrichment_status: :pending} = Repo.get!(Link, link.id)
+  end
+
+  test "does not enqueue enrichment for an enriched or already pending link", %{scope: scope} do
+    enriched = captured_link(scope)
+    other = user_scope_fixture()
+    pending = captured_link(other)
+    Repo.update_all(from(l in Link, where: l.id == ^enriched.id), set: [enriched_at: DateTime.utc_now(:second)])
+    Repo.update_all(from(l in Link, where: l.id == ^pending.id), set: [enrichment_status: :pending])
+
+    for link <- [enriched, pending] do
+      stub_page("/img/a.png", png(40))
+      assert :ok = perform_job(ExtractContent, %{"link_id" => link.id})
+    end
+
+    refute_enqueued(worker: EnrichLink)
+  end
+
+  test "does not enqueue enrichment for a page with no content", %{scope: scope} do
+    link = captured_link(scope)
+    Req.Test.stub(SafeFetch, &Plug.Conn.send_resp(&1, 404, ""))
+
+    assert :ok = perform_job(ExtractContent, %{"link_id" => link.id})
+    refute_enqueued(worker: EnrichLink)
+  end
+
   test "running it again replaces the content images", %{scope: scope} do
     link = captured_link(scope)
     stub_page("/img/a.png", png(40))
@@ -146,6 +180,22 @@ defmodule Acervo.Library.ExtractContentTest do
     assert missing.id in ids
     for link <- [pending, video, failed, done], do: refute(link.id in ids)
   end
+
+  test "the enrichment backfill selects ready links never enriched or failed", %{scope: scope} do
+    missing = scope |> link_fixture() |> ready()
+    failed = scope |> link_fixture() |> ready() |> status(:failed)
+    pending = scope |> link_fixture() |> ready() |> status(:pending)
+    done = scope |> link_fixture() |> ready() |> status(:ready)
+    capturing = link_fixture(scope)
+
+    ids = Release.missing_enrichment(Repo)
+
+    assert missing.id in ids
+    assert failed.id in ids
+    for link <- [pending, done, capturing], do: refute(link.id in ids)
+  end
+
+  defp status(link, status), do: link |> Ecto.Changeset.change(enrichment_status: status) |> Repo.update!()
 
   defp ready(link, attrs \\ %{}), do: link |> Link.capture_changeset(Map.put(attrs, :status, :ready)) |> Repo.update!()
 end

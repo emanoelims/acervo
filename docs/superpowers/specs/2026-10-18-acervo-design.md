@@ -42,7 +42,7 @@ the LLM stack, themes, and components.
 | AI suggestions | Every new link lands in the **inbox** with suggested collections. The owner accepts chips, picks others, and marks it done |
 | Search | Hybrid: pgvector cosine similarity plus Postgres full-text, merged with Reciprocal Rank Fusion |
 | Searchable text | Title, description, page text excerpt, owner's note, and a Claude-written description of the preview image |
-| Chat model | Claude through ReqLLM with `ANTHROPIC_API_KEY`. Haiku 5.5 by default, configurable |
+| Chat model | Claude through ReqLLM with `ANTHROPIC_API_KEY`. Opus 5.5 by default, configurable |
 | Embeddings | `openrouter:voyageai/voyage-4-lite` with `OPENROUTER_API_KEY`, 1024 dimensions requested explicitly, configurable with `ACERVO_EMBEDDING_MODEL` |
 | Jobs | Oban on Postgres |
 | Images | WebP bytes in Postgres behind an `Acervo.Storage` behaviour, so Tigris can replace it later |
@@ -297,7 +297,7 @@ Environment variables, with every new one added to `mise.local.toml.example`:
 | `ANTHROPIC_API_KEY` | Claude enrichment | yes |
 | `OPENROUTER_API_KEY` | Embeddings | yes |
 | `ACERVO_ALLOWED_EMAILS` | Comma-separated registration allowlist | yes |
-| `ACERVO_CHAT_MODEL` | Default `anthropic:claude-haiku-5-5` | no |
+| `ACERVO_CHAT_MODEL` | Default `anthropic:claude-opus-5-5` (Opus 5.5) | no |
 | `ACERVO_EMBEDDING_MODEL` | Default `openrouter:voyageai/voyage-4-lite` | no |
 | `RESEND_API_KEY`, `MAIL_FROM` | Magic-link email | yes |
 | `DATABASE_URL`, `SECRET_KEY_BASE`, `PHX_HOST` | Standard | yes |

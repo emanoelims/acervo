@@ -5,6 +5,16 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Each saved link is read by AI: it gets an image description and collection suggestions in the inbox, which you accept with a click. Opus 5.5 is the default model; set `ACERVO_CHAT_MODEL` to use another.
+- Triage the inbox: accept all suggestions at once, or finish a link with ✓ to dismiss the rest. Edit the image description in the link column.
+- `Acervo.Release.ai_costs/0` reports the model calls and their estimated cost per day.
+
+### Migration
+
+- After deploying, run the enrichment backfill so links saved before this get descriptions, and inbox links get suggestions (one model call each): `fly ssh console -a acervo-app -C "/app/bin/acervo eval 'Acervo.Release.backfill_enrichment()'"`.
+
 ## [0.7.0] - 2026-10-18
 
 Read every saved page in Acervo, even when its site blocks embedding.

@@ -154,7 +154,7 @@ defmodule AcervoWeb.LinkColumnTest do
       view |> form("#note-form", link: %{note: "Changed"}) |> render_submit()
       assert has_element?(view, "#note-status .note-saved", "Saved")
 
-      send(view.pid, {:clear_note_saved, make_ref()})
+      send(view.pid, {:clear_saved, :note_saved, make_ref()})
       assert has_element?(view, "#note-status .note-saved")
     end
 
@@ -166,7 +166,7 @@ defmodule AcervoWeb.LinkColumnTest do
       assert has_element?(view, "#note-status .note-saved")
 
       %{assigns: %{note_saved: ref}} = :sys.get_state(view.pid).socket
-      send(view.pid, {:clear_note_saved, ref})
+      send(view.pid, {:clear_saved, :note_saved, ref})
       refute has_element?(view, "#note-status .note-saved")
     end
 
@@ -186,7 +186,7 @@ defmodule AcervoWeb.LinkColumnTest do
 
       {:ok, view, _html} = live(conn, ~p"/all")
 
-      for event <- ~w(done delete save_note) do
+      for event <- ~w(delete save_note save_image_description) do
         render_hook(view, event, %{})
       end
 
@@ -351,6 +351,122 @@ defmodule AcervoWeb.LinkColumnTest do
              end) == "Oct 12, 2026"
 
       assert AcervoWeb.LinkComponents.link_date(%Link{published_at: nil, inserted_at: date}) == date
+    end
+  end
+
+  describe "suggestions and the image description" do
+    defp enriched(scope, attrs \\ %{}) do
+      scope
+      |> link_fixture()
+      |> capture(title: "With image")
+      |> Link.enrichment_changeset(Enum.into(attrs, %{enrichment_status: :ready}))
+      |> Repo.update!()
+    end
+
+    test "suggestions show with their reasons and dismiss with ✕", %{conn: conn, scope: scope} do
+      link = enriched(scope)
+      keep = suggestion_fixture(scope, link, %{proposed_name: "Fica", reason: "Combina"})
+      drop = suggestion_fixture(scope, link, %{proposed_name: "Sai", reason: "Talvez"})
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+
+      assert has_element?(view, "#link-suggestions #link-suggestion-#{keep.id}", "Fica")
+      assert has_element?(view, "#link-suggestions .sug-why", "Combina")
+      assert has_element?(view, "#suggestion-dismiss-#{drop.id}[aria-label='Dismiss Sai']")
+
+      view |> element("#suggestion-dismiss-#{drop.id}") |> render_click()
+
+      refute has_element?(view, "#link-suggestion-#{drop.id}")
+      assert has_element?(view, "#link-suggestion-#{keep.id}")
+      assert Repo.get!(Acervo.Collections.Suggestion, drop.id).status == :dismissed
+    end
+
+    test "a suggestion accepted in the column becomes a filled chip", %{conn: conn, scope: scope} do
+      link = enriched(scope)
+      suggestion = suggestion_fixture(scope, link, %{proposed_name: "Nova"})
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+
+      view |> element("#link-suggestion-accept-#{suggestion.id}") |> render_click()
+
+      [collection] = Collections.list_collections(scope)
+      assert has_element?(view, "#link-chip-#{collection.id}", "Nova")
+      refute has_element?(view, "#link-suggestions")
+    end
+
+    test "accept all and ✓ in the column", %{conn: conn, scope: scope} do
+      link = enriched(scope)
+      suggestion_fixture(scope, link, %{proposed_name: "Um"})
+      suggestion_fixture(scope, link, %{proposed_name: "Dois"})
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+
+      view |> element("#link-accept-all") |> render_click()
+
+      link = Library.get_link!(scope, link.id)
+      assert link.triaged_at
+      assert link.suggestions == []
+      assert length(link.collections) == 2
+      refute has_element?(view, "#link-accept-all")
+      refute has_element?(view, "#link-done")
+      assert has_element?(view, "#column-link")
+    end
+
+    test "a placeholder chip shows while enrichment is pending, nothing when it failed", %{conn: conn, scope: scope} do
+      pending = enriched(scope, enrichment_status: :pending)
+      failed = enriched(scope, enrichment_status: :failed)
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{pending.id}")
+      assert has_element?(view, "#link-detail .chip.is-waiting")
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{failed.id}")
+      refute has_element?(view, "#link-detail .chip.ai")
+      refute has_element?(view, "#link-suggestions")
+    end
+
+    test "the image description is editable and stamps the edit", %{conn: conn, scope: scope} do
+      link = enriched(scope, image_description: "A red square")
+      collection_link_image_fixture(link)
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+
+      assert has_element?(view, "#link-image-description[maxlength='1000']", "A red square")
+      assert has_element?(view, "#image-description-status[role=status]")
+
+      view
+      |> form("#image-description-form", link: %{image_description: "A blue circle"})
+      |> render_submit()
+
+      saved = Library.get_link!(scope, link.id)
+      assert saved.image_description == "A blue circle"
+      assert saved.image_description_edited_at
+      assert has_element?(view, "#image-description-status .note-saved", "Saved")
+      refute has_element?(view, "#note-status .note-saved")
+
+      view |> element("#link-image-description") |> render_blur(%{"value" => "On blur"})
+      assert Library.get_link!(scope, link.id).image_description == "On blur"
+    end
+
+    test "an unchanged description saves nothing; a long one shows its error", %{conn: conn, scope: scope} do
+      link = enriched(scope, image_description: "Kept")
+      collection_link_image_fixture(link)
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+
+      view |> element("#link-image-description") |> render_blur(%{"value" => "Kept"})
+      refute has_element?(view, "#image-description-status .note-saved")
+      refute Library.get_link!(scope, link.id).image_description_edited_at
+
+      view |> element("#link-image-description") |> render_blur(%{"value" => String.duplicate("a", 1001)})
+      assert has_element?(view, "#image-description-form", "should be at most 1000 character(s)")
+    end
+
+    test "links without an image have no description field", %{conn: conn, scope: scope} do
+      link = enriched(scope)
+
+      {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
+
+      refute has_element?(view, "#image-description-form")
     end
   end
 end

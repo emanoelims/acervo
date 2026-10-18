@@ -5,8 +5,8 @@ defmodule Acervo.Library do
   Saving a link enqueues `Acervo.Library.CaptureLink`, which fetches its
   preview in the background. Mutations broadcast on the `"links:<user_id>"`
   topic of `Acervo.PubSub`: `{:link_created, link}`, `{:link_updated, link}`
-  and `{:link_deleted, link}`. Broadcast links carry their images and
-  collections preloaded.
+  and `{:link_deleted, link}`. Broadcast links carry their images,
+  collections and pending collection suggestions preloaded.
 
   Preloaded images never carry their bytes, which are served separately
   through `Acervo.Storage.fetch/2`, and are only the card's: previews and
@@ -17,7 +17,9 @@ defmodule Acervo.Library do
   import Ecto.Query
 
   alias Acervo.Accounts.Scope
+  alias Acervo.AI.EnrichLink
   alias Acervo.Collections.CollectionLink
+  alias Acervo.Collections.Suggestion
   alias Acervo.Library.CaptureLink
   alias Acervo.Library.Embed
   alias Acervo.Library.FramePolicy
@@ -108,7 +110,8 @@ defmodule Acervo.Library do
       `{:collection, collection_id}`
     * `:limit` - defaults to #{@default_limit}
 
-  Each link carries its collections and only its first image (position 0).
+  Each link carries its collections, its pending collection suggestions and
+  only its first image (position 0).
   """
   @spec list_links(Scope.t(), keyword()) :: [Link.t()]
   def list_links(%Scope{user: user}, opts \\ []) do
@@ -119,7 +122,7 @@ defmodule Acervo.Library do
       where: l.user_id == ^user.id,
       order_by: [desc: l.inserted_at, desc: l.id],
       limit: ^opts[:limit],
-      preload: [:collections, images: ^first_image]
+      preload: [:collections, images: ^first_image, suggestions: ^pending_suggestions_query()]
     )
     |> filter(opts[:filter])
     |> Repo.all()
@@ -136,7 +139,7 @@ defmodule Acervo.Library do
     )
   end
 
-  @doc "Gets one of the scope's links with its images and collections. Raises if not found."
+  @doc "Gets one of the scope's links with its images, collections and pending suggestions. Raises if not found."
   @spec get_link!(Scope.t(), Ecto.UUID.t()) :: Link.t()
   def get_link!(%Scope{user: user}, id) do
     Link |> Repo.get_by!(id: id, user_id: user.id) |> preload_link()
@@ -162,6 +165,23 @@ defmodule Acervo.Library do
   @doc "Returns a changeset for tracking note changes."
   @spec change_note(Link.t(), map()) :: Ecto.Changeset.t()
   def change_note(%Link{} = link, attrs \\ %{}), do: Link.note_changeset(link, attrs)
+
+  @doc """
+  Saves the owner's edit of the image description, stamping
+  `image_description_edited_at` so enrichment never overwrites it.
+  """
+  @spec update_image_description(Scope.t(), Link.t(), map()) ::
+          {:ok, Link.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def update_image_description(%Scope{} = scope, %Link{} = link, attrs) do
+    with {:ok, link} <- owned(scope, link) do
+      # phase 4: enqueue EmbedLink
+      link |> Link.image_description_changeset(attrs) |> Repo.update() |> updated(scope)
+    end
+  end
+
+  @doc "Returns a changeset for tracking image description changes."
+  @spec change_image_description(Link.t(), map()) :: Ecto.Changeset.t()
+  def change_image_description(%Link{} = link, attrs \\ %{}), do: Link.image_description_changeset(link, attrs)
 
   @spec mark_triaged(Scope.t(), Link.t()) :: {:ok, Link.t()} | {:error, :not_found}
   def mark_triaged(%Scope{} = scope, %Link{} = link) do
@@ -211,7 +231,9 @@ defmodule Acervo.Library do
 
   @doc """
   Normalizes `binary` and stores it as the link's screenshot at position 0,
-  moving its other images down. The link becomes `:ready` without an error.
+  moving its other images down. The link becomes `:ready` without an error
+  and is enqueued for enrichment again, even when it was enriched: the image
+  changed.
   """
   @spec attach_screenshot(Scope.t(), Link.t(), binary()) ::
           {:ok, Link.t()} | {:error, :not_found | :not_an_image | :too_large | Ecto.Changeset.t()}
@@ -228,7 +250,17 @@ defmodule Acervo.Library do
     Repo.update_all(from(i in LinkImage, where: i.link_id == ^link.id and i.kind != :content), inc: [position: 1])
 
     with {:ok, _image} <- Storage.put(scope, link, Map.merge(image, %{kind: :screenshot, position: 0})) do
-      link |> Link.capture_changeset(%{status: :ready, capture_error: nil}) |> Repo.update()
+      # `enqueue/1` marks the row `:pending`; the struct must say so too, or
+      # the broadcast hides the waiting placeholder.
+      changeset =
+        link
+        |> Link.capture_changeset(%{status: :ready, capture_error: nil})
+        |> Ecto.Changeset.change(enrichment_status: :pending)
+
+      with {:ok, link} <- Repo.update(changeset),
+           {:ok, _job} <- EnrichLink.enqueue(link) do
+        {:ok, link}
+      end
     end
   end
 
@@ -260,6 +292,16 @@ defmodule Acervo.Library do
     end
   end
 
+  @doc false
+  # Preloads a link just written by the caller, broadcasts
+  # `{:link_updated, link}` and returns it. Used by `Acervo.Collections`
+  # after its transactions commit.
+  @spec broadcast_link(Scope.t(), Link.t()) :: Link.t()
+  def broadcast_link(%Scope{} = scope, %Link{} = link) do
+    {:ok, link} = updated({:ok, link}, scope)
+    link
+  end
+
   # Checks ownership against the database, not the (possibly stale) struct.
   defp owned(%Scope{user: user}, %Link{id: id}) do
     case Repo.get_by(Link, id: id, user_id: user.id) do
@@ -277,7 +319,13 @@ defmodule Acervo.Library do
   defp updated({:error, _} = error, _scope), do: error
 
   defp preload_link(%Link{} = link) do
-    Repo.preload(link, [:collections, images: images_query()], force: true)
+    Repo.preload(link, [:collections, images: images_query(), suggestions: pending_suggestions_query()], force: true)
+  end
+
+  # Only pending suggestions reach the interface, oldest first, with their
+  # collection (nil for a new name).
+  defp pending_suggestions_query do
+    from s in Suggestion, where: s.status == :pending, order_by: [asc: s.inserted_at, asc: s.id], preload: :collection
   end
 
   defp images_query, do: from(i in LinkImage, where: i.kind != :content, select: struct(i, ^@image_fields))

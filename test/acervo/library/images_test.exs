@@ -8,6 +8,7 @@ defmodule Acervo.Library.ImagesTest do
   alias Acervo.Library.Link
   alias Acervo.Library.LinkImage
   alias Acervo.Storage.Database
+  alias Vix.Vips.Image, as: Vimage
   alias Vix.Vips.MutableImage
 
   @fixtures Path.expand("../../support/fixtures/images", __DIR__)
@@ -104,6 +105,31 @@ defmodule Acervo.Library.ImagesTest do
 
     test "rejects input over 15 MB" do
       assert Images.normalize(:binary.copy(<<0>>, 15 * 1024 * 1024 + 1)) == {:error, :too_large}
+    end
+  end
+
+  describe "for_model/2" do
+    test "brings a large photo to a 1024px WebP under 1 MB" do
+      assert {:ok, bytes} = Images.for_model(fixture("photo.jpg"))
+
+      assert byte_size(bytes) < 1_000_000
+      assert {:ok, image} = Image.from_binary(bytes)
+      assert {Image.width(image), Image.height(image)} == {1024, 512}
+      assert {:ok, "webpload_buffer"} = Vimage.header_value(image, "vips-loader")
+    end
+
+    test "retries once at 768px, then gives up when the result stays too large" do
+      {:ok, first} = Images.for_model(fixture("photo.jpg"))
+
+      assert {:ok, bytes} = Images.for_model(fixture("photo.jpg"), max_bytes: byte_size(first) - 1)
+      assert {:ok, image} = Image.from_binary(bytes)
+      assert Image.width(image) == 768
+      assert Images.for_model(fixture("photo.jpg"), max_bytes: 1) == {:error, :too_large}
+    end
+
+    test "rejects data that is not an image, or too large to decode" do
+      assert Images.for_model(fixture("not_image.txt")) == {:error, :not_an_image}
+      assert Images.for_model(lying_png(25_000, 25_000)) == {:error, :too_large}
     end
   end
 

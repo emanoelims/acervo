@@ -37,6 +37,9 @@ defmodule AcervoWeb.GuideComponents do
             "No preview (Instagram often blocks it)? Drop, pick or paste a screenshot while the link is open."
           )}
         </:row>
+        <:row icon="lucide-sparkle">
+          {gettext("Claude describes each link's image; edit the description if it's wrong.")}
+        </:row>
       </.guide_section>
 
       <.guide_section id="guide-web" title={gettext("Read")}>
@@ -64,18 +67,28 @@ defmodule AcervoWeb.GuideComponents do
       </.guide_section>
 
       <.guide_section id="guide-inbox" title={gettext("Inbox")}>
+        <:row icon="lucide-sparkle">
+          {gettext("Suggested collections: tap one to add the link. + marks a new one.")}
+        </:row>
+        <:row icon="lucide-check-check">
+          {gettext("Accept all adds every suggestion and finishes.")}
+        </:row>
         <:row icon="lucide-check">
-          {gettext("Done marks a link as sorted and clears it from the Inbox.")}
+          {gettext("Done finishes the link and dismisses the rest.")}
         </:row>
       </.guide_section>
 
       <.guide_section id="guide-notes" title={gettext("Notes")}>
         <:row icon="lucide-notebook-pen">
-          <span class="key-mac">{gettext("A note saves with %{keys} or when you leave the field.",
+          <span class="key-mac">{gettext(
+            "A note, or an image description, saves with %{keys} or when you leave the field.",
             keys: "⌘↩"
           )}</span>
           <span class="key-other">
-            {gettext("A note saves with %{keys} or when you leave the field.", keys: "Ctrl+↩")}
+            {gettext(
+              "A note, or an image description, saves with %{keys} or when you leave the field.",
+              keys: "Ctrl+↩"
+            )}
           </span>
         </:row>
       </.guide_section>
@@ -112,7 +125,7 @@ defmodule AcervoWeb.GuideComponents do
             </tr>
             <tr>
               <td><kbd><.mod_key /></kbd><kbd>↩</kbd></td>
-              <td>{gettext("In a note: save it")}</td>
+              <td>{gettext("In a note or description: save it")}</td>
             </tr>
             <tr>
               <td><kbd>?</kbd></td>
