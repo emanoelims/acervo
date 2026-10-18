@@ -165,6 +165,23 @@ defmodule Acervo.Library do
   @spec change_note(Link.t(), map()) :: Ecto.Changeset.t()
   def change_note(%Link{} = link, attrs \\ %{}), do: Link.note_changeset(link, attrs)
 
+  @doc """
+  Saves the owner's edit of the image description, stamping
+  `image_description_edited_at` so enrichment never overwrites it.
+  """
+  @spec update_image_description(Scope.t(), Link.t(), map()) ::
+          {:ok, Link.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def update_image_description(%Scope{} = scope, %Link{} = link, attrs) do
+    with {:ok, link} <- owned(scope, link) do
+      # phase 4: enqueue EmbedLink
+      link |> Link.image_description_changeset(attrs) |> Repo.update() |> updated(scope)
+    end
+  end
+
+  @doc "Returns a changeset for tracking image description changes."
+  @spec change_image_description(Link.t(), map()) :: Ecto.Changeset.t()
+  def change_image_description(%Link{} = link, attrs \\ %{}), do: Link.image_description_changeset(link, attrs)
+
   @spec mark_triaged(Scope.t(), Link.t()) :: {:ok, Link.t()} | {:error, :not_found}
   def mark_triaged(%Scope{} = scope, %Link{} = link) do
     with {:ok, link} <- owned(scope, link) do

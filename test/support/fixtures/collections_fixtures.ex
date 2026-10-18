@@ -5,6 +5,7 @@ defmodule Acervo.CollectionsFixtures do
   """
 
   alias Acervo.Collections
+  alias Acervo.Collections.Suggestion
   alias Acervo.Library.Link
   alias Acervo.Library.LinkImage
   alias Acervo.Repo
@@ -46,6 +47,19 @@ defmodule Acervo.CollectionsFixtures do
 
     %LinkImage{link_id: link.id}
     |> LinkImage.changeset(attrs)
+    |> Repo.insert!()
+  end
+
+  @doc """
+  Inserts a suggestion for `link`, as the enrichment would: `attrs` carries
+  either `:collection_id` or `:proposed_name`, plus an optional `:reason` and
+  `:status` (default `:pending`).
+  """
+  def suggestion_fixture(scope, link, attrs \\ %{}) do
+    {status, attrs} = attrs |> Map.new() |> Map.pop(:status, :pending)
+
+    %Suggestion{user_id: scope.user.id, link_id: link.id, status: status}
+    |> Suggestion.changeset(Enum.into(attrs, %{reason: "Fits"}))
     |> Repo.insert!()
   end
 end

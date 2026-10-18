@@ -202,6 +202,34 @@ defmodule Acervo.LibraryTest do
     end
   end
 
+  describe "update_image_description/3" do
+    test "saves the edit, stamps edited_at and broadcasts", %{scope: scope} do
+      link = link_fixture(scope)
+
+      assert {:ok, %Link{image_description: "Um gato", image_description_edited_at: %DateTime{}}} =
+               Library.update_image_description(scope, link, %{"image_description" => "  Um gato "})
+
+      assert_receive {:link_updated, %Link{image_description: "Um gato"}}
+      assert %Link{image_description_edited_at: %DateTime{}} = Repo.get!(Link, link.id)
+    end
+
+    test "another user gets not_found", %{scope: scope} do
+      link = link_fixture(scope)
+
+      assert {:error, :not_found} =
+               Library.update_image_description(user_scope_fixture(), link, %{"image_description" => "x"})
+
+      refute Repo.get!(Link, link.id).image_description
+    end
+
+    test "change_image_description/2 validates the length", %{scope: scope} do
+      changeset =
+        Library.change_image_description(link_fixture(scope), %{"image_description" => String.duplicate("a", 1001)})
+
+      refute changeset.valid?
+    end
+  end
+
   describe "delete_link/2" do
     test "deletes and broadcasts", %{scope: scope} do
       link = link_fixture(scope)
