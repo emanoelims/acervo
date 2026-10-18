@@ -48,7 +48,6 @@ defmodule Acervo.AI.EnrichLink do
   @min_snooze 15
   @max_snooze 600
   @default_snooze 60
-  @transient_statuses [408, 409]
 
   @doc """
   Marks `link` `:pending` (on the link row only, `updated_at` untouched) and
@@ -188,7 +187,7 @@ defmodule Acervo.AI.EnrichLink do
   end
 
   defp failed(job, scope, link, reason) do
-    case classify(reason) do
+    case AI.Client.classify(reason) do
       :transient -> transient(job, scope, link, reason)
       :permanent -> give_up(scope, link, {:cancel, reason})
     end
@@ -198,13 +197,6 @@ defmodule Acervo.AI.EnrichLink do
   defp snooze_seconds(retry_after, snoozed) do
     (retry_after || @default_snooze * Integer.pow(2, snoozed)) |> max(@min_snooze) |> min(@max_snooze)
   end
-
-  @doc false
-  @spec classify(AI.Client.error()) :: :transient | :permanent
-  def classify(:unavailable), do: :permanent
-  def classify({:http, status}) when status in @transient_statuses or status >= 500, do: :transient
-  def classify({:http, _status}), do: :permanent
-  def classify(_reason), do: :transient
 
   defp transient(%Oban.Job{attempt: attempt, max_attempts: max}, scope, link, reason) do
     if attempt >= max, do: give_up(scope, link, {:error, reason}), else: {:error, reason}

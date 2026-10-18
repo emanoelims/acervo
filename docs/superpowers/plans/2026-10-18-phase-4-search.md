@@ -202,7 +202,44 @@ Tasks 1 and 2 can run in parallel. Task 4's query work can start once 1 and 2 ar
 
 #### Spike findings
 
-*(Task 1 fills this in.)*
+Run on 2026-10-18 against the dev server through Tidewave, with the real key: 28 requests and $0.0003 in total. Every call went through `Acervo.AI.embed/4` and is in dev `ai_calls`, except the 512-dimension check, which called `ReqLLM.embed/3` directly.
+
+- **Model:** `openrouter:voyageai/voyage-4-lite` is kept (Decision 1). No fallback to `text-embedding-3-small` was needed.
+- **`dimensions`:** honored.
+  - `dimensions: 1024` returns 1024 floats with an L2 norm of 1.0.
+  - One check with `dimensions: 512` returned 512 floats, so OpenRouter forwards the parameter rather than ignoring it.
+- **`input_type`:** accepted and honored.
+  - It goes in `provider_options: [input_type: "document" | "query"]`, and the body carries it at the top level.
+  - The same text embedded as a query and as a document has a cosine similarity of only 0.744, so the two types really differ.
+- **ReqLLM options:** `ReqLLM.embed/3` validates its options strictly.
+  - `max_retries` and `receive_timeout` at the top level fail with a `NimbleOptions` error, wrapped in `ReqLLM.Error.Unknown.Unknown`, and no request is made. The first spike attempt failed this way: it is the `provider_error` row in dev `ai_calls`.
+  - Both go in `req_http_options` instead. ReqLLM's retry step reads `max_retries` from the Req options, so `[retry: false, max_retries: 0, receive_timeout: ...]` gives exactly one request on a 429 or 500 (checked offline with a plug).
+- **Request:** `POST /api/v1/embeddings` with `model: "voyageai/voyage-4-lite"`, `input`, `dimensions`, `encoding_format: "float"` and `input_type`.
+- **Latency:**
+  - First call: 1.4 s, the same for the whole call and for the HTTP request per `[:req_llm, :request, :stop]` telemetry.
+  - Documents afterwards (59 to 2,143 tokens): 0.7 to 2.4 s, median 0.78 s.
+  - Queries: 0.68 to 0.99 s, median 0.75 s. That is well inside the 3 s search timeout, with the cache absorbing repeats.
+- **Usage:** `%{input_tokens:, output_tokens: 0, total_cost:, ...}` (the `:input`/`:output` aliases are present too). Queries cost 3 to 4 tokens. The 7 dev documents averaged about 1,060 tokens, with a maximum of 2,143.
+- **Cost:**
+  - `total_cost` is filled but **rounded to $0.000001** (`ReqLLM.Billing` rounds to 6 decimals). A 14-token call reports 0.0, so a short query would record zero and a 25-token one double its cost.
+  - So `Acervo.AI.Rates` gained `openrouter:voyageai/voyage-4-lite` at $0.02 per million input tokens, and is now keyed by the full model spec.
+  - `Acervo.AI` prefers the dated rate whenever `Rates` knows the model, and falls back to ReqLLM's cost otherwise. Claude is unaffected: ReqLLM never priced it.
+  - The spike's `ai_calls` row: `embed_link`, status `ok`, 14 input / 0 output tokens, `cost_usd` 0.00000028, `duration_ms` 1408.
+  - Per call: a query is about $0.00000008; a typical document about $0.00002, and $0.00004 at 2,000 tokens.
+- **Dimension mismatch:** ReqLLM rejects a wrong length before returning the usage, so the usage callback fires with `%{}` and that call's tokens are lost. This is acceptable, because a mismatch is a configuration error.
+- **Similarity cutoff (Decision 2).** 7 dev documents in Task 3's format (the eighth link, an empty Instagram post, would be skipped). Cosine similarity, query type against document type:
+
+  | query | best match | its similarity | highest other |
+  |---|---|---|---|
+  | machine learning in Elixir | Nx v0.1 post | 0.579 | 0.407 (Elixir v1.17), 0.296 (Req) |
+  | github outage | GitHub availability report | 0.588 | 0.186 |
+  | música dos anos 80 | Rick Astley video (cross-lingual, implied) | 0.319 | 0.084 |
+  | xyzzy plover (nonsense) | — | — | 0.227 (a 59-token tweet) |
+  | receita de bolo de chocolate (off-topic) | — | — | 0.123 |
+
+  - Relevant hits score 0.32 to 0.59. Noise stays at or below 0.23, and short documents drift highest.
+  - **Proposed cutoff: keep vector hits with similarity ≥ 0.27, that is `max_distance: 0.73` on `<=>`.** It keeps the weakest real match (0.319), drops the noisiest unrelated document (0.227), and passes "Req" for the Elixir ML query (0.296, related).
+  - Recheck it in Task 6 with more links, because 7 documents is a thin sample.
 
 ---
 

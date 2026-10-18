@@ -5,6 +5,7 @@ defmodule Acervo.AI.ClaudeTest do
   import ExUnit.CaptureLog
 
   alias Acervo.AI.Claude
+  alias Acervo.AI.Client
   alias ReqLLM.Error.API
   alias ReqLLM.Message.ContentPart
 
@@ -120,17 +121,17 @@ defmodule Acervo.AI.ClaudeTest do
   end
 
   test "reads retry-after from rate-limit errors that carry headers" do
-    assert Claude.map_error(%API.Request{status: 429, headers: %{"retry-after" => ["30"]}}) == {:rate_limited, 30}
-    assert Claude.map_error(%API.Request{status: 429, headers: [{"retry-after", "7"}]}) == {:rate_limited, 7}
-    assert Claude.map_error(%API.Request{status: 429, headers: %{"retry-after" => ["soon"]}}) == {:rate_limited, nil}
-    assert Claude.map_error(%API.Request{status: 429, headers: nil}) == {:rate_limited, nil}
-    assert Claude.map_error(%API.Timeout{kind: :receive, timeout: 60_000}) == :timeout
-    assert Claude.map_error(%API.Request{status: nil, cause: %Req.TransportError{reason: :timeout}}) == :timeout
+    assert Client.map_error(%API.Request{status: 429, headers: %{"retry-after" => ["30"]}}) == {:rate_limited, 30}
+    assert Client.map_error(%API.Request{status: 429, headers: [{"retry-after", "7"}]}) == {:rate_limited, 7}
+    assert Client.map_error(%API.Request{status: 429, headers: %{"retry-after" => ["soon"]}}) == {:rate_limited, nil}
+    assert Client.map_error(%API.Request{status: 429, headers: nil}) == {:rate_limited, nil}
+    assert Client.map_error(%API.Timeout{kind: :receive, timeout: 60_000}) == :timeout
+    assert Client.map_error(%API.Request{status: nil, cause: %Req.TransportError{reason: :timeout}}) == :timeout
 
-    assert Claude.map_error(%API.Request{status: nil, cause: %Req.TransportError{reason: :econnrefused}}) ==
+    assert Client.map_error(%API.Request{status: nil, cause: %Req.TransportError{reason: :econnrefused}}) ==
              :provider_error
 
-    assert Claude.map_error(:boom) == :provider_error
+    assert Client.map_error(:boom) == :provider_error
   end
 
   test "rejects text that is not a valid object and still reports the usage", %{context: context} do

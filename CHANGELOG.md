@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Migration
+
+- Production now requires the `OPENROUTER_API_KEY` secret, used for search embeddings. `ACERVO_EMBEDDING_MODEL` optionally picks another model that returns 1024 dimensions.
+
 ## [0.8.0] - 2026-10-18
 
 AI reads every saved link and suggests where it belongs.

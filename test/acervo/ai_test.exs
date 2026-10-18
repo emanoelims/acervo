@@ -8,6 +8,7 @@ defmodule Acervo.AITest do
   alias Acervo.AI.Call
   alias Acervo.AI.Rates
   alias Acervo.FakeAIClient
+  alias Acervo.FakeEmbedder
 
   @schema %{"type" => "object", "properties" => %{"language" => %{"type" => "string"}}}
 
@@ -54,7 +55,8 @@ defmodule Acervo.AITest do
       assert call.error == nil
       assert call.input_tokens == 1200
       assert call.output_tokens == 80
-      assert Decimal.equal?(call.cost_usd, Decimal.new("0.0002"))
+      # The dated rate wins over the client's cost: 1200 × $4/M + 80 × $20/M.
+      assert Decimal.equal?(call.cost_usd, Decimal.new("0.0064"))
       assert call.duration_ms >= 0
     end
 
@@ -99,16 +101,114 @@ defmodule Acervo.AITest do
     end
   end
 
+  describe "embed/4" do
+    test "returns the vector and records the call", %{scope: scope} do
+      test = self()
+
+      FakeEmbedder.stub(fn model, text, opts ->
+        send(test, {:called, model, text, opts})
+        {:ok, FakeEmbedder.axis(0)}
+      end)
+
+      assert {:ok, vector} =
+               AI.embed(scope, %{operation: "embed_query", link_id: nil}, "praia",
+                 input_type: :query,
+                 receive_timeout: 900
+               )
+
+      assert vector == FakeEmbedder.axis(0)
+      assert_received {:called, "openrouter:voyageai/voyage-4-lite", "praia", opts}
+      assert opts[:dimensions] == 1024
+      assert opts[:input_type] == :query
+      assert opts[:receive_timeout] == 900
+      assert is_function(opts[:usage_callback], 1)
+
+      assert [call] = Repo.all(Call)
+      assert call.user_id == scope.user.id
+      assert call.operation == "embed_query"
+      assert call.model == "openrouter:voyageai/voyage-4-lite"
+      assert call.status == :ok
+      assert call.input_tokens == 12
+      assert call.output_tokens == 0
+      assert Decimal.equal?(call.cost_usd, Decimal.new("0.00000024"))
+    end
+
+    test "records the link of a document embedding", %{scope: scope} do
+      link = link_fixture(scope)
+
+      assert {:ok, _vector} =
+               AI.embed(scope, %{operation: "embed_link", link_id: link.id}, "texto", input_type: :document)
+
+      assert [%Call{operation: "embed_link", link_id: link_id}] = Repo.all(Call)
+      assert link_id == link.id
+    end
+
+    test "records a failed call with its error code", %{scope: scope} do
+      FakeEmbedder.stub(fn _model, _text, _opts -> {:error, {:http, 500}} end)
+
+      assert {:error, {:http, 500}} = AI.embed(scope, %{operation: "embed_query", link_id: nil}, "praia")
+      assert [%Call{status: :error, error: "http_500", operation: "embed_query"}] = Repo.all(Call)
+    end
+
+    test "is counted in the cost summary", %{scope: scope} do
+      assert {:ok, _vector} = AI.embed(scope, %{operation: "embed_query", link_id: nil}, "praia")
+
+      assert [%{calls: 1, input_tokens: 12, output_tokens: 0, cost_usd: cost}] = AI.cost_summary(1)
+      assert Decimal.equal?(cost, Decimal.new("0.00000024"))
+    end
+
+    test "uses the configured model and fixed dimensions" do
+      assert AI.embedding_model() == "openrouter:voyageai/voyage-4-lite"
+      assert AI.embedding_dimensions() == 1024
+      assert {:ok, _model} = ReqLLM.Embedding.validate_model(AI.embedding_model())
+    end
+  end
+
+  describe "FakeEmbedder" do
+    test "gives the same unit vector for the same text" do
+      vector = FakeEmbedder.vector("praia")
+
+      assert length(vector) == 1024
+      assert vector == FakeEmbedder.vector("praia")
+      refute vector == FakeEmbedder.vector("montanha")
+      assert_in_delta dot(vector, vector), 1.0, 1.0e-9
+    end
+
+    test "builds orthogonal axes and normalized blends" do
+      assert dot(FakeEmbedder.axis(0), FakeEmbedder.axis(1)) == 0.0
+      assert dot(FakeEmbedder.axis(3), FakeEmbedder.axis(3)) == 1.0
+
+      blend = FakeEmbedder.blend([{0, 1.0}, {1, 1.0}])
+      assert_in_delta dot(blend, blend), 1.0, 1.0e-9
+      assert_in_delta dot(blend, FakeEmbedder.axis(0)), :math.sqrt(0.5), 1.0e-9
+    end
+
+    test "counts calls from the test process", %{scope: scope} do
+      assert FakeEmbedder.calls() == 0
+
+      task = Task.async(fn -> AI.embed(scope, %{operation: "embed_query", link_id: nil}, "praia") end)
+      assert {:ok, _vector} = Task.await(task)
+
+      assert FakeEmbedder.calls() == 1
+    end
+  end
+
   describe "Rates.estimate/3" do
     test "prices Haiku 5.5 at the dated rates, with the long-context tier" do
       assert Decimal.equal?(Rates.estimate("anthropic:claude-haiku-5-5", 100_000, 0), Decimal.new("0.01"))
-      assert Decimal.equal?(Rates.estimate("claude-haiku-5-5", 0, 1_000_000), Decimal.new("0.5"))
+      assert Decimal.equal?(Rates.estimate("anthropic:claude-haiku-5-5", 0, 1_000_000), Decimal.new("0.5"))
       assert Decimal.equal?(Rates.estimate("anthropic:claude-haiku-5-5", 200_000, 0), Decimal.new("0.1"))
       assert Decimal.equal?(Rates.estimate("anthropic:claude-sonnet-5-5", 1000, 1000), Decimal.new("0.012"))
     end
 
-    test "returns nil for unknown models or missing tokens" do
+    test "prices voyage-4-lite at OpenRouter's listed rate" do
+      assert Decimal.equal?(Rates.estimate("openrouter:voyageai/voyage-4-lite", 12, 0), Decimal.new("0.00000024"))
+      assert Decimal.equal?(Rates.estimate("openrouter:voyageai/voyage-4-lite", 2000, 0), Decimal.new("0.00004"))
+    end
+
+    test "returns nil for unknown models, unprefixed specs or missing tokens" do
       assert Rates.estimate("anthropic:claude-unknown", 10, 10) == nil
+      assert Rates.estimate("claude-haiku-5-5", 10, 10) == nil
       assert Rates.estimate("anthropic:claude-haiku-5-5", nil, 10) == nil
     end
   end
@@ -142,6 +242,8 @@ defmodule Acervo.AITest do
       assert [%{calls: 1, input_tokens: 5, cost_usd: nil}] = AI.cost_summary(1)
     end
   end
+
+  defp dot(a, b), do: a |> Enum.zip_with(b, &(&1 * &2)) |> Enum.sum()
 
   defp insert_call(scope, inserted_at, attrs) do
     Repo.insert!(

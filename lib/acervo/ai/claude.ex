@@ -11,7 +11,6 @@ defmodule Acervo.AI.Claude do
   @behaviour Acervo.AI.Client
 
   alias Acervo.AI.Client
-  alias ReqLLM.Error.API
 
   require Logger
 
@@ -59,7 +58,7 @@ defmodule Acervo.AI.Claude do
   end
 
   defp notify_usage({:ok, response} = result, callback) do
-    callback.(usage(response.usage))
+    callback.(Client.usage(response.usage))
     result
   end
 
@@ -67,19 +66,6 @@ defmodule Acervo.AI.Claude do
     callback.(%{})
     result
   end
-
-  @doc false
-  @spec usage(map() | nil) :: Client.usage()
-  def usage(usage) when is_map(usage) do
-    usage
-    |> Map.take([:input_tokens, :output_tokens, :total_cost])
-    |> Map.filter(fn
-      {:total_cost, value} -> is_number(value) and value >= 0
-      {_key, value} -> is_integer(value) and value >= 0
-    end)
-  end
-
-  def usage(_usage), do: %{}
 
   defp extract_object({:ok, response}, schema) do
     with {:ok, object} when is_map(object) <- ReqLLM.Response.unwrap_object(response),
@@ -94,8 +80,8 @@ defmodule Acervo.AI.Claude do
   end
 
   defp extract_object({:error, error}, _schema) do
-    reason = map_error(error)
-    {module, status} = error_class(error)
+    reason = Client.map_error(error)
+    {module, status} = Client.error_class(error)
 
     Logger.warning(
       "AI provider request failed: #{inspect(module)}, HTTP #{inspect(status)}, #{Client.error_code(reason)}"
@@ -103,36 +89,4 @@ defmodule Acervo.AI.Claude do
 
     {:error, reason}
   end
-
-  @doc false
-  @spec map_error(term()) :: Client.error()
-  def map_error(%API.Request{status: 429, headers: headers}), do: {:rate_limited, retry_after(headers)}
-  def map_error(%{status: 408}), do: :timeout
-  def map_error(%{status: status}) when is_integer(status) and status in 400..599, do: {:http, status}
-  def map_error(%API.Timeout{}), do: :timeout
-  def map_error(%Req.TransportError{reason: :timeout}), do: :timeout
-  def map_error(%{cause: cause}) when is_exception(cause), do: map_error_cause(cause)
-  def map_error(_error), do: :provider_error
-
-  defp map_error_cause(%API.Timeout{}), do: :timeout
-  defp map_error_cause(%Req.TransportError{reason: :timeout}), do: :timeout
-  defp map_error_cause(_cause), do: :provider_error
-
-  defp retry_after(headers) do
-    value =
-      case headers do
-        %{} -> headers |> Map.get("retry-after") |> List.wrap() |> List.first()
-        list when is_list(list) -> list |> List.keyfind("retry-after", 0, {nil, nil}) |> elem(1)
-        _ -> nil
-      end
-
-    case value && Integer.parse(String.trim(value)) do
-      {seconds, ""} when seconds > 0 -> seconds
-      _ -> nil
-    end
-  end
-
-  defp error_class(%{__struct__: module, status: status}) when is_integer(status), do: {module, status}
-  defp error_class(%{__struct__: module}), do: {module, nil}
-  defp error_class(_error), do: {:unknown, nil}
 end

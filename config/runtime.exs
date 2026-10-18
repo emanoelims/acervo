@@ -27,6 +27,14 @@ config :acervo, :ai, model: System.get_env("ACERVO_CHAT_MODEL", "anthropic:claud
 # (see `mise.local.toml.example`); it is required in production.
 config :acervo, :anthropic, api_key: System.get_env("ANTHROPIC_API_KEY")
 
+# Embeddings for search, through OpenRouter. The model must return
+# 1024-dimension vectors (the `links.embedding` column type).
+config :acervo, :embeddings, model: System.get_env("ACERVO_EMBEDDING_MODEL", "openrouter:voyageai/voyage-4-lite")
+
+# OpenRouter API key. Set it in `mise.local.toml` for development; it is
+# required in production.
+config :acervo, :openrouter, api_key: System.get_env("OPENROUTER_API_KEY")
+
 if config_env() != :test do
   if allowed = System.get_env("ACERVO_ALLOWED_EMAILS") do
     emails =
@@ -87,6 +95,12 @@ if config_env() == :prod do
     raise """
     environment variable ANTHROPIC_API_KEY is missing.
     Get one at https://console.anthropic.com/settings/keys
+    """
+
+  System.get_env("OPENROUTER_API_KEY") ||
+    raise """
+    environment variable OPENROUTER_API_KEY is missing.
+    Get one at https://openrouter.ai/settings/keys
     """
 
   System.get_env("ACERVO_ALLOWED_EMAILS") ||

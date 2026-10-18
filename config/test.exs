@@ -29,6 +29,11 @@ config :acervo, Oban, testing: :manual
 # The Claude adapter's own tests send its requests to `Req.Test` stubs.
 config :acervo, :ai_client, Acervo.FakeAIClient
 config :acervo, :ai_req_options, plug: {Req.Test, Acervo.AI.Claude}
+config :acervo, :embed_req_options, plug: {Req.Test, Acervo.AI.OpenRouterEmbedder}
+
+# No embedding calls in tests: `Acervo.FakeEmbedder` returns deterministic
+# vectors. The OpenRouter adapter's own tests use `Req.Test` stubs.
+config :acervo, :embedder, Acervo.FakeEmbedder
 
 # No DNS or network in tests: SafeFetch resolves through a static table and
 # its requests go to `Req.Test` stubs named `Acervo.Library.SafeFetch`.
