@@ -202,6 +202,101 @@ defmodule Acervo.Library.CaptureLinkTest do
     end
   end
 
+  describe "reader view" do
+    defp article_html do
+      paragraphs = Enum.map_join(1..3, "\n", &"<p>Paragraph #{&1}: bees pollinate crops and make honey for the hive.</p>")
+
+      """
+      <!doctype html>
+      <html><head><meta property="og:title" content="Bees"></head>
+      <body><nav><a href="/">Home</a></nav>
+      <article><h1>Bees</h1>#{paragraphs}
+      <p><img src="/img/hive.png" alt="Hive"><img src="/img/missing.png"><img src="/img/tiny.png"></p>
+      <p><a href="javascript:alert(1)" onclick="x">trap</a></p>
+      </article></body></html>
+      """
+    end
+
+    defp reader_link(link),
+      do:
+        Repo.one!(
+          from l in Link,
+            where: l.id == ^link.id,
+            select: map(l, [:content_html, :content_source, :content_extracted_at, :title])
+        )
+
+    defp content_images(link), do: link |> images_of() |> Enum.filter(&(&1.kind == :content))
+
+    test "stores the article as sanitized HTML with its images", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+      stub_site(article_html(), %{"/img/hive.png" => distinct_png(40), "/img/tiny.png" => distinct_png(8)})
+
+      assert :ok = perform(link)
+
+      assert %{content_source: :html, content_html: html, content_extracted_at: %DateTime{}} = reader_link(link)
+      assert [%LinkImage{kind: :content, width: 40, height: 40} = image] = content_images(link)
+      assert html =~ ~s(<img src="/images/#{image.id}" alt="Hive" width="40" height="40">)
+      assert html =~ "<h2>Bees</h2><p>Paragraph 1"
+      refute html =~ ~r/missing|tiny|javascript|onclick|Home/
+      assert html =~ "trap"
+
+      # Content images never show on the card.
+      assert_receive {:link_updated, %Link{images: []}}
+    end
+
+    test "prefers the page's Markdown", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+      markdown = "# Bees\n\n" <> String.duplicate("Bees *pollinate* crops. ", 12)
+
+      Req.Test.stub(SafeFetch, fn
+        %{request_path: "/posts/bees.md"} = conn ->
+          conn |> Plug.Conn.put_resp_content_type("text/markdown", nil) |> Plug.Conn.send_resp(200, markdown)
+
+        conn ->
+          conn |> Plug.Conn.put_resp_content_type("text/html") |> Plug.Conn.send_resp(200, article_html())
+      end)
+
+      assert :ok = perform(link)
+
+      assert %{content_source: :markdown, content_html: "<h2>Bees</h2><p>Bees <em>pollinate</em>" <> _} =
+               reader_link(link)
+    end
+
+    test "a page with too little to read records no content", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+      stub_site(page_html([]), %{})
+
+      assert :ok = perform(link)
+      assert %{content_html: nil, content_source: nil, content_extracted_at: %DateTime{}} = reader_link(link)
+    end
+
+    test "YouTube, X and Instagram keep their embeds instead", %{scope: scope} do
+      link = link_fixture(scope, "https://x.com/jack/status/20")
+
+      Req.Test.stub(SafeFetch, fn conn ->
+        conn |> Plug.Conn.put_resp_content_type("text/html") |> Plug.Conn.send_resp(200, article_html())
+      end)
+
+      perform(link)
+      assert %{content_html: nil, content_extracted_at: nil} = reader_link(link)
+    end
+
+    test "a crash while extracting it never fails the capture", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+
+      Req.Test.stub(SafeFetch, fn
+        %{request_path: "/posts/bees.md"} -> raise "boom"
+        conn -> conn |> Plug.Conn.put_resp_content_type("text/html") |> Plug.Conn.send_resp(200, article_html())
+      end)
+
+      log = capture_log(fn -> assert :ok = perform(link) end)
+
+      assert log =~ "reader content of link #{link.id} crashed"
+      assert %Link{status: :ready, title: "Bees", capture_error: nil} = Repo.get!(Link, link.id)
+      assert %{content_extracted_at: nil} = reader_link(link)
+    end
+  end
+
   describe "permanent errors" do
     test "a missing page ends ready with the error and no retry", %{scope: scope} do
       link = link_fixture(scope, "https://example.com/posts/gone")

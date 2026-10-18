@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head><title>Enum — Elixir docs</title><base href="https://docs.example.com/elixir/"></head>
+<body>
+  <div class="sidebar"><nav><a href="Kernel.html">Kernel</a><a href="Enum.html">Enum</a></nav></div>
+  <div class="content">
+    <div class="content-inner">
+      <h1>Enum <small>behaviour</small></h1>
+      <p>Functions for working with collections, known as enumerables. In Elixir, an enumerable is any data type that implements the <code>Enumerable</code> protocol.</p>
+      <pre><code class="makeup elixir"><span class="kd">iex&gt;</span> <span class="nc">Enum</span>.<span class="n">map</span>([1, 2, 3], fn x -&gt; x * 2 end)
+[2, 4, 6]</code></pre>
+      <p>Some functions, like <a href="Enum.html#reduce/3"><code>reduce/3</code></a>, are the building blocks of the others.</p>
+      <pre class="language-shell"><code class="language-shell">mix test --only enum</code></pre>
+      <h2 id="map/2">map(enumerable, fun)</h2>
+      <p>Returns a list where each element is the result of invoking <code>fun</code> on each corresponding element of <code>enumerable</code>.</p>
+    </div>
+  </div>
+</body>
+</html>

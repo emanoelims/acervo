@@ -28,7 +28,7 @@ defmodule Acervo.Library.Extractors.Generic do
   @doc """
   Like `fetch/2`, but also returns the final URL after redirects, which the
   capture carries as `final_url` too. The capture's `embeddable` follows the
-  final response's headers.
+  final response's headers, and its `document` is the parsed page.
   """
   @spec fetch_page(URI.t(), keyword()) :: {:ok, Capture.t(), String.t()} | {:error, term()}
   def fetch_page(%URI{} = uri, opts) do
@@ -51,7 +51,10 @@ defmodule Acervo.Library.Extractors.Generic do
     end
   end
 
-  defp parse(body, response), do: HtmlMeta.parse(body, response.url, content_type(response))
+  defp parse(body, response) do
+    doc = HtmlMeta.document(body, content_type(response))
+    %{HtmlMeta.parse_document(doc, response.url) | document: doc}
+  end
 
   defp content_types(%{headers: headers}), do: headers |> Map.get("content-type", []) |> List.wrap()
 

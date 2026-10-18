@@ -14,6 +14,10 @@ defmodule Acervo.Library.CaptureLink do
   and handled as a transient error coded `"crashed"`. Every run broadcasts
   `{:link_updated, link}`.
 
+  Generic pages also get their reader view (`Acervo.Library.Reader`) once the
+  preview is saved; YouTube, X and Instagram keep their embeds instead. A
+  failure there is logged and never fails the capture.
+
   A run never leaves the link `:processing` on its own. A job killed mid-run
   (by its timeout or a node restart rescued by `Oban.Plugins.Lifeline`) is
   retried, and every run starts over whatever the link's status. When the
@@ -31,6 +35,7 @@ defmodule Acervo.Library.CaptureLink do
   alias Acervo.Library.Images
   alias Acervo.Library.Link
   alias Acervo.Library.LinkImage
+  alias Acervo.Library.Reader
   alias Acervo.Library.SafeFetch
   alias Acervo.Library.URL
   alias Acervo.Repo
@@ -39,6 +44,8 @@ defmodule Acervo.Library.CaptureLink do
   require Logger
 
   @max_images 4
+  # The reader view starts no request after this, well within the timeout.
+  @content_ms 150_000
   @max_image_bytes 15_000_000
   @permanent_errors [:blocked, :not_found, :not_html, :blocked_address, :bad_port, :invalid_url, :too_many_redirects]
 
@@ -49,9 +56,11 @@ defmodule Acervo.Library.CaptureLink do
   # captured again, like any retry.
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"link_id" => link_id}, attempt: attempt, max_attempts: max_attempts}) do
+    deadline = System.monotonic_time(:millisecond) + @content_ms
+
     case load(link_id) do
       {:ok, scope, link} ->
-        result = capture(scope, link, attempt >= max_attempts)
+        result = capture(scope, link, %{final_attempt?: attempt >= max_attempts, deadline: deadline})
         Library.broadcast_updated(scope, link.id)
         result
 
@@ -71,24 +80,24 @@ defmodule Acervo.Library.CaptureLink do
 
   # Extracts from the canonical URL, which always has an http(s) scheme even
   # when the user typed a bare host.
-  defp capture(scope, link, final_attempt?) do
+  defp capture(scope, link, run) do
     case update_link(link, %{status: :processing}) do
-      {:ok, link} -> safely_extract(scope, link, final_attempt?)
+      {:ok, link} -> safely_extract(scope, link, run)
       gone_or_error -> finish(gone_or_error, :ok)
     end
   end
 
-  defp safely_extract(scope, link, final_attempt?) do
-    extract(scope, link, final_attempt?)
+  defp safely_extract(scope, link, run) do
+    extract(scope, link, run)
   rescue
     exception ->
       log_crash(link, exception, __STACKTRACE__)
-      handle_error(link, :crashed, final_attempt?)
+      handle_error(link, :crashed, run.final_attempt?)
   end
 
   # Logs the exception's type and stacktrace only: its message and the call
   # arguments could carry page content.
-  defp log_crash(link, exception, stacktrace) do
+  defp log_crash(link, exception, stacktrace, what \\ "capture") do
     stacktrace =
       Enum.map(stacktrace, fn
         {module, fun, args, location} when is_list(args) -> {module, fun, length(args), location}
@@ -96,21 +105,21 @@ defmodule Acervo.Library.CaptureLink do
       end)
 
     Logger.error(
-      "capture of link #{link.id} crashed with #{inspect(exception.__struct__)}\n" <>
+      "#{what} of link #{link.id} crashed with #{inspect(exception.__struct__)}\n" <>
         Exception.format_stacktrace(stacktrace)
     )
   end
 
-  defp extract(scope, link, final_attempt?) do
+  defp extract(scope, link, run) do
     case Extractor.extract(link.canonical_url) do
-      {:ok, %Capture{} = capture} -> apply_capture(scope, link, capture)
-      {:error, reason} -> handle_error(link, reason, final_attempt?)
+      {:ok, %Capture{} = capture} -> apply_capture(scope, link, capture, run)
+      {:error, reason} -> handle_error(link, reason, run.final_attempt?)
     end
   end
 
   ## Success
 
-  defp apply_capture(scope, link, %Capture{} = capture) do
+  defp apply_capture(scope, link, %Capture{} = capture, run) do
     store_images(scope, link, capture.image_urls)
 
     attrs = %{
@@ -128,8 +137,21 @@ defmodule Acervo.Library.CaptureLink do
     link
     |> Link.capture_changeset(Map.merge(attrs, resolved_url(capture)))
     |> save()
+    |> tap(&store_content(scope, &1, capture, run))
     |> finish(:ok)
   end
+
+  ## Reader view
+
+  defp store_content(scope, {:ok, %Link{source: :generic} = link}, %Capture{document: %LazyHTML{} = doc} = capture, run) do
+    page_url = capture.final_url || link.canonical_url
+    content = Reader.build(doc, page_url, deadline: run.deadline)
+    Reader.store(scope, link, content, deadline: run.deadline)
+  rescue
+    exception -> log_crash(link, exception, __STACKTRACE__, "reader content")
+  end
+
+  defp store_content(_scope, _saved, _capture, _run), do: :ok
 
   # `canonical_url` is the immutable dedupe key and never changes. Where the
   # page says it lives (its canonical URL, or else where the fetch ended up
@@ -158,7 +180,9 @@ defmodule Acervo.Library.CaptureLink do
   defp store_images(scope, link, urls) do
     existing =
       Repo.all(
-        from i in LinkImage, where: i.link_id == ^link.id, select: %{sha256: i.sha256, kind: i.kind, position: i.position}
+        from i in LinkImage,
+          where: i.link_id == ^link.id and i.kind != :content,
+          select: %{sha256: i.sha256, kind: i.kind, position: i.position}
       )
 
     state = %{

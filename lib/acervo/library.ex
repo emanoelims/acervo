@@ -9,7 +9,9 @@ defmodule Acervo.Library do
   collections preloaded.
 
   Preloaded images never carry their bytes, which are served separately
-  through `Acervo.Storage.fetch/2`.
+  through `Acervo.Storage.fetch/2`, and are only the card's: previews and
+  screenshots. The reader view's images and HTML are loaded on their own by
+  `reader_content/2`.
   """
 
   import Ecto.Query
@@ -223,11 +225,20 @@ defmodule Acervo.Library do
   end
 
   defp insert_screenshot(scope, link, image) do
-    Repo.update_all(from(i in LinkImage, where: i.link_id == ^link.id), inc: [position: 1])
+    Repo.update_all(from(i in LinkImage, where: i.link_id == ^link.id and i.kind != :content), inc: [position: 1])
 
     with {:ok, _image} <- Storage.put(scope, link, Map.merge(image, %{kind: :screenshot, position: 0})) do
       link |> Link.capture_changeset(%{status: :ready, capture_error: nil}) |> Repo.update()
     end
+  end
+
+  @doc """
+  The link's reader HTML, sanitized at capture by `Acervo.Library.Sanitizer`
+  and safe to render raw, or `nil` when it has none.
+  """
+  @spec reader_content(Scope.t(), Link.t()) :: String.t() | nil
+  def reader_content(%Scope{user: user}, %Link{id: id}) do
+    Repo.one(from l in Link, where: l.id == ^id and l.user_id == ^user.id, select: l.content_html)
   end
 
   @doc "Subscribes the caller to the scope's link broadcasts."
@@ -269,7 +280,7 @@ defmodule Acervo.Library do
     Repo.preload(link, [:collections, images: images_query()], force: true)
   end
 
-  defp images_query, do: from(i in LinkImage, select: struct(i, ^@image_fields))
+  defp images_query, do: from(i in LinkImage, where: i.kind != :content, select: struct(i, ^@image_fields))
 
   defp broadcast(%Scope{user: user}, message) do
     Phoenix.PubSub.broadcast(Acervo.PubSub, topic(user.id), message)

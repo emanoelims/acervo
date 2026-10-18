@@ -53,6 +53,7 @@ defmodule Acervo.MixProject do
       {:tidewave, "~> 0.9.1", only: :dev},
       {:phoenix_live_view, "~> 1.2.0"},
       {:lazy_html, ">= 0.1.0"},
+      {:mdex, "~> 0.14.2"},
       {:image, "~> 0.72.0"},
       {:phoenix_live_dashboard, "~> 0.9.1"},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},

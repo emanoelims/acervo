@@ -23,6 +23,10 @@ defmodule Acervo.Library.Link do
     field :published_at, :utc_datetime
     field :text_excerpt, :string
     field :embeddable, :boolean
+    # Up to 300 KB, so it is only loaded when asked for (`Library.reader_content/2`).
+    field :content_html, :string, load_in_query: false
+    field :content_source, Ecto.Enum, values: [:markdown, :html]
+    field :content_extracted_at, :utc_datetime
     field :note, :string
     field :triaged_at, :utc_datetime
 
@@ -83,6 +87,15 @@ defmodule Acervo.Library.Link do
     String.to_existing_atom(key)
   rescue
     ArgumentError -> nil
+  end
+
+  @doc """
+  The reader content, the trusted output of `Acervo.Library.Sanitizer`.
+  """
+  def content_changeset(link, attrs) do
+    link
+    |> cast(attrs, [:content_html, :content_source, :content_extracted_at])
+    |> validate_length(:content_html, max: 320_000, count: :bytes)
   end
 
   def note_changeset(link, attrs) do

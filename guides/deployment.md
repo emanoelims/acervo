@@ -121,3 +121,25 @@ The public `/health` route has no pipeline and no browser session, because Fly's
 check sends no cookies or CSRF token. It runs `SELECT 1` and reports only
 `{"status":"ok"}` (200) or `{"status":"unavailable"}` (503). Never enable
 development routes on Fly.
+
+## One-off tasks
+
+Release tasks run inside the app's machine with `bin/acervo eval`. They start
+only what they need, so they are safe next to the running server.
+
+### Reader content backfill
+
+Links captured before reader mode have no article. Enqueue one
+`Acervo.Library.ExtractContent` job per ready web-page link that was never
+extracted:
+
+```sh
+fly ssh console -a acervo-app -C "/app/bin/acervo eval 'Acervo.Release.backfill_reader_content()'"
+```
+
+It prints how many links were enqueued. The running app's `content` queue
+fetches each page again, one at a time, and stores only its article and the
+article's images; titles, notes, collections and preview images are untouched.
+Rerunning it skips links already extracted, and rerunning a job replaces that
+link's previous article images. Watch progress in the logs or with
+`SELECT count(*) FROM links WHERE content_extracted_at IS NULL AND source = 'generic'`.
