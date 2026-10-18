@@ -149,6 +149,9 @@ defmodule AcervoWeb.ArchiveComponents do
         <:trigger><.icon name="lucide-settings-2" class="size-[19px]" /></:trigger>
         <.appearance_panel locale={@locale} return_to={@return_to} />
         <div class="dock-panel-divider"></div>
+        <.link id="dock-guide" patch={~p"/guide"} class="dock-panel-row">
+          <.icon name="lucide-keyboard" class="size-4" /><span>{gettext("Shortcuts and features")}</span>
+        </.link>
         <.link id="dock-log-out" href={~p"/users/log-out"} method="delete" class="dock-panel-row">
           <.icon name="lucide-log-out" class="size-4" /><span>{gettext("Log out")}</span>
         </.link>
@@ -363,6 +366,19 @@ defmodule AcervoWeb.ArchiveComponents do
         }
       }
     </script>
+    """
+  end
+
+  @doc """
+  Renders the platform's modifier key: ⌘ on Apple devices, Ctrl elsewhere.
+  Both are rendered; CSS keeps the one matching `<html data-platform>`, which
+  `app.js` sets. With `plus`, Ctrl is followed by "+" (⌘↩ but Ctrl+↩).
+  """
+  attr :plus, :boolean, default: false
+
+  def mod_key(assigns) do
+    ~H"""
+    <span class="key-mac">⌘</span><span class="key-other">Ctrl{if @plus, do: "+"}</span>
     """
   end
 

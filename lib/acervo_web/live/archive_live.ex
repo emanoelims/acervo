@@ -6,10 +6,12 @@ defmodule AcervoWeb.ArchiveLive do
 
   Links are saved from the dock's pill or by pasting anywhere, and organized
   into collections from the link column; collections are created in column 1
-  and renamed, described or deleted from their column's menu.
+  and renamed, described or deleted from their column's menu. `/guide` opens
+  a column describing every feature and shortcut, also opened with `?`.
   """
   use AcervoWeb, :live_view
 
+  import AcervoWeb.GuideComponents
   import AcervoWeb.LinkComponents
 
   alias Acervo.Collections
@@ -17,6 +19,7 @@ defmodule AcervoWeb.ArchiveLive do
   alias Acervo.Library
 
   @max_screenshot_bytes 15_000_000
+  @note_saved_ms 1500
 
   @impl true
   def mount(_params, _session, socket) do
@@ -24,7 +27,7 @@ defmodule AcervoWeb.ArchiveLive do
 
     {:ok,
      socket
-     |> assign(filter: nil, collection: nil, link: nil, note_form: nil, screenshot_link_id: nil)
+     |> assign(filter: nil, collection: nil, link: nil, note_form: nil, note_saved: nil, screenshot_link_id: nil)
      |> assign(add_form: nil, new_collection_form: nil, editing: nil, collection_form: nil)
      |> assign(:collection_filter, collection_filter(""))
      |> allow_upload(:screenshot,
@@ -78,7 +81,7 @@ defmodule AcervoWeb.ArchiveLive do
   defp filter(action, _collection) when action in [:all, :all_link], do: :all
   defp filter(action, _collection) when action in [:inbox, :inbox_link], do: :inbox
   defp filter(action, collection) when action in [:collection, :collection_link], do: {:collection, collection.id}
-  defp filter(:home, _collection), do: nil
+  defp filter(action, _collection) when action in [:home, :guide], do: nil
 
   # A renamed collection changes the cards' hrefs, so it re-streams too.
   defp renamed?(%{id: id, slug: old}, %{id: id, slug: new}), do: old != new
@@ -125,7 +128,12 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   defp assign_link_fields(socket, link) do
-    assign(socket, link: link, note_form: link && note_form(link), collection_filter: collection_filter(""))
+    assign(socket,
+      link: link,
+      note_form: link && note_form(link),
+      note_saved: nil,
+      collection_filter: collection_filter("")
+    )
   end
 
   defp restream_existing(socket, nil), do: socket
@@ -201,6 +209,9 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   def handle_event("add_link", _params, socket), do: {:noreply, socket}
+
+  # The `?` key, outside fields.
+  def handle_event("open_guide", _params, socket), do: {:noreply, push_patch(socket, to: ~p"/guide")}
 
   # Organizing the open link.
   def handle_event("filter_collections", %{"query" => query}, socket),
@@ -410,11 +421,19 @@ defmodule AcervoWeb.ArchiveLive do
       {:noreply, socket}
     else
       case Library.update_note(socket.assigns.current_scope, link, %{note: note}) do
-        {:ok, link} -> {:noreply, assign(socket, link: link, note_form: note_form(link))}
+        {:ok, link} -> {:noreply, socket |> assign(link: link, note_form: note_form(link)) |> show_note_saved()}
         {:error, :not_found} -> {:noreply, gone(socket)}
         {:error, changeset} -> {:noreply, assign(socket, :note_form, to_form(changeset, as: :link, action: :validate))}
       end
     end
+  end
+
+  # "Saved" shows briefly; a newer save restarts the timer, so only the
+  # latest one clears it.
+  defp show_note_saved(socket) do
+    ref = make_ref()
+    Process.send_after(self(), {:clear_note_saved, ref}, @note_saved_ms)
+    assign(socket, :note_saved, ref)
   end
 
   defp gone(socket) do
@@ -463,6 +482,11 @@ defmodule AcervoWeb.ArchiveLive do
     end
   end
 
+  def handle_info({:clear_note_saved, ref}, %{assigns: %{note_saved: ref}} = socket),
+    do: {:noreply, assign(socket, :note_saved, nil)}
+
+  def handle_info({:clear_note_saved, _stale}, socket), do: {:noreply, socket}
+
   defp renamed_path(%{link: nil} = assigns, collection), do: list_path(%{assigns | collection: collection})
 
   defp renamed_path(%{link: link} = assigns, collection), do: link_path(assigns.filter, collection, link)
@@ -500,6 +524,8 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp assign_page_title(%{assigns: %{link: %{} = link}} = socket), do: assign(socket, :page_title, display_title(link))
 
+  defp assign_page_title(%{assigns: %{live_action: :guide}} = socket), do: assign(socket, :page_title, gettext("Guide"))
+
   defp assign_page_title(socket) do
     assign(socket, :page_title, list_title(socket.assigns.filter, socket.assigns.collection) || "Acervo")
   end
@@ -508,7 +534,7 @@ defmodule AcervoWeb.ArchiveLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div id="columns" class="columns" phx-hook=".PasteLink">
+      <div id="columns" class="columns" phx-hook=".Shortcuts">
         <.column id="column-root" class="column-root">
           <h1 class="root-title">Acervo</h1>
           <p class="lead" phx-no-format>
@@ -651,7 +677,12 @@ defmodule AcervoWeb.ArchiveLive do
             collections={@collections}
             collection_filter={@collection_filter}
             upload={@uploads.screenshot}
+            note_saved={!!@note_saved}
           />
+        </.column>
+
+        <.column :if={@live_action == :guide} id="column-guide" title={gettext("Guide")}>
+          <.guide />
         </.column>
       </div>
       <.add_pill :if={@add_form} form={@add_form} />
@@ -663,18 +694,25 @@ defmodule AcervoWeb.ArchiveLive do
         return_to={@return_to}
       />
     </Layouts.app>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".PasteLink">
-      // Pasting a link anywhere outside a field saves it. Only text that
-      // starts like a URL counts, so stray pasted words are never saved; the
-      // dock's add field still takes bare hosts. Pasted images are handled by
-      // the link column's own hook.
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".Shortcuts">
+      // Page-wide keys, ignored while typing in a field:
+      // - pasting a link saves it. Only text that starts like a URL counts, so
+      //   stray pasted words are never saved; the dock's add field still takes
+      //   bare hosts. Pasted images are handled by the link column's own hook.
+      // - `?` opens the guide.
       const URL_LIKE = /^(https?:\/\/|www\.)[^\s]+\.[^\s]{2,}$/i
+      const typing = target => target instanceof Element &&
+        (target.closest('input, textarea, select, [contenteditable]') || target.isContentEditable)
       export default {
         mounted() {
+          this.onKeydown = event => {
+            if (event.key !== '?' || event.ctrlKey || event.metaKey || event.altKey) return
+            if (event.defaultPrevented || event.isComposing || typing(event.target)) return
+            event.preventDefault()
+            this.pushEvent('open_guide', {})
+          }
           this.onPaste = event => {
-            const target = event.target
-            if (target instanceof Element &&
-                (target.closest('input, textarea, [contenteditable]') || target.isContentEditable)) return
+            if (typing(event.target)) return
             const data = event.clipboardData
             if (!data) return
             if (Array.from(data.files || []).some(file => file.type.startsWith('image/'))) return
@@ -684,9 +722,11 @@ defmodule AcervoWeb.ArchiveLive do
             this.pushEvent('add_link', {url})
           }
           window.addEventListener('paste', this.onPaste)
+          window.addEventListener('keydown', this.onKeydown)
         },
         destroyed() {
           window.removeEventListener('paste', this.onPaste)
+          window.removeEventListener('keydown', this.onKeydown)
         }
       }
     </script>

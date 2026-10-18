@@ -91,6 +91,21 @@
 .desc-input::placeholder { color: var(--faint); }
 .desc-form .field-errors { margin-top: 16px; }
 
+/* Key labels: ⌘ on Apple devices, Ctrl elsewhere (app.js sets data-platform). */
+:root[data-platform=mac] .key-other, :root:not([data-platform=mac]) .key-mac { display: none; }
+
+/* The guide column: short sections of icon rows, then the shortcuts. */
+.guide-section + .guide-section { margin-top: 30px; }
+.guide-head { margin: 0 0 12px; color: var(--ink); font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.guide-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.guide-row { display: flex; align-items: flex-start; gap: 12px; color: var(--body); font-size: 15px; line-height: 1.55; }
+.guide-glyph { flex: none; margin-top: 3px; color: var(--muted); }
+.guide-keys { width: 100%; border-collapse: collapse; color: var(--body); font-size: 15px; line-height: 1.55; }
+.guide-keys td { padding: 5px 0; vertical-align: baseline; }
+.guide-keys td:first-child { width: 1%; padding-right: 18px; white-space: nowrap; }
+.guide-keys kbd { display: inline-block; min-width: 24px; padding: 0 6px; border-radius: 6px; color: var(--muted); font: 12px/22px var(--font-ui); text-align: center; box-shadow: 0 0 0 1px var(--line); }
+.guide-keys kbd + kbd { margin-left: 4px; }
+
 @media (prefers-reduced-motion: reduce) {
   .column-scroll, .float, .float.is-leaving { animation: none; }
   .column-up, .dock-item, .swatch, .dot, .font-chip, .lang-chip, .nav-add { transition: none; }

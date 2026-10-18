@@ -94,6 +94,18 @@ a.card:hover .card-shot { color: var(--muted); }
 .note-input::placeholder { color: var(--faint); }
 .note-input:hover { background: color-mix(in oklab, var(--soft) 60%, transparent); }
 .note-input:focus { outline: 0; background: var(--soft); }
+/* Under the note, in the gap above the actions: the shortcut hint while it is
+   focused and a brief "Saved". Absolute, so neither moves the layout. */
+.link-notes { position: relative; }
+.note-foot { position: absolute; top: 100%; left: 0; right: 0; display: flex; align-items: center; gap: 12px; height: 20px; margin-top: 2px; color: var(--faint); font-size: 12px; pointer-events: none; }
+.note-hint { display: inline-flex; align-items: center; gap: 6px; opacity: 0; transition: opacity .2s; }
+.link-notes:focus-within .note-hint { opacity: 1; }
+.note-hint kbd { padding: 0 5px; border-radius: 5px; color: var(--muted); font: 11px/17px var(--font-ui); box-shadow: 0 0 0 1px var(--line); }
+.note-status { margin-left: auto; }
+.note-saved { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); animation: note-saved-in .25s var(--ease) both; }
+.note-saved.is-leaving { animation: note-saved-out .3s ease both; }
+@keyframes note-saved-in { from { opacity: 0; transform: translateY(2px); } }
+@keyframes note-saved-out { to { opacity: 0; } }
 .acts { display: flex; gap: 8px; margin-top: 24px; }
 .round { display: grid; flex: none; place-items: center; width: 38px; height: 38px; padding: 0; border: 0; border-radius: 50%; background: var(--card); color: var(--muted); cursor: pointer; box-shadow: var(--card-shadow); transition: transform .2s var(--ease), box-shadow .2s, color .2s; }
 .round:hover { transform: translateY(-1px); color: var(--ink); box-shadow: var(--card-shadow), 0 4px 12px rgb(0 0 0 / .06); }
@@ -103,5 +115,6 @@ a.card:hover .card-shot { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   .card, .chip, .chip-x, .round, .pick-row { transition: none; }
   a.card:hover, .chip:hover, .round:hover { transform: none; }
-  .skeleton { animation: none; }
+  .skeleton, .note-saved, .note-saved.is-leaving { animation: none; }
+  .note-hint { transition: none; }
 }

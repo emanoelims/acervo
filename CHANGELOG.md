@@ -5,6 +5,11 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Notes save with ⌘/Ctrl+Enter and confirm when saved.
+- A guide to features and shortcuts, opened with ? or from the dock settings.
+
 ## [0.3.0] - 2026-10-18
 
 Capture: save links by pasting them, see their previews and organize them.

@@ -15,6 +15,9 @@ Now you can visit [`localhost:4200`](http://localhost:4200) from your browser.
 
 Ready to run in production? Please see the [deployment guide](guides/deployment.md).
 
+For every feature and keyboard shortcut, and where each is implemented, see
+[guides/features.md](guides/features.md).
+
 ## Learn more
 
 * Official website: https://www.phoenixframework.org/

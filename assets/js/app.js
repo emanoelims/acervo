@@ -30,6 +30,11 @@ import {Select} from "./select"
 
 initializeAppearance()
 
+// Apple keyboards say ⌘ where others say Ctrl. CSS shows the matching key
+// labels from this, and keyboard hooks read it to pick the modifier.
+const platform = navigator.userAgentData?.platform || navigator.platform || ""
+document.documentElement.dataset.platform = /mac|iphone|ipad|ipod/i.test(platform) ? "mac" : "other"
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,

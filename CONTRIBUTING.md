@@ -44,6 +44,9 @@ should explain the resulting behavior, applicable documentation and tests, and
 any database migration or authentication/authorization impact. Focus each PR on
 one subject and run the nearest tests while working.
 
+When adding or changing a user-facing feature or keyboard shortcut, update both
+the in-app guide (`ArchiveLive` :guide) and `guides/features.md` in the same PR.
+
 CI cancels obsolete runs, limits job runtime, pins Actions to immutable commits,
 and uses caches keyed by the BEAM versions, test environment, and lockfile.
 Dependabot proposes weekly Mix and GitHub Actions updates using allowed
