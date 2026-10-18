@@ -24,7 +24,7 @@ defmodule AcervoWeb.ArchiveLive do
 
     {:ok,
      socket
-     |> assign(filter: nil, collection: nil, link: nil, note_form: nil)
+     |> assign(filter: nil, collection: nil, link: nil, note_form: nil, screenshot_link_id: nil)
      |> assign(add_form: nil, new_collection_form: nil, editing: nil, collection_form: nil)
      |> assign(:collection_filter, collection_filter(""))
      |> allow_upload(:screenshot,
@@ -109,6 +109,22 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   defp assign_link(socket, link) do
+    socket
+    |> cancel_screenshots_unless_open(link)
+    |> assign_link_fields(link)
+  end
+
+  # A pending screenshot belongs to the link it started on, so moving to
+  # another link (or closing the column) drops it.
+  defp cancel_screenshots_unless_open(%{assigns: %{screenshot_link_id: id}} = socket, %{id: id}), do: socket
+
+  defp cancel_screenshots_unless_open(socket, _link) do
+    socket.assigns.uploads.screenshot.entries
+    |> Enum.reduce(socket, &cancel_upload(&2, :screenshot, &1.ref))
+    |> assign(:screenshot_link_id, nil)
+  end
+
+  defp assign_link_fields(socket, link) do
     assign(socket, link: link, note_form: link && note_form(link), collection_filter: collection_filter(""))
   end
 
@@ -134,10 +150,13 @@ defmodule AcervoWeb.ArchiveLive do
 
   # The screenshot upload starts on its own; a new pick replaces a failed one.
   def handle_event("validate_screenshot", _params, socket) do
-    case socket.assigns.uploads.screenshot.entries do
-      [_one] -> {:noreply, socket}
-      entries -> {:noreply, Enum.reduce(Enum.drop(entries, -1), socket, &cancel_upload(&2, :screenshot, &1.ref))}
-    end
+    socket =
+      case socket.assigns.uploads.screenshot.entries do
+        [_one] -> socket
+        entries -> Enum.reduce(Enum.drop(entries, -1), socket, &cancel_upload(&2, :screenshot, &1.ref))
+      end
+
+    {:noreply, assign(socket, :screenshot_link_id, socket.assigns.link && socket.assigns.link.id)}
   end
 
   # Adding a link: the dock's pill and pasting anywhere share "add_link".
@@ -291,15 +310,27 @@ defmodule AcervoWeb.ArchiveLive do
 
   # Attaches the finished upload to the open link as its first image.
   defp handle_progress(:screenshot, %{done?: true}, socket) do
+    socket = track_screenshot_link(socket)
+
     results = consume_uploaded_entries(socket, :screenshot, fn %{path: path}, _entry -> {:ok, File.read(path)} end)
 
     case {results, socket.assigns.link} do
-      {[{:ok, binary}], %{} = link} when is_binary(binary) -> attach_screenshot(socket, link, binary)
-      {_results, _link} -> {:noreply, socket}
+      {[{:ok, binary}], %{id: id} = link} when is_binary(binary) and id == socket.assigns.screenshot_link_id ->
+        attach_screenshot(socket, link, binary)
+
+      {_results, _link} ->
+        {:noreply, assign(socket, :screenshot_link_id, nil)}
     end
   end
 
-  defp handle_progress(:screenshot, _entry, socket), do: {:noreply, socket}
+  defp handle_progress(:screenshot, _entry, socket), do: {:noreply, track_screenshot_link(socket)}
+
+  # Entries are cancelled whenever the open link changes, so one that is
+  # still around belongs to the link open now.
+  defp track_screenshot_link(%{assigns: %{screenshot_link_id: nil, link: %{id: id}}} = socket),
+    do: assign(socket, :screenshot_link_id, id)
+
+  defp track_screenshot_link(socket), do: socket
 
   defp attach_screenshot(socket, link, binary) do
     case Library.attach_screenshot(socket.assigns.current_scope, link, binary) do
@@ -307,7 +338,7 @@ defmodule AcervoWeb.ArchiveLive do
       {:error, :not_an_image} -> {:noreply, put_flash(socket, :error, gettext("That file isn't an image."))}
       {:error, :too_large} -> {:noreply, put_flash(socket, :error, gettext("That image is too large."))}
       {:error, :not_found} -> {:noreply, gone(socket)}
-      {:error, %Ecto.Changeset{}} -> {:noreply, put_flash(socket, :error, gettext("That file isn't an image."))}
+      {:error, %Ecto.Changeset{}} -> {:noreply, put_flash(socket, :error, gettext("That image couldn't be added."))}
     end
   end
 

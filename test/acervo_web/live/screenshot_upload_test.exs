@@ -80,4 +80,74 @@ defmodule AcervoWeb.ScreenshotUploadTest do
     assert {:error, [[_ref, :not_accepted]]} = render_upload(upload, "notes.txt")
     assert has_element?(view, "#screenshot-drop #screenshot-error")
   end
+
+  test "an upload started on one link is cancelled when another opens, never landing on it", %{
+    conn: conn,
+    scope: scope
+  } do
+    a = blocked_link(scope)
+    b = scope |> link_fixture() |> Link.capture_changeset(%{status: :failed, capture_error: "blocked"}) |> Repo.update!()
+    {:ok, view, _html} = live(conn, ~p"/inbox/l/#{a.id}")
+
+    upload = screenshot(view, "photo.jpg", image_fixture("photo.jpg"), "image/jpeg")
+    render_upload(upload, "photo.jpg", 50)
+    assert [_pending] = pending_entries(view)
+
+    render_patch(view, ~p"/inbox/l/#{b.id}")
+    assert pending_entries(view) == []
+
+    # Finishing the cancelled upload is refused, and nothing lands anywhere.
+    catch_exit(render_upload(upload, "photo.jpg", 100))
+
+    assert Library.get_link!(scope, a.id).images == []
+    assert Library.get_link!(scope, b.id).images == []
+  end
+
+  test "closing the link column cancels a pending screenshot", %{conn: conn, scope: scope} do
+    link = blocked_link(scope)
+    {:ok, view, _html} = live(conn, ~p"/inbox/l/#{link.id}")
+
+    upload = screenshot(view, "photo.jpg", image_fixture("photo.jpg"), "image/jpeg")
+    render_upload(upload, "photo.jpg", 50)
+    assert [_pending] = pending_entries(view)
+
+    render_patch(view, ~p"/inbox")
+    assert pending_entries(view) == []
+  end
+
+  defp pending_entries(view) do
+    %{socket: socket} = :sys.get_state(view.pid)
+    socket.assigns.uploads.screenshot.entries
+  end
+
+  test "an image that exceeds the decode limits flashes the too-large error", %{conn: conn, scope: scope} do
+    link = blocked_link(scope)
+    {:ok, view, _html} = live(conn, ~p"/inbox/l/#{link.id}")
+
+    png = image_fixture("wide.png")
+    <<sig::binary-size(8), 13::32, "IHDR", _w::32, _h::32, rest::binary-size(5), _crc::32, tail::binary>> = png
+    ihdr_body = <<25_000::32, 25_000::32, rest::binary>>
+    crc = :erlang.crc32(["IHDR", ihdr_body])
+    lying = <<sig::binary, 13::32, "IHDR", ihdr_body::binary, crc::32, tail::binary>>
+
+    upload = screenshot(view, "huge.png", lying, "image/png")
+    html = render_upload(upload, "huge.png")
+
+    assert html =~ "That image is too large."
+    assert Library.get_link!(scope, link.id).images == []
+  end
+
+  test "a link deleted before the upload completes is handled gracefully", %{conn: conn, scope: scope} do
+    link = blocked_link(scope)
+    {:ok, view, _html} = live(conn, ~p"/inbox/l/#{link.id}")
+
+    upload = screenshot(view, "photo.jpg", image_fixture("photo.jpg"), "image/jpeg")
+    render_upload(upload, "photo.jpg", 50)
+    {:ok, _} = Library.delete_link(scope, link)
+
+    render_upload(upload, "photo.jpg", 50)
+
+    assert Process.alive?(view.pid)
+    refute has_element?(view, "#column-link")
+  end
 end

@@ -265,7 +265,8 @@ defmodule AcervoWeb.LinkComponents do
     </div>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".ScreenshotPaste">
       // Pasting an image while a link is open, outside a field, uploads it as
-      // that link's screenshot. Anything else is left to the link-paste hook.
+      // that link's screenshot. It adds another one even when the link already
+      // has images, on purpose. Anything else is left to the link-paste hook.
       export default {
         mounted() {
           this.onPaste = event => {
