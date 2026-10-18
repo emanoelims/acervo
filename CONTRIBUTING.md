@@ -5,6 +5,12 @@ Elixir is pinned to a specific release built for OTP 29. Erlang can receive
 updates within the 29 series through `mise upgrade erlang`. Update the Elixir
 pin explicitly when adopting a new release.
 
+Development and tests use Postgres 18 with pgvector in an Apple
+[`container`](https://github.com/apple/container) named `acervo-db`, published
+on `localhost:5432`. Create it once
+with `mise run db:create`; afterwards, start it with `mise run db`. Data lives
+in the `acervo-pgdata` volume. CI runs the same `pgvector/pgvector:pg18` image.
+
 Run `mise install`, then `mise run setup`. Start Phoenix with `mise run dev`.
 Before opening a PR, run `mise run precommit`, which executes `mix precommit`.
 In development, [Tidewave](https://tidewave.ai) is mounted at

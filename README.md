@@ -3,6 +3,7 @@
 To start your Phoenix server:
 
 * Run `mise install` to install Elixir/Erlang
+* Run `mise run db:create` once (then `mise run db`) to start Postgres 18 with pgvector in an Apple container on port 5432
 * Copy `mise.local.toml.example` to `mise.local.toml` and fill in your secrets (e.g. `ANTHROPIC_API_KEY`)
 * Run `mise run setup` to install and setup dependencies
 * Start Phoenix endpoint with `mise run dev` or inside IEx with `mise exec -- iex -S mix phx.server`
