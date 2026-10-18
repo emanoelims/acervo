@@ -5,6 +5,7 @@ defmodule Acervo.Library.Extractors.Generic do
   @behaviour Acervo.Library.Extractor
 
   alias Acervo.Library.Capture
+  alias Acervo.Library.FramePolicy
   alias Acervo.Library.HtmlMeta
   alias Acervo.Library.SafeFetch
 
@@ -26,14 +27,17 @@ defmodule Acervo.Library.Extractors.Generic do
 
   @doc """
   Like `fetch/2`, but also returns the final URL after redirects, which the
-  capture carries as `final_url` too.
+  capture carries as `final_url` too. The capture's `embeddable` follows the
+  final response's headers.
   """
   @spec fetch_page(URI.t(), keyword()) :: {:ok, Capture.t(), String.t()} | {:error, term()}
   def fetch_page(%URI{} = uri, opts) do
     case SafeFetch.get(URI.to_string(uri), Keyword.put(opts, :accept, @accept)) do
       {:ok, %{body: body, url: url} = response} when is_binary(body) ->
         if html?(response),
-          do: {:ok, %{HtmlMeta.parse(body, url, content_type(response)) | final_url: url}, url},
+          do:
+            {:ok, %{parse(body, response) | final_url: url, embeddable: FramePolicy.embeddable?(url, response.headers)},
+             url},
           else: {:error, :not_html}
 
       {:ok, _response} ->
@@ -46,6 +50,8 @@ defmodule Acervo.Library.Extractors.Generic do
         {:error, reason}
     end
   end
+
+  defp parse(body, response), do: HtmlMeta.parse(body, response.url, content_type(response))
 
   defp content_types(%{headers: headers}), do: headers |> Map.get("content-type", []) |> List.wrap()
 

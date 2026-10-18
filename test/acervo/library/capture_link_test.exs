@@ -92,6 +92,46 @@ defmodule Acervo.Library.CaptureLinkTest do
       assert_receive {:link_updated, %Link{status: :ready, images: [_, _]}}
     end
 
+    test "stores whether the page allows framing", %{scope: scope} do
+      open = link_fixture(scope, "https://example.com/posts/bees")
+      stub_site(page_html([]), %{})
+
+      assert :ok = perform(open)
+      assert %Link{embeddable: true} = Repo.get!(Link, open.id)
+
+      framed_only_by_itself = link_fixture(scope, "https://example.com/posts/wasps")
+
+      Req.Test.stub(SafeFetch, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("content-security-policy", "default-src 'self'; frame-ancestors 'self'")
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.send_resp(200, page_html([]))
+      end)
+
+      assert :ok = perform(framed_only_by_itself)
+      assert %Link{embeddable: false} = Repo.get!(Link, framed_only_by_itself.id)
+    end
+
+    test "a page answered with X-Frame-Options or over http is not embeddable", %{scope: scope} do
+      denied = link_fixture(scope, "https://example.com/posts/bees")
+
+      Req.Test.stub(SafeFetch, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("x-frame-options", "DENY")
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.send_resp(200, page_html([]))
+      end)
+
+      assert :ok = perform(denied)
+      assert %Link{embeddable: false} = Repo.get!(Link, denied.id)
+
+      plain = link_fixture(scope, "http://example.com/posts/bees")
+      stub_site(page_html([]), %{})
+
+      assert :ok = perform(plain)
+      assert %Link{embeddable: false} = Repo.get!(Link, plain.id)
+    end
+
     test "stores at most four images", %{scope: scope} do
       link = link_fixture(scope, "https://example.com/posts/bees")
       paths = for i <- 1..6, do: "/img/#{i}.png"
