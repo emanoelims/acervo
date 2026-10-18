@@ -5,6 +5,11 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Links appear as cards and open in their own column with note, done and
+  delete, updating live while previews are captured.
+
 ### Changed
 
 - Signing in with an allowed email creates the account; there is no separate

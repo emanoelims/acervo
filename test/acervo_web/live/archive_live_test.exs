@@ -29,7 +29,8 @@ defmodule AcervoWeb.ArchiveLiveTest do
 
     test "an empty archive reads as zero, not as one", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/")
-      assert view |> element("#column-root .lead") |> render() =~ "No links · no collections."
+      lead = view |> element("#column-root .lead") |> render() |> String.replace(~r/\s+/, " ")
+      assert lead =~ "No links · no collections."
     end
 
     test "inbox opens a second column with an empty state", %{conn: conn} do
