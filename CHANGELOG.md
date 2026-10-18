@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-18
+
+See how Acervo is doing in Grafana.
+
 ### Added
 
 - Metrics for AI cost, search, background jobs and the VM, viewable in Fly's Grafana.
