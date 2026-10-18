@@ -3,12 +3,17 @@ defmodule AcervoWeb.ArchiveLive do
   The column browser: root navigation, the selected list of links and the
   open link. Subscribes to the user's link broadcasts and keeps the list,
   the open link and the counts current.
+
+  Links are saved from the dock's pill or by pasting anywhere, and organized
+  into collections from the link column; collections are created in column 1
+  and renamed, described or deleted from their column's menu.
   """
   use AcervoWeb, :live_view
 
   import AcervoWeb.LinkComponents
 
   alias Acervo.Collections
+  alias Acervo.Collections.Collection
   alias Acervo.Library
 
   @impl true
@@ -18,6 +23,8 @@ defmodule AcervoWeb.ArchiveLive do
     {:ok,
      socket
      |> assign(filter: nil, collection: nil, link: nil, note_form: nil)
+     |> assign(add_form: nil, new_collection_form: nil, editing: nil, collection_form: nil)
+     |> assign(:collection_filter, collection_filter(""))
      |> refresh_counts()
      |> stream_configure(:links, dom_id: &"link-#{&1.id}")
      |> stream(:links, [])}
@@ -30,7 +37,7 @@ defmodule AcervoWeb.ArchiveLive do
     with {:ok, collection} <- fetch_collection(socket, params),
          filter = filter(socket.assigns.live_action, collection),
          reset? = filter != socket.assigns.filter or renamed?(socket.assigns.collection, collection),
-         socket = socket |> assign(:collection, collection) |> apply_filter(filter, reset?),
+         socket = socket |> stop_editing(collection) |> assign(:collection, collection) |> apply_filter(filter, reset?),
          {:ok, link} <- fetch_link(socket, params) do
       {:noreply, socket |> select_link(link, reset?) |> assign_page_title()}
     else
@@ -46,6 +53,10 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   defp fetch_collection(_socket, _params), do: {:ok, nil}
+
+  # Leaving a collection drops its rename or description form.
+  defp stop_editing(%{assigns: %{collection: %{id: id}}} = socket, %{id: id}), do: socket
+  defp stop_editing(socket, _collection), do: assign(socket, editing: nil, collection_form: nil)
 
   defp fetch_link(socket, %{"id" => id}) do
     {:ok, Library.get_link!(socket.assigns.current_scope, id)}
@@ -77,15 +88,19 @@ defmodule AcervoWeb.ArchiveLive do
   # A reset stream renders every card with the new selection already; otherwise
   # the previously and newly selected cards are re-rendered in place. (Inserting
   # them after a reset in the same render would move them to the end.)
-  defp select_link(socket, link, true = _reset?), do: assign(socket, link: link, note_form: link && note_form(link))
+  defp select_link(socket, link, true = _reset?), do: assign_link(socket, link)
 
   defp select_link(socket, link, false = _reset?) do
     previous = socket.assigns.link
 
     socket
-    |> assign(link: link, note_form: link && note_form(link))
+    |> assign_link(link)
     |> restream_existing(previous)
     |> restream_existing(link)
+  end
+
+  defp assign_link(socket, link) do
+    assign(socket, link: link, note_form: link && note_form(link), collection_filter: collection_filter(""))
   end
 
   defp restream_existing(socket, nil), do: socket
@@ -93,9 +108,120 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp note_form(link, attrs \\ %{}), do: to_form(Library.change_note(link, attrs), as: :link)
 
+  defp collection_filter(query), do: to_form(%{"query" => query})
+
+  @link_events ~w(save_note done delete add_to_collection remove_from_collection create_collection_for_link pick_collection)
+  @collection_events ~w(edit_collection validate_collection save_collection delete_collection)
+
   @impl true
-  def handle_event(event, _params, %{assigns: %{link: nil}} = socket) when event in ~w(save_note done delete),
+  def handle_event(event, _params, %{assigns: %{link: nil}} = socket) when event in @link_events, do: {:noreply, socket}
+
+  def handle_event(event, _params, %{assigns: %{collection: nil}} = socket) when event in @collection_events,
     do: {:noreply, socket}
+
+  # Adding a link: the dock's pill and pasting anywhere share "add_link".
+  def handle_event("toggle_add", _params, %{assigns: %{add_form: nil}} = socket),
+    do: {:noreply, assign(socket, :add_form, to_form(%{"url" => ""}))}
+
+  def handle_event(event, _params, socket) when event in ~w(toggle_add close_add),
+    do: {:noreply, assign(socket, :add_form, nil)}
+
+  def handle_event("add_link", %{"url" => url}, socket) when is_binary(url) do
+    case Library.save_link(socket.assigns.current_scope, url) do
+      {:ok, link, :created} ->
+        {:noreply,
+         socket
+         |> assign(:add_form, nil)
+         |> put_flash(:info, gettext("Saved."))
+         |> push_patch(to: ~p"/inbox/l/#{link.id}")}
+
+      {:ok, link, :existing} ->
+        {:noreply,
+         socket
+         |> assign(:add_form, nil)
+         |> put_flash(:info, gettext("Already in your archive."))
+         |> push_patch(to: existing_path(link))}
+
+      {:error, :invalid_url} ->
+        {:noreply, add_error(socket, url, {dgettext_noop("errors", "That doesn't look like a link."), []})}
+
+      {:error, %Ecto.Changeset{errors: [{_field, error} | _]}} ->
+        {:noreply, add_error(socket, url, error)}
+    end
+  end
+
+  # Organizing the open link.
+  def handle_event("filter_collections", %{"query" => query}, socket),
+    do: {:noreply, assign(socket, :collection_filter, collection_filter(query))}
+
+  def handle_event("add_to_collection", %{"id" => id}, socket) do
+    case own_collection(socket, id) do
+      nil -> {:noreply, socket}
+      collection -> add_to(socket, collection)
+    end
+  end
+
+  def handle_event("remove_from_collection", %{"id" => id}, socket) do
+    with %Collection{} = collection <- own_collection(socket, id),
+         {:error, :not_found} <- Collections.remove_link(socket.assigns.current_scope, collection, socket.assigns.link) do
+      {:noreply, gone(socket)}
+    else
+      _removed_or_unknown -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("create_collection_for_link", %{"name" => name}, socket), do: pick_or_create(socket, name)
+  def handle_event("pick_collection", %{"query" => query}, socket), do: pick_or_create(socket, query)
+
+  # Collections: create in column 1; rename, describe and delete in their column.
+  def handle_event("new_collection", _params, socket),
+    do: {:noreply, assign(socket, :new_collection_form, to_form(Collections.change_collection(%Collection{})))}
+
+  def handle_event("cancel_new_collection", _params, socket), do: {:noreply, assign(socket, :new_collection_form, nil)}
+
+  def handle_event("validate_new_collection", %{"collection" => attrs}, socket) do
+    changeset = Collections.change_collection(%Collection{}, attrs)
+    {:noreply, assign(socket, :new_collection_form, to_form(changeset, action: :validate))}
+  end
+
+  # Enter and blurring the name both create it, so whichever arrives second
+  # finds the form gone. A blank name just closes it.
+  def handle_event("create_collection", _params, %{assigns: %{new_collection_form: nil}} = socket), do: {:noreply, socket}
+
+  def handle_event("create_collection", %{"value" => name}, socket) do
+    if String.trim(name) == "",
+      do: {:noreply, assign(socket, :new_collection_form, nil)},
+      else: create_collection(socket, %{"name" => name})
+  end
+
+  def handle_event("create_collection", %{"collection" => attrs}, socket), do: create_collection(socket, attrs)
+
+  def handle_event("edit_collection", %{"field" => field}, socket) when field in ~w(name description) do
+    form = to_form(Collections.change_collection(socket.assigns.collection))
+    {:noreply, assign(socket, editing: String.to_existing_atom(field), collection_form: form)}
+  end
+
+  def handle_event("cancel_edit", _params, socket), do: {:noreply, assign(socket, editing: nil, collection_form: nil)}
+
+  def handle_event("validate_collection", %{"collection" => attrs}, socket) do
+    changeset = Collections.change_collection(socket.assigns.collection, attrs)
+    {:noreply, assign(socket, :collection_form, to_form(changeset, action: :validate))}
+  end
+
+  # Enter and blurring both save the field being edited; the second finds the form gone.
+  def handle_event("save_collection", _params, %{assigns: %{editing: nil}} = socket), do: {:noreply, socket}
+
+  def handle_event("save_collection", %{"value" => value}, socket),
+    do: save_collection(socket, %{to_string(socket.assigns.editing) => value})
+
+  def handle_event("save_collection", %{"collection" => attrs}, socket), do: save_collection(socket, attrs)
+
+  def handle_event("delete_collection", _params, socket) do
+    case Collections.delete_collection(socket.assigns.current_scope, socket.assigns.collection) do
+      {:ok, _collection} -> {:noreply, push_patch(socket, to: ~p"/")}
+      {:error, :not_found} -> {:noreply, socket |> put_flash(:error, gettext("Not found.")) |> push_patch(to: ~p"/")}
+    end
+  end
 
   def handle_event("save_note", %{"link" => %{"note" => note}}, socket), do: save_note(socket, note)
   def handle_event("save_note", %{"value" => note}, socket), do: save_note(socket, note)
@@ -123,6 +249,60 @@ defmodule AcervoWeb.ArchiveLive do
 
       {:error, :not_found} ->
         {:noreply, gone(socket)}
+    end
+  end
+
+  defp add_error(socket, url, error), do: assign(socket, :add_form, to_form(%{"url" => url}, errors: [url: error]))
+
+  # A new link waits in the inbox; a saved one opens where it lives.
+  defp existing_path(%{triaged_at: nil} = link), do: ~p"/inbox/l/#{link.id}"
+  defp existing_path(link), do: ~p"/all/l/#{link.id}"
+
+  defp own_collection(socket, id), do: Enum.find(socket.assigns.collections, &(&1.id == id))
+
+  # The link column follows `{:link_updated, link}`, which adding broadcasts.
+  defp add_to(socket, collection) do
+    case Collections.add_link(socket.assigns.current_scope, collection, socket.assigns.link) do
+      :ok -> {:noreply, assign(socket, :collection_filter, collection_filter(""))}
+      {:error, :not_found} -> {:noreply, gone(socket)}
+    end
+  end
+
+  # Adds the link to the collection with that name, creating it if needed.
+  defp pick_or_create(socket, name) do
+    name = String.trim(name)
+
+    case {name, AcervoWeb.LinkComponents.existing_collection(socket.assigns.collections, name)} do
+      {"", _collection} ->
+        {:noreply, socket}
+
+      {_name, %Collection{} = collection} ->
+        add_to(socket, collection)
+
+      {name, nil} ->
+        case Collections.create_collection(socket.assigns.current_scope, %{"name" => name}) do
+          {:ok, collection} -> add_to(socket, collection)
+          {:error, _changeset} -> {:noreply, put_flash(socket, :error, gettext("Couldn't create that collection."))}
+        end
+    end
+  end
+
+  defp create_collection(socket, attrs) do
+    case Collections.create_collection(socket.assigns.current_scope, attrs) do
+      {:ok, collection} ->
+        {:noreply, socket |> assign(:new_collection_form, nil) |> push_patch(to: ~p"/c/#{collection.slug}")}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, :new_collection_form, to_form(changeset))}
+    end
+  end
+
+  # `{:collections_changed}` then refreshes the column and follows a new slug.
+  defp save_collection(socket, attrs) do
+    case Collections.update_collection(socket.assigns.current_scope, socket.assigns.collection, attrs) do
+      {:ok, _collection} -> {:noreply, assign(socket, editing: nil, collection_form: nil)}
+      {:error, :not_found} -> {:noreply, socket |> put_flash(:error, gettext("Not found.")) |> push_patch(to: ~p"/")}
+      {:error, changeset} -> {:noreply, assign(socket, :collection_form, to_form(changeset))}
     end
   end
 
@@ -229,7 +409,7 @@ defmodule AcervoWeb.ArchiveLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div id="columns" class="columns">
+      <div id="columns" class="columns" phx-hook=".PasteLink">
         <.column id="column-root" class="column-root">
           <h1 class="root-title">Acervo</h1>
           <p class="lead" phx-no-format>
@@ -249,7 +429,7 @@ defmodule AcervoWeb.ArchiveLive do
             <.nav_item id="nav-all" navigate={~p"/all"} active={@filter == :all} count={@total_count}>
               {gettext("All")}
             </.nav_item>
-            <li :if={@collections != []} class="nav-sep" aria-hidden="true"></li>
+            <li class="nav-sep" aria-hidden="true"></li>
             <.nav_item
               :for={collection <- @collections}
               id={"nav-collection-#{collection.id}"}
@@ -259,11 +439,94 @@ defmodule AcervoWeb.ArchiveLive do
             >
               {collection.name}
             </.nav_item>
+            <li :if={is_nil(@new_collection_form)}>
+              <button
+                id="new-collection"
+                type="button"
+                class="nav-add"
+                phx-click="new_collection"
+                title={gettext("New collection")}
+                aria-label={gettext("New collection")}
+              >
+                <.icon name="lucide-plus" class="size-4" />
+              </button>
+            </li>
+            <li :if={@new_collection_form}>
+              <.form
+                for={@new_collection_form}
+                id="new-collection-form"
+                class="nav-form"
+                phx-change="validate_new_collection"
+                phx-submit="create_collection"
+              >
+                <.input
+                  field={@new_collection_form[:name]}
+                  id="new-collection-name"
+                  class="nav-input"
+                  placeholder={gettext("New collection")}
+                  aria-label={gettext("New collection")}
+                  maxlength="80"
+                  autocomplete="off"
+                  phx-mounted={JS.focus()}
+                  phx-blur="create_collection"
+                  phx-keydown="cancel_new_collection"
+                  phx-key="Escape"
+                />
+              </.form>
+            </li>
           </ul>
         </.column>
 
         <.column :if={@filter} id={list_column_id(@filter)} title={list_title(@filter, @collection)}>
-          <p :if={list_desc(@filter, @collection)} class="desc">{list_desc(@filter, @collection)}</p>
+          <:heading :if={@editing == :name}>
+            <.form
+              for={@collection_form}
+              id="rename-collection-form"
+              class="title-form"
+              phx-change="validate_collection"
+              phx-submit="save_collection"
+            >
+              <.input
+                field={@collection_form[:name]}
+                id="rename-collection-name"
+                class="title-input"
+                aria-label={gettext("Name")}
+                maxlength="80"
+                autocomplete="off"
+                phx-mounted={JS.focus()}
+                phx-blur="save_collection"
+                phx-keydown="cancel_edit"
+                phx-key="Escape"
+              />
+            </.form>
+          </:heading>
+          <:actions :if={@collection}><.collection_menu /></:actions>
+          <.form
+            :if={@editing == :description}
+            for={@collection_form}
+            id="describe-collection-form"
+            class="desc desc-form"
+            phx-change="validate_collection"
+            phx-submit="save_collection"
+          >
+            <.input
+              type="textarea"
+              field={@collection_form[:description]}
+              id="describe-collection-text"
+              class="desc-input"
+              rows="1"
+              maxlength="280"
+              placeholder={gettext("Add a description")}
+              aria-label={gettext("Description")}
+              phx-mounted={JS.focus()}
+              phx-blur="save_collection"
+              phx-keydown="cancel_edit"
+              phx-key="Escape"
+            />
+          </.form>
+          <p :if={@editing != :description and list_desc(@filter, @collection)} class="desc">
+            {list_desc(@filter, @collection)}
+          </p>
           <div id="links" class="cards" phx-update="stream">
             <.empty id="links-empty" class="hidden only:block">{empty_text(@filter)}</.empty>
             <.card
@@ -283,16 +546,48 @@ defmodule AcervoWeb.ArchiveLive do
           title={display_title(@link)}
           key={@link.id}
         >
-          <.link_detail link={@link} note_form={@note_form} />
+          <.link_detail
+            link={@link}
+            note_form={@note_form}
+            collections={@collections}
+            collection_filter={@collection_filter}
+          />
         </.column>
       </div>
+      <.add_pill :if={@add_form} form={@add_form} />
       <.dock
         active={if @filter == :inbox, do: :inbox, else: :home}
         inbox_count={@inbox_count}
+        adding={!!@add_form}
         locale={@locale}
         return_to={@return_to}
       />
     </Layouts.app>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".PasteLink">
+      // Pasting a link anywhere outside a field saves it. Images are left
+      // alone here; they get their own flow.
+      const URL_LIKE = /^(https?:\/\/)?[^\s]+\.[^\s]{2,}$/
+      export default {
+        mounted() {
+          this.onPaste = event => {
+            const target = event.target
+            if (target instanceof Element &&
+                (target.closest('input, textarea, [contenteditable]') || target.isContentEditable)) return
+            const data = event.clipboardData
+            if (!data) return
+            if (Array.from(data.files || []).some(file => file.type.startsWith('image/'))) return
+            const url = data.getData('text/plain').trim()
+            if (!URL_LIKE.test(url)) return
+            event.preventDefault()
+            this.pushEvent('add_link', {url})
+          }
+          window.addEventListener('paste', this.onPaste)
+        },
+        destroyed() {
+          window.removeEventListener('paste', this.onPaste)
+        }
+      }
+    </script>
     """
   end
 

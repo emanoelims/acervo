@@ -37,6 +37,7 @@ export const Floating = {
         this.search = ""
         this.searchAt = 0
         if (this.menu) this.menuFocus ||= this.listbox ? "selected" : "first"
+        else this.autofocus = true
         document.querySelectorAll("details[data-popover][open]").forEach(other => {
           if (other !== this.disclosure && !other.contains(this.disclosure) && !this.disclosure.contains(other)) other.removeAttribute("open")
         })
@@ -146,6 +147,11 @@ export const Floating = {
       if (this.menuFocus) {
         this.focusMenu(this.menuFocus)
         this.menuFocus = null
+      }
+      // Dialog panels focus their [data-autofocus] field once they are shown.
+      if (this.autofocus) {
+        this.autofocus = false
+        this.panel.querySelector("[data-autofocus]")?.focus({preventScroll: true})
       }
     })
   },

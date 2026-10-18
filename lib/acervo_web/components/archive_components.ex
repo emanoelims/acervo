@@ -19,6 +19,7 @@ defmodule AcervoWeb.ArchiveComponents do
   attr :title, :string, default: nil
   attr :class, :string, default: nil
   attr :key, :string, default: nil
+  slot :heading, doc: "replaces the title in the heading, as an inline rename form does"
   slot :actions
   slot :inner_block, required: true
 
@@ -37,9 +38,10 @@ defmodule AcervoWeb.ArchiveComponents do
       </button>
       <div class="column-scroll" id={"#{@id}-scroll"} data-key={@key} phx-hook=".ColumnScroll">
         <header :if={@title} class="column-head">
-          <h2>
+          <h2 :if={@heading == []}>
             <span class="column-title">{@title}</span><span class="chev" aria-hidden="true">›</span>
           </h2>
+          {render_slot(@heading)}
           {render_slot(@actions)}
         </header>
         {render_slot(@inner_block)}
@@ -106,9 +108,10 @@ defmodule AcervoWeb.ArchiveComponents do
     """
   end
 
-  @doc "Renders the floating glass dock with home, inbox and settings."
+  @doc "Renders the floating glass dock with home, inbox, settings and add."
   attr :active, :atom, values: [:home, :inbox], required: true
   attr :inbox_count, :integer, default: 0
+  attr :adding, :boolean, default: false
   attr :locale, :string, required: true
   attr :return_to, :string, required: true
 
@@ -150,9 +153,109 @@ defmodule AcervoWeb.ArchiveComponents do
           <.icon name="lucide-log-out" class="size-4" /><span>{gettext("Log out")}</span>
         </.link>
       </.popover>
+      <button
+        id="dock-add"
+        type="button"
+        class={["dock-item", @adding && "is-open"]}
+        phx-click="toggle_add"
+        title={gettext("Add")}
+        aria-label={gettext("Add")}
+        aria-controls="add-pill"
+        aria-expanded={to_string(@adding)}
+      >
+        <.icon name="lucide-plus" class="size-[19px]" />
+      </button>
     </nav>
     """
   end
+
+  @doc """
+  Renders the floating pill above the dock where a link is pasted and saved
+  with Enter. Escape closes it.
+  """
+  attr :form, Phoenix.HTML.Form, required: true
+
+  def add_pill(assigns) do
+    ~H"""
+    <div
+      id="add-pill"
+      class="float"
+      phx-window-keydown="close_add"
+      phx-key="Escape"
+      phx-remove={JS.transition("is-leaving", time: 200)}
+    >
+      <.icon name="lucide-link" class="float-icon size-[18px]" />
+      <.form for={@form} id="add-link-form" class="float-form" phx-submit="add_link">
+        <.input
+          field={@form[:url]}
+          id="add-link-url"
+          class="float-input"
+          placeholder={gettext("Paste a link")}
+          aria-label={gettext("Paste a link")}
+          autocomplete="off"
+          inputmode="url"
+          spellcheck="false"
+          autofocus
+          phx-mounted={JS.focus()}
+        />
+      </.form>
+      <kbd class="float-kbd" aria-hidden="true">↵</kbd>
+    </div>
+    """
+  end
+
+  @doc "Renders a collection column's ··· menu: rename, describe and delete."
+  def collection_menu(assigns) do
+    ~H"""
+    <.popover
+      id="collection-menu"
+      label={gettext("More")}
+      menu
+      placement="bottom-end"
+      trigger_class="round"
+      panel_class="dropdown-menu"
+    >
+      <:trigger><.icon name="lucide-ellipsis" class="size-4" /></:trigger>
+      <button
+        id="rename-collection"
+        type="button"
+        role="menuitem"
+        tabindex="-1"
+        class="dropdown-item"
+        phx-click={JS.push("edit_collection", value: %{field: "name"}) |> close_menu()}
+      >
+        <.icon name="lucide-pen-line" class="size-4" />
+        <span class="dropdown-item-label">{gettext("Rename")}</span>
+      </button>
+      <button
+        id="describe-collection"
+        type="button"
+        role="menuitem"
+        tabindex="-1"
+        class="dropdown-item"
+        phx-click={JS.push("edit_collection", value: %{field: "description"}) |> close_menu()}
+      >
+        <.icon name="lucide-align-left" class="size-4" />
+        <span class="dropdown-item-label">{gettext("Description")}</span>
+      </button>
+      <div class="dropdown-divider" role="separator"></div>
+      <button
+        id="delete-collection"
+        type="button"
+        role="menuitem"
+        tabindex="-1"
+        class="dropdown-item dropdown-item-danger"
+        phx-click="delete_collection"
+        data-confirm={gettext("Delete this collection? Its links stay in your archive.")}
+      >
+        <.icon name="lucide-trash-2" class="size-4" />
+        <span class="dropdown-item-label">{gettext("Delete")}</span>
+      </button>
+    </.popover>
+    """
+  end
+
+  defp close_menu(js), do: JS.remove_attribute(js, "open", to: "#collection-menu")
 
   @doc "Renders the theme, accent, font and language choices."
   attr :locale, :string, required: true

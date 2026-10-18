@@ -118,7 +118,7 @@ defmodule AcervoWeb.LinkColumnTest do
 
       {:ok, view, _html} = live(conn, ~p"/all/l/#{link.id}")
 
-      assert has_element?(view, "#column-link .chip[href='/c/#{collection.slug}']", "Elixir")
+      assert has_element?(view, "#column-link #link-chip-#{collection.id} a[href='/c/#{collection.slug}']", "Elixir")
     end
 
     test "saving a note persists it", %{conn: conn, scope: scope} do

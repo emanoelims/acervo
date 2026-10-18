@@ -57,7 +57,41 @@
 .appearance [aria-pressed=true], .lang-chip.is-active { box-shadow: 0 0 0 2px var(--ink); }
 .dot[aria-pressed=true] { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--ink); }
 
+/* The floating pill above the dock, where a link is pasted. */
+.dock-item.is-open { background: rgb(255 255 255 / .17); }
+.float { position: fixed; left: 50%; bottom: 92px; z-index: 19; display: flex; align-items: flex-start; gap: 10px; width: min(560px, calc(100vw - 32px)); padding: 14px 18px; border-radius: 18px; background: color-mix(in oklab, var(--card) 90%, transparent); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); box-shadow: var(--pop-shadow); transform: translateX(-50%); animation: float-in .35s var(--ease) both; }
+.float.is-leaving { animation: float-out .2s var(--ease) both; }
+@keyframes float-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+@keyframes float-out { to { opacity: 0; transform: translate(-50%, 10px); } }
+.float-icon { flex: none; margin-top: 3px; color: var(--muted); }
+.float-form { flex: 1; min-width: 0; }
+.float-form .form-field { margin: 0; }
+.float-input { display: block; width: 100%; padding: 0; border: 0; outline: 0; background: none; color: var(--ink); font: inherit; font-size: 16px; line-height: 24px; }
+.float-input::placeholder { color: var(--faint); }
+.float-form .field-errors { margin-top: 4px; }
+.float-kbd { flex: none; margin-top: 1px; padding: 3px 7px; border-radius: 6px; color: var(--muted); font: 12px var(--font-ui); box-shadow: 0 0 0 1px var(--line); }
+
+/* Column 1: the quiet + after the collections and its inline name field. */
+.nav-add { display: flex; align-items: center; padding: 9px 0; border: 0; background: none; color: var(--faint); cursor: pointer; transition: color .2s; }
+.nav-add:hover, .nav-add:focus-visible { color: var(--ink); }
+.nav-add:focus-visible { outline: 2px solid var(--rule-strong); outline-offset: 2px; border-radius: 6px; }
+.nav-form { margin: 2px 0; }
+.nav-form .form-field { margin: 0; }
+.nav-input { display: block; width: calc(100% + 24px); margin: 0 -12px; padding: 7px 12px; border: 0; border-radius: 10px; background: var(--soft); color: var(--ink); font: inherit; font-size: 17px; line-height: 1.4; outline: 0; }
+.nav-input::placeholder { color: var(--faint); }
+.nav-form .field-errors { margin-top: 6px; }
+
+/* Renaming in place of the title, describing in place of the description. */
+.title-form { flex: 1; min-width: 0; }
+.title-form .form-field { margin: 0; }
+.title-input { display: block; width: calc(100% + 10px); margin: -4px 0 -4px -10px; padding: 4px 10px; border: 0; border-radius: 12px; background: var(--soft); color: var(--ink); font: inherit; font-size: 28px; font-weight: 600; letter-spacing: -.025em; line-height: 1.12; outline: 0; }
+.title-form .field-errors { margin-top: 10px; }
+.desc-form .form-field { margin: 0; }
+.desc-input { display: block; width: calc(100% + 24px); min-height: 0; margin: -10px -12px; padding: 10px 12px; border: 0; border-radius: 12px; background: var(--soft); color: var(--body); font: inherit; font-size: 16.5px; line-height: 1.6; resize: none; field-sizing: content; outline: 0; }
+.desc-input::placeholder { color: var(--faint); }
+.desc-form .field-errors { margin-top: 16px; }
+
 @media (prefers-reduced-motion: reduce) {
-  .column-scroll { animation: none; }
-  .column-up, .dock-item, .swatch, .dot, .font-chip, .lang-chip { transition: none; }
+  .column-scroll, .float, .float.is-leaving { animation: none; }
+  .column-up, .dock-item, .swatch, .dot, .font-chip, .lang-chip, .nav-add { transition: none; }
 }
