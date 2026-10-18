@@ -12,8 +12,9 @@ defmodule AcervoWeb.Endpoint do
     secure: Application.compile_env(:acervo, :secure_cookies, false)
   ]
 
+  # Uploads arrive in 64 kB chunks, far below the 1 MB frame cap.
   socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]],
+    websocket: [connect_info: [session: @session_options], max_frame_size: 1_000_000],
     longpoll: [connect_info: [session: @session_options]]
 
   # Serve at "/" the static files from "priv/static" directory.
