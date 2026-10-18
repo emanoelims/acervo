@@ -122,3 +122,8 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "must have the @ sign and no spaces"
 msgstr ""
+
+#: lib/acervo/collections/collection.ex:51
+#, elixir-autogen, elixir-format
+msgid "must contain letters or numbers"
+msgstr ""
