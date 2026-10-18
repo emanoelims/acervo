@@ -11,6 +11,7 @@ updates:
     # One PR for compatible updates; major updates stay separate for review.
     groups:
       mix:
+        patterns: ['*']
         update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
