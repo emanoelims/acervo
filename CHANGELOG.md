@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-18
+
+AI reads every saved link and suggests where it belongs.
+
 ### Added
 
 - Each saved link is read by AI: it gets an image description and collection suggestions in the inbox, which you accept with a click. Opus 5.5 is the default model; set `ACERVO_CHAT_MODEL` to use another.
