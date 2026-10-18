@@ -5,6 +5,11 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Signing in with an allowed email creates the account; there is no separate
+  sign-up screen.
+
 ## [0.2.0] - 2026-10-18
 
 First published release: the foundation of the link archive, before capture,

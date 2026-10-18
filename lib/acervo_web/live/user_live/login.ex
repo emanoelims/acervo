@@ -25,12 +25,6 @@ defmodule AcervoWeb.UserLive.Login do
         </.button>
       </.form>
 
-      <p :if={!@current_scope} class="auth-alternate">
-        <.link id="register-link" navigate={~p"/users/register"} class="text-link">
-          {gettext("Create account")}
-        </.link>
-      </p>
-
       <p :if={local_mail_adapter?()} class="auth-alternate">
         <.link id="dev-mailbox-link" href="/dev/mailbox" class="text-link">
           <.icon name="lucide-mail" class="size-4" /> {gettext("Mailbox")}
@@ -53,12 +47,7 @@ defmodule AcervoWeb.UserLive.Login do
 
   @impl true
   def handle_event("submit_magic", %{"user" => %{"email" => email}}, socket) do
-    if user = Accounts.get_user_by_email(email) do
-      Accounts.deliver_login_instructions(
-        user,
-        &url(~p"/users/log-in/#{&1}")
-      )
-    end
+    :ok = Accounts.request_login_link(email, &url(~p"/users/log-in/#{&1}"))
 
     info = gettext("If your email is registered, a sign-in link is on its way.")
 
