@@ -28,11 +28,11 @@ jobs:
       # The Dependency Submission API requires write access to the repository.
       contents: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # Provides mix for `install-deps`, so transitive dependencies resolve fully.
-      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4
-      - uses: erlef/mix-dependency-submission@257b2df58056895d7a0f3f7dba5b0520d71d9a46 # v1.3.4
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+      - uses: erlef/mix-dependency-submission@c5bd30a0e18822272a914adb7fb153866d491baf # v1.3.5
         with:
           install-deps: 'true'
