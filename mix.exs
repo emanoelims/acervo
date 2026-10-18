@@ -27,7 +27,7 @@ defmodule Acervo.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test]
+      preferred_envs: [precommit: :test, credo: :test]
     ]
   end
 
@@ -40,6 +40,8 @@ defmodule Acervo.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:styler, "~> 1.12", only: [:dev, :test], runtime: false},
       {:phoenix, "~> 1.8.15"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},
@@ -53,19 +55,9 @@ defmodule Acervo.MixProject do
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.5", runtime: Mix.env() == :dev},
       {:heroicons,
-       github: "tailwindlabs/heroicons",
-       tag: "v2.2.0",
-       sparse: "optimized",
-       app: false,
-       compile: false,
-       depth: 1},
+       github: "tailwindlabs/heroicons", tag: "v2.2.0", sparse: "optimized", app: false, compile: false, depth: 1},
       {:daisyui,
-       github: "saadeghi/daisyui",
-       tag: "v5.7.47",
-       sparse: "packages/bundle",
-       app: false,
-       compile: false,
-       depth: 1},
+       github: "saadeghi/daisyui", tag: "v5.7.47", sparse: "packages/bundle", app: false, compile: false, depth: 1},
       {:swoosh, "~> 1.16"},
       {:req, "~> 0.5"},
       {:telemetry_metrics, "~> 1.0"},
@@ -96,7 +88,7 @@ defmodule Acervo.MixProject do
         "esbuild acervo --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "credo --strict", "test"]
     ]
   end
 end

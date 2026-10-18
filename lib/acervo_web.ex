@@ -23,10 +23,11 @@ defmodule AcervoWeb do
     quote do
       use Phoenix.Router, helpers: false
 
-      # Import common connection and controller functions to use in pipelines
-      import Plug.Conn
       import Phoenix.Controller
       import Phoenix.LiveView.Router
+
+      # Import common connection and controller functions to use in pipelines
+      import Plug.Conn
     end
   end
 
@@ -39,7 +40,6 @@ defmodule AcervoWeb do
   def controller do
     quote do
       use Phoenix.Controller, formats: [:html, :json]
-
       use Gettext, backend: AcervoWeb.Gettext
 
       import Plug.Conn
@@ -82,14 +82,16 @@ defmodule AcervoWeb do
       # Translation
       use Gettext, backend: AcervoWeb.Gettext
 
-      # HTML escaping functionality
-      import Phoenix.HTML
       # Core UI components
       import AcervoWeb.CoreComponents
 
+      # HTML escaping functionality
+      import Phoenix.HTML
+
+      alias AcervoWeb.Layouts
+
       # Common modules used in templates
       alias Phoenix.LiveView.JS
-      alias AcervoWeb.Layouts
 
       # Routes generation with the ~p sigil
       unquote(verified_routes())

@@ -19,15 +19,16 @@ defmodule AcervoWeb.ConnCase do
 
   using do
     quote do
-      # The default endpoint for testing
-      @endpoint AcervoWeb.Endpoint
-
       use AcervoWeb, :verified_routes
+
+      import AcervoWeb.ConnCase
+      import Phoenix.ConnTest
 
       # Import conveniences for testing with connections
       import Plug.Conn
-      import Phoenix.ConnTest
-      import AcervoWeb.ConnCase
+
+      # The default endpoint for testing
+      @endpoint AcervoWeb.Endpoint
     end
   end
 
