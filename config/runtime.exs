@@ -30,6 +30,7 @@ config :acervo, :anthropic, api_key: System.get_env("ANTHROPIC_API_KEY")
 # Embeddings for search, through OpenRouter. The model must return
 # 1024-dimension vectors (the `links.embedding` column type).
 config :acervo, :embeddings, model: System.get_env("ACERVO_EMBEDDING_MODEL", "openrouter:voyageai/voyage-4-lite")
+config :acervo, :metrics, port: String.to_integer(System.get_env("METRICS_PORT", "9568"))
 
 # OpenRouter API key. Set it in `mise.local.toml` for development; it is
 # required in production.
@@ -125,6 +126,10 @@ if config_env() == :prod do
 
   config :acervo, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
   config :acervo, :mail_from, {"Acervo", System.fetch_env!("MAIL_FROM")}
+
+  # Every interface, IPv6 and IPv4, so Fly's scraper reaches it over the
+  # private network. The port is not in `http_service`, so it stays private.
+  config :acervo, :metrics, ip: {0, 0, 0, 0, 0, 0, 0, 0}
 
   # ## SSL Support
   #

@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Metrics for AI cost, search, background jobs and the VM, viewable in Fly's Grafana.
+
 ## [0.9.0] - 2026-10-18
 
 Find anything you saved, in your own words.

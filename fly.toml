@@ -34,6 +34,11 @@ kill_timeout = "30s"
     [http_service.checks.headers]
       X-Forwarded-Proto = "https"
 
+# Scraped by Fly over the private network every 15 s; not in http_service.
+[metrics]
+  port = 9568
+  path = "/metrics"
+
 [[vm]]
   cpu_kind = "shared"
   cpus = 1

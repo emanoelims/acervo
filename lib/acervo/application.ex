@@ -15,10 +15,14 @@ defmodule Acervo.Application do
       {Oban, Application.fetch_env!(:acervo, Oban)},
       # Query embeddings run here, unlinked, so a slow one outlives its search.
       {Task.Supervisor, name: Acervo.TaskSupervisor},
-      Acervo.Search.QueryCache,
-      # Start to serve requests, typically the last entry
-      AcervoWeb.Endpoint
+      Acervo.Search.QueryCache
     ]
+
+    # Prometheus metrics on their own port, only where the endpoint serves.
+    children = if AcervoWeb.Metrics.enabled?(), do: children ++ [AcervoWeb.Metrics], else: children
+
+    # Start to serve requests, typically the last entry
+    children = children ++ [AcervoWeb.Endpoint]
 
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
