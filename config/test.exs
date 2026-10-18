@@ -39,6 +39,7 @@ config :acervo, :embedder, Acervo.FakeEmbedder
 # its requests go to `Req.Test` stubs named `Acervo.Library.SafeFetch`.
 config :acervo, :resolver, Acervo.StaticResolver
 config :acervo, :safe_fetch_req_options, plug: {Req.Test, Acervo.Library.SafeFetch}
+config :acervo, :search, embed_timeout: 200, query_receive_timeout: 1_000, max_distance: 0.73
 
 config :acervo, :static_hosts, %{
   "public.test" => [{93, 184, 216, 34}],

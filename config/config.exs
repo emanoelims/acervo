@@ -67,6 +67,14 @@ config :acervo, :scopes,
     test_setup_helper: :register_and_log_in_user
   ]
 
+# Search (`Acervo.Search`). `embed_timeout` is the whole wait for the query
+# vector before falling back to text-only results flagged partial; the query
+# call itself gives up after `query_receive_timeout`, so a late answer still
+# fills the cache for the next keystroke. Vector hits farther than
+# `max_distance` (cosine distance, so similarity below 0.27) are dropped; text
+# hits are always kept.
+config :acervo, :search, embed_timeout: 3_000, query_receive_timeout: 10_000, max_distance: 0.73
+
 config :acervo,
   ecto_repos: [Acervo.Repo],
   generators: [timestamp_type: :utc_datetime, binary_id: true]

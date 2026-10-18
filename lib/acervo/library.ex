@@ -132,6 +132,28 @@ defmodule Acervo.Library do
     |> Repo.all()
   end
 
+  @doc """
+  The scope's links among `ids`, with the same preloads as `list_links/2`,
+  in the order of `ids`. Ids of other users' links, or of deleted ones, are
+  left out.
+  """
+  @spec list_links_by_ids(Scope.t(), [Ecto.UUID.t()]) :: [Link.t()]
+  def list_links_by_ids(%Scope{}, []), do: []
+
+  def list_links_by_ids(%Scope{user: user}, ids) when is_list(ids) do
+    first_image = from i in images_query(), where: i.position == 0
+
+    by_id =
+      from(l in Link,
+        where: l.user_id == ^user.id and l.id in ^ids,
+        preload: [:collections, images: ^first_image, suggestions: ^pending_suggestions_query()]
+      )
+      |> Repo.all()
+      |> Map.new(&{&1.id, &1})
+
+    for id <- ids, link = by_id[id], do: link
+  end
+
   defp filter(query, :all), do: query
   defp filter(query, :inbox), do: where(query, [l], is_nil(l.triaged_at))
 

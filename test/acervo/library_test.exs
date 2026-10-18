@@ -149,6 +149,24 @@ defmodule Acervo.LibraryTest do
     end
   end
 
+  describe "list_links_by_ids/2" do
+    test "returns the scope's links in the given order, with list_links/2's preloads", %{scope: scope} do
+      a = link_fixture(scope)
+      b = link_fixture(scope)
+      insert_image(a, 0, "a")
+      insert_image(a, 1, "b")
+      collection = collection_fixture(scope)
+      :ok = Collections.add_link(scope, collection, a)
+      theirs = link_fixture(user_scope_fixture())
+
+      assert [%{id: first}, %{id: second, images: [%LinkImage{position: 0}], collections: [_], suggestions: []}] =
+               Library.list_links_by_ids(scope, [b.id, theirs.id, Ecto.UUID.generate(), a.id])
+
+      assert [first, second] == [b.id, a.id]
+      assert Library.list_links_by_ids(scope, []) == []
+    end
+  end
+
   describe "pending suggestions" do
     setup %{scope: scope} do
       link = link_fixture(scope)
