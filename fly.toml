@@ -13,7 +13,7 @@ kill_timeout = "30s"
 [env]
   PHX_HOST = "acervo.fly.dev"
   PORT = "8080"
-  POOL_SIZE = "5"
+  POOL_SIZE = "10"
   ECTO_IPV6 = "true"
   DNS_CLUSTER_QUERY = "acervo.internal"
 
