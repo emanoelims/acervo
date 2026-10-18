@@ -286,6 +286,19 @@ defmodule Acervo.AI.EnrichmentTest do
       end
     end
 
+    test "an empty language, asked for when the page has no text, is stored as nil" do
+      assert {:ok, %{language: nil}} = Enrichment.normalize(output(%{"language" => ""}), input(%{text: ""}))
+    end
+
+    test "the system prompt asks for an empty language without text and for reasons in the collections' language" do
+      prompt = Enrichment.system_prompt()
+
+      assert prompt =~ "no text to judge"
+      assert prompt =~ "use an empty string and never guess"
+      assert prompt =~ "always written in the language of the collection names"
+      assert prompt =~ "Brazilian Portuguese when there are no collections"
+    end
+
     test "missing keys or wrong types are invalid" do
       assert {:error, :invalid_response} = Enrichment.normalize(Map.delete(output(), "suggestions"), input())
       assert {:error, :invalid_response} = Enrichment.normalize(output(%{"suggestions" => "receitas"}), input())

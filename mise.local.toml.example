@@ -2,8 +2,8 @@
 # mise loads that file automatically on top of `mise.toml`.
 [env]
 ANTHROPIC_API_KEY = ""
-# Optional: the chat model for enrichment (defaults to Haiku 5.5)
-# ACERVO_CHAT_MODEL = "anthropic:claude-haiku-5-5"
+# Optional: the chat model for enrichment (defaults to Opus 5.5)
+# ACERVO_CHAT_MODEL = "anthropic:claude-opus-5-5"
 # Optional in dev; required in production
 # ACERVO_ALLOWED_EMAILS = ""
 # Required in production: Resend API key and the sender address (the address

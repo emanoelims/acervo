@@ -21,7 +21,7 @@ if System.get_env("PHX_SERVER") do
 end
 
 config :acervo, AcervoWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4200"))]
-config :acervo, :ai, model: System.get_env("ACERVO_CHAT_MODEL", "anthropic:claude-haiku-5-5")
+config :acervo, :ai, model: System.get_env("ACERVO_CHAT_MODEL", "anthropic:claude-opus-5-5")
 
 # Anthropic API key. Set it in `mise.local.toml` for development
 # (see `mise.local.toml.example`); it is required in production.

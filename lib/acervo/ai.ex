@@ -17,10 +17,10 @@ defmodule Acervo.AI do
 
   require Logger
 
-  @doc "The configured chat model, such as `\"anthropic:claude-haiku-5-5\"`."
+  @doc "The configured chat model, such as `\"anthropic:claude-opus-5-5\"` (Opus 5.5 by default)."
   @spec model() :: String.t()
   def model do
-    Application.get_env(:acervo, :ai, [])[:model] || "anthropic:claude-haiku-5-5"
+    Application.get_env(:acervo, :ai, [])[:model] || "anthropic:claude-opus-5-5"
   end
 
   @doc """

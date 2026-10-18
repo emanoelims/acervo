@@ -42,14 +42,14 @@ defmodule Acervo.AITest do
       assert {:ok, %{"language" => "pt"}} =
                AI.generate_object(scope, %{operation: "enrich_link", link_id: link.id}, context, @schema)
 
-      assert_received {:called, "anthropic:claude-haiku-5-5", ^context, @schema}
+      assert_received {:called, "anthropic:claude-opus-5-5", ^context, @schema}
       assert FakeAIClient.last_context() == context
 
       assert [call] = Repo.all(Call)
       assert call.user_id == scope.user.id
       assert call.link_id == link.id
       assert call.operation == "enrich_link"
-      assert call.model == "anthropic:claude-haiku-5-5"
+      assert call.model == "anthropic:claude-opus-5-5"
       assert call.status == :ok
       assert call.error == nil
       assert call.input_tokens == 1200
@@ -83,7 +83,7 @@ defmodule Acervo.AITest do
 
       assert {:ok, _} = AI.generate_object(scope, %{operation: "enrich_link", link_id: nil}, context, @schema)
       assert [%Call{input_tokens: 412, output_tokens: 57, cost_usd: cost}] = Repo.all(Call)
-      assert Decimal.equal?(cost, Decimal.new("0.0000697"))
+      assert Decimal.equal?(cost, Decimal.new("0.002788"))
     end
 
     test "keeps the record when the link was deleted during the call", %{scope: scope, context: context} do
