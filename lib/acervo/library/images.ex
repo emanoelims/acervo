@@ -70,6 +70,49 @@ defmodule Acervo.Library.Images do
     end
   end
 
+  @doc """
+  Prepares an image for the model: a WebP at quality 75, at most `max_side`
+  pixels on the long side (1024 keeps it near 1.4k input tokens). When the
+  result is still over `max_bytes`, it retries once at 768 px and quality 60,
+  then gives up with `:too_large`. Accepts the same formats as `normalize/1`.
+  """
+  @spec for_model(binary(), keyword()) :: {:ok, binary()} | {:error, :not_an_image | :too_large}
+  def for_model(binary, opts \\ []) when is_binary(binary) do
+    opts = Keyword.validate!(opts, max_side: 1024, max_bytes: 1_000_000)
+
+    with :ok <- check_input_size(binary),
+         {:ok, probe} <- open(binary),
+         :ok <- check_loader(probe),
+         :ok <- check_dimensions(probe),
+         {:ok, bytes} <- model_webp(binary, opts[:max_side], 75) do
+      if byte_size(bytes) <= opts[:max_bytes] do
+        {:ok, bytes}
+      else
+        smaller(binary, opts[:max_bytes])
+      end
+    else
+      {:error, :too_large} -> {:error, :too_large}
+      {:error, _} -> {:error, :not_an_image}
+    end
+  end
+
+  defp check_input_size(binary) when byte_size(binary) > @max_input_bytes, do: {:error, :too_large}
+  defp check_input_size(_binary), do: :ok
+
+  defp smaller(binary, max_bytes) do
+    case model_webp(binary, 768, 60) do
+      {:ok, bytes} when byte_size(bytes) <= max_bytes -> {:ok, bytes}
+      {:ok, _bytes} -> {:error, :too_large}
+      {:error, _} -> {:error, :not_an_image}
+    end
+  end
+
+  defp model_webp(binary, max_side, quality) do
+    with {:ok, image} <- Operation.thumbnail_buffer(binary, max_side, size: :VIPS_SIZE_DOWN) do
+      Image.write(image, :memory, suffix: ".webp", quality: quality, strip_metadata: true)
+    end
+  end
+
   # libvips opens lazily: this reads the header only, no pixels are decoded.
   defp open(binary), do: Image.from_binary(binary)
 
