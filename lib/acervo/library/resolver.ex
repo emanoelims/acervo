@@ -17,14 +17,19 @@ defmodule Acervo.Library.Resolver do
 end
 
 defmodule Acervo.Library.Resolver.Inet do
-  @moduledoc "Resolves through the system resolver, merging IPv4 and IPv6 answers (IPv4 first)."
+  @moduledoc """
+  Resolves through the system resolver, merging IPv4 and IPv6 answers (IPv4
+  first). Each lookup gives up after 5 seconds.
+  """
   @behaviour Acervo.Library.Resolver
+
+  @timeout 5_000
 
   @impl true
   def resolve(host) when is_binary(host) do
     host = String.to_charlist(host)
 
-    case {:inet.getaddrs(host, :inet), :inet.getaddrs(host, :inet6)} do
+    case {:inet.getaddrs(host, :inet, @timeout), :inet.getaddrs(host, :inet6, @timeout)} do
       {{:error, reason}, {:error, _}} -> {:error, reason}
       {v4, v6} -> {:ok, Enum.uniq(addresses(v4) ++ addresses(v6))}
     end

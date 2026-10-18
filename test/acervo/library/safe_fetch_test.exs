@@ -41,7 +41,16 @@ defmodule Acervo.Library.SafeFetchTest do
         # 64:ff9b::10.0.0.5, NAT64
         {0x64, 0xFF9B, 0, 0, 0, 0, 0x0A00, 0x0005},
         # 2002:7f00:0001::, 6to4 wrapping 127.0.0.1
-        {0x2002, 0x7F00, 0x0001, 0, 0, 0, 0, 1}
+        {0x2002, 0x7F00, 0x0001, 0, 0, 0, 0, 1},
+        # ::ffff:0:127.0.0.1, SIIT (0:0:0:0:ffff:0::/96)
+        {0, 0, 0, 0, 0xFFFF, 0, 0x7F00, 0x0001},
+        # 2001:0::, Teredo, blocked outright
+        {0x2001, 0, 0x4136, 0xE378, 0x8000, 0x63BF, 0x3FFF, 0xFDD2},
+        # 100::/64, discard-only
+        {0x100, 0, 0, 0, 0, 0, 0, 1},
+        # fec0::/10, deprecated site-local
+        {0xFEC0, 0, 0, 0, 0, 0, 0, 1},
+        {0xFEFF, 0, 0, 0, 0, 0, 0, 1}
       ]
 
       for ip <- blocked do
@@ -61,7 +70,10 @@ defmodule Acervo.Library.SafeFetchTest do
         {223, 255, 255, 255},
         {0x2001, 0x4860, 0, 0, 0, 0, 0, 0x8888},
         {0, 0, 0, 0, 0, 0xFFFF, 0x0808, 0x0808},
-        {0x64, 0xFF9B, 0, 0, 0, 0, 0x0808, 0x0808}
+        {0, 0, 0, 0, 0xFFFF, 0, 0x0808, 0x0808},
+        {0x64, 0xFF9B, 0, 0, 0, 0, 0x0808, 0x0808},
+        {0x2001, 0x0DB9, 0, 0, 0, 0, 0, 1},
+        {0x100, 0, 0, 1, 0, 0, 0, 1}
       ]
 
       for ip <- allowed do
@@ -162,6 +174,29 @@ defmodule Acervo.Library.SafeFetchTest do
 
       assert {:ok, %{status: 200, url: "https://ipv6.test/"}} = SafeFetch.get("https://ipv6.test/")
     end
+
+    test "pins TLS to the original host through Finch conn_opts" do
+      uri = URI.parse("https://public.test/a")
+      opts = [max_bytes: 100, accept: nil, user_agent: "ua", max_redirects: 5]
+
+      options = SafeFetch.req_options(uri, {93, 184, 216, 34}, opts)
+
+      assert options[:url] == "https://93.184.216.34/a"
+      assert {"host", "public.test"} in options[:headers]
+      refute Keyword.has_key?(options, :connect_options)
+
+      assert options[:finch] == [
+               conn_opts: [hostname: "public.test", transport_opts: [timeout: 10_000]],
+               pool_max_idle_time: 60_000
+             ]
+
+      ipv6_options = SafeFetch.req_options(URI.parse("https://ipv6.test/"), {0x2001, 0x4860, 0, 0, 0, 0, 0, 0x8888}, opts)
+
+      assert ipv6_options[:url] == "https://[2001:4860::8888]/"
+      assert {"host", "ipv6.test"} in ipv6_options[:headers]
+      assert ipv6_options[:finch][:conn_opts][:hostname] == "ipv6.test"
+      assert ipv6_options[:finch][:conn_opts][:transport_opts] == [timeout: 10_000, inet6: true]
+    end
   end
 
   describe "get/2 redirects" do
@@ -195,6 +230,33 @@ defmodule Acervo.Library.SafeFetchTest do
       end)
 
       assert {:ok, %{url: "https://public.test/a/next?x=1"}} = SafeFetch.get("https://public.test/a/start")
+    end
+
+    test "follows a protocol-relative location with the current scheme's default port" do
+      Req.Test.expect(SafeFetch, 2, fn
+        %{request_path: "/start"} = conn ->
+          conn
+          |> Plug.Conn.put_resp_header("location", "//other.test/next")
+          |> Plug.Conn.send_resp(302, "")
+
+        %{request_path: "/next"} = conn ->
+          assert conn.host == "93.184.216.35"
+          assert conn.port == 443
+          assert Plug.Conn.get_req_header(conn, "host") == ["other.test"]
+          Plug.Conn.send_resp(conn, 200, "ok")
+      end)
+
+      assert {:ok, %{status: 200, url: "https://other.test/next"}} = SafeFetch.get("https://public.test/start")
+    end
+
+    test "blocks a protocol-relative location to a private host" do
+      Req.Test.expect(SafeFetch, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "//internal.test/x")
+        |> Plug.Conn.send_resp(302, "")
+      end)
+
+      assert {:error, :blocked_address} = SafeFetch.get("https://public.test/")
     end
 
     test "blocks a redirect to a private host" do
@@ -314,5 +376,37 @@ defmodule Acervo.Library.SafeFetchTest do
       send(test_pid, {:request, conn})
       Plug.Conn.send_resp(conn, 200, "should not be reached")
     end)
+  end
+end
+
+defmodule Acervo.Library.SafeFetchConfigTest do
+  # Mutates the application environment, so it must not run alongside the
+  # async SafeFetch tests.
+  use ExUnit.Case, async: false
+
+  alias Acervo.Library.SafeFetch
+
+  setup do
+    original = Application.get_env(:acervo, :safe_fetch_req_options)
+    on_exit(fn -> Application.put_env(:acervo, :safe_fetch_req_options, original) end)
+  end
+
+  test "the test override can only inject a plug" do
+    Application.put_env(:acervo, :safe_fetch_req_options,
+      plug: {Req.Test, SafeFetch},
+      url: "http://127.0.0.1/",
+      connect_options: [hostname: "evil.test"],
+      finch: [name: Req.Finch],
+      redirect: true
+    )
+
+    options = SafeFetch.req_options(URI.parse("https://public.test/"), {93, 184, 216, 34}, max_bytes: 1)
+
+    assert options[:plug] == {Req.Test, SafeFetch}
+    assert options[:url] == "https://93.184.216.34/"
+    assert options[:redirect] == false
+    assert options[:finch][:conn_opts][:hostname] == "public.test"
+    refute Keyword.has_key?(options, :connect_options)
+    assert Keyword.get_values(options, :url) == ["https://93.184.216.34/"]
   end
 end

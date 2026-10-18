@@ -9,18 +9,19 @@ defmodule Acervo.Library.SafeFetch do
       refused if *any* address is private, loopback, link-local, multicast or
       otherwise internal (see `blocked_ip?/1`);
     * the connection is pinned to the vetted address: Req is given a URL whose
-      host is the IP literal, while `connect_options: [hostname: host]` makes
-      Mint use the real host for TLS SNI and certificate verification, and the
-      `host` header carries it to the server. DNS is never consulted again, so
-      a rebinding answer cannot redirect the connection;
+      host is the IP literal, while the Finch `conn_opts: [hostname: host]`
+      makes Mint use the real host for TLS SNI and certificate verification,
+      and the `host` header carries it to the server. DNS is never consulted
+      again, so a rebinding answer cannot redirect the connection;
     * redirects are followed by hand, re-running every check on each hop;
     * the body is streamed and abandoned past `:max_bytes`, and every hop has
       connect, receive and overall timeouts.
 
-  Req starts one Finch instance per distinct set of connect options, and the
-  instance name hashes `hostname`, so a pinned connection is only ever reused
-  for the same host name, IP and port (Finch keys its pools by scheme, IP and
-  port within an instance).
+  Req starts one Finch instance per distinct set of pool options, and the
+  instance name hashes them, `hostname` included, so a pinned connection is
+  only ever reused for the same host name, IP and port (Finch keys its pools by
+  scheme, IP and port within an instance). Pools idle for `@pool_max_idle_time`
+  are terminated, closing their sockets.
   """
 
   import Bitwise
@@ -33,6 +34,7 @@ defmodule Acervo.Library.SafeFetch do
   @connect_timeout 10_000
   @receive_timeout 10_000
   @request_timeout 30_000
+  @pool_max_idle_time 60_000
 
   # {network, prefix length}
   @blocked_ipv4 [
@@ -55,9 +57,15 @@ defmodule Acervo.Library.SafeFetch do
     {{0, 0, 0, 0, 0, 0, 0, 0}, 96},
     {{0xFC00, 0, 0, 0, 0, 0, 0, 0}, 7},
     {{0xFE80, 0, 0, 0, 0, 0, 0, 0}, 10},
+    # deprecated site-local
+    {{0xFEC0, 0, 0, 0, 0, 0, 0, 0}, 10},
     {{0xFF00, 0, 0, 0, 0, 0, 0, 0}, 8},
     # NAT64 local-use prefix, which may translate to any internal IPv4
-    {{0x64, 0xFF9B, 0x1, 0, 0, 0, 0, 0}, 48}
+    {{0x64, 0xFF9B, 0x1, 0, 0, 0, 0, 0}, 48},
+    # discard-only
+    {{0x100, 0, 0, 0, 0, 0, 0, 0}, 64},
+    # Teredo, which tunnels to an IPv4 address we cannot vet
+    {{0x2001, 0, 0, 0, 0, 0, 0, 0}, 32}
   ]
 
   @type response :: %{status: integer(), headers: map(), body: binary(), url: String.t()}
@@ -99,8 +107,9 @@ defmodule Acervo.Library.SafeFetch do
   @doc """
   Returns whether `ip` is in a range the server must never reach.
 
-  IPv4-mapped (`::ffff:a.b.c.d`), NAT64 (`64:ff9b::a.b.c.d`) and 6to4
-  (`2002:AABB:CCDD::`) IPv6 addresses are judged by the IPv4 address they embed.
+  IPv4-mapped (`::ffff:a.b.c.d`), SIIT (`::ffff:0:a.b.c.d`), NAT64
+  (`64:ff9b::a.b.c.d`) and 6to4 (`2002:AABB:CCDD::`) IPv6 addresses are judged
+  by the IPv4 address they embed. Teredo (`2001::/32`) is blocked outright.
   """
   @spec blocked_ip?(:inet.ip_address()) :: boolean()
   def blocked_ip?({_, _, _, _} = ip) do
@@ -109,6 +118,7 @@ defmodule Acervo.Library.SafeFetch do
   end
 
   def blocked_ip?({0, 0, 0, 0, 0, 0xFFFF, high, low}), do: blocked_ip?(embedded_ipv4(high, low))
+  def blocked_ip?({0, 0, 0, 0, 0xFFFF, 0, high, low}), do: blocked_ip?(embedded_ipv4(high, low))
   def blocked_ip?({0x64, 0xFF9B, 0, 0, 0, 0, high, low}), do: blocked_ip?(embedded_ipv4(high, low))
   def blocked_ip?({0x2002, high, low, _, _, _, _, _}), do: blocked_ip?(embedded_ipv4(high, low))
 
@@ -166,9 +176,12 @@ defmodule Acervo.Library.SafeFetch do
     end
   end
 
+  # A protocol-relative location (`//host/path`) merges into a URI without a
+  # port, so the scheme's default port is filled in before checking it.
   defp validate(%URI{scheme: scheme, host: host, userinfo: nil, port: port} = uri)
        when scheme in ["http", "https"] and is_binary(host) and host != "" do
-    if port in @allowed_ports, do: {:ok, %{uri | fragment: nil}}, else: {:error, :bad_port}
+    port = port || URI.default_port(scheme)
+    if port in @allowed_ports, do: {:ok, %{uri | port: port, fragment: nil}}, else: {:error, :bad_port}
   end
 
   defp validate(%URI{}), do: {:error, :invalid_url}
@@ -192,31 +205,46 @@ defmodule Acervo.Library.SafeFetch do
 
   defp request(uri, ip, opts) do
     max_bytes = opts[:max_bytes]
-    pinned_url = URI.to_string(%{uri | host: ip |> :inet.ntoa() |> to_string()})
 
-    req_options =
-      Keyword.merge(
-        [
-          method: :get,
-          url: pinned_url,
-          headers: request_headers(uri, opts),
-          connect_options: [hostname: uri.host, timeout: @connect_timeout],
-          receive_timeout: @receive_timeout,
-          request_timeout: @request_timeout,
-          redirect: false,
-          retry: false,
-          decode_body: false,
-          into: &collect(&1, &2, max_bytes)
-        ],
-        Application.get_env(:acervo, :safe_fetch_req_options, [])
-      )
-
-    case Req.request(req_options) do
+    case uri |> req_options(ip, opts) |> Req.request() do
       {:ok, response} -> check_size(response, max_bytes)
       {:error, %{reason: :timeout}} -> {:error, :timeout}
       {:error, %{reason: reason}} -> {:error, {:transport, reason}}
       {:error, error} -> {:error, {:transport, error}}
     end
+  end
+
+  @doc false
+  # The Req options for one pinned hop. Public only so tests can inspect them.
+  # Tests may inject a `:plug` through `:safe_fetch_req_options`, and nothing
+  # else, so the URL and the pinned connection can never be overridden.
+  @spec req_options(URI.t(), :inet.ip_address(), keyword()) :: keyword()
+  def req_options(uri, ip, opts) do
+    max_bytes = opts[:max_bytes]
+    pinned_url = URI.to_string(%{uri | host: ip |> :inet.ntoa() |> to_string()})
+
+    # Setting conn_opts replaces the `inet6: true` Req would add on its own for
+    # an IPv6 URL, so it is set here instead.
+    transport_opts = [timeout: @connect_timeout] ++ if(tuple_size(ip) == 8, do: [inet6: true], else: [])
+
+    Keyword.merge(
+      [
+        method: :get,
+        url: pinned_url,
+        headers: request_headers(uri, opts),
+        finch: [
+          conn_opts: [hostname: uri.host, transport_opts: transport_opts],
+          pool_max_idle_time: @pool_max_idle_time
+        ],
+        receive_timeout: @receive_timeout,
+        request_timeout: @request_timeout,
+        redirect: false,
+        retry: false,
+        decode_body: false,
+        into: &collect(&1, &2, max_bytes)
+      ],
+      :acervo |> Application.get_env(:safe_fetch_req_options, []) |> Keyword.take([:plug])
+    )
   end
 
   defp request_headers(uri, opts) do
