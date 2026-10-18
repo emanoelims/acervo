@@ -43,7 +43,7 @@ jobs:
       MIX_ENV: test
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres

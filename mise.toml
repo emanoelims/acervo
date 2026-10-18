@@ -7,6 +7,18 @@ erlang = "29"
 [env]
 PORT = "4200"
 
+[tasks."db:create"]
+description = "Create the acervo-db container (Postgres 18 with pgvector) on port 5432"
+run = [
+  "container system start",
+  "container volume create acervo-pgdata",
+  "container run -d --name acervo-db -c 2 -m 1024M -p 127.0.0.1:5432:5432 -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -v acervo-pgdata:/var/lib/postgresql pgvector/pgvector:pg18",
+]
+
+[tasks.db]
+description = "Start the acervo-db container"
+run = ["container system start", "container start acervo-db"]
+
 [tasks.setup]
 description = "Set up dependencies, database, and assets"
 run = ["mix local.hex --force", "mix local.rebar --force", "mix setup"]
