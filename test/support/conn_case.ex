@@ -38,7 +38,9 @@ defmodule AcervoWeb.ConnCase do
 
   setup tags do
     Acervo.DataCase.setup_sandbox(tags)
-    {:ok, conn: Phoenix.ConnTest.build_conn()}
+    # Tests assert on English msgids; the locale suite covers the pt_BR default.
+    conn = Phoenix.ConnTest.put_req_cookie(Phoenix.ConnTest.build_conn(), "acervo_locale", "en")
+    {:ok, conn: conn}
   end
 
   @doc """

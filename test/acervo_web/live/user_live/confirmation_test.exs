@@ -69,7 +69,7 @@ defmodule AcervoWeb.UserLive.ConfirmationTest do
       assert redirected_to(conn) == ~p"/"
 
       # log out, new conn
-      conn = build_conn()
+      conn = put_req_cookie(build_conn(), "acervo_locale", "en")
 
       {:ok, _lv, html} =
         conn
@@ -101,7 +101,7 @@ defmodule AcervoWeb.UserLive.ConfirmationTest do
       assert Accounts.get_user!(user.id).confirmed_at == user.confirmed_at
 
       # log out, new conn
-      conn = build_conn()
+      conn = put_req_cookie(build_conn(), "acervo_locale", "en")
 
       {:ok, _lv, html} =
         conn

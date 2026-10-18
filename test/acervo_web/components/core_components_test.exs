@@ -6,6 +6,11 @@ defmodule AcervoWeb.CoreComponentsTest do
 
   alias AcervoWeb.CoreComponents
 
+  setup do
+    Gettext.put_locale(AcervoWeb.Gettext, "en")
+    :ok
+  end
+
   test "button uses leitor's action classes" do
     assigns = %{}
 

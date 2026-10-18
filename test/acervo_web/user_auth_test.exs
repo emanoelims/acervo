@@ -13,6 +13,8 @@ defmodule AcervoWeb.UserAuthTest do
   @remember_me_cookie_max_age 60 * 60 * 24 * 14
 
   setup %{conn: conn} do
+    Gettext.put_locale(AcervoWeb.Gettext, "en")
+
     conn =
       conn
       |> Map.replace!(:secret_key_base, AcervoWeb.Endpoint.config(:secret_key_base))
