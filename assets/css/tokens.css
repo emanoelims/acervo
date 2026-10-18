@@ -22,6 +22,13 @@
 :root[data-theme=ink] { --paper:#0f1319; --card:#161b23; --soft:#1c222c; --ink:#e3e8f0; --body:#abb4c1; --muted:#7a8594; --faint:#505a69; --line:#232b36; --rule-strong:#303947; --pill:#2c3441; --pop-shadow:0 1px 1px rgb(0 0 0 / 0.35), 0 18px 44px -14px rgb(0 0 0 / 0.7), 0 3px 8px -3px rgb(0 0 0 / 0.45); --card-shadow:0 1px 1px rgb(0 0 0 / 0.3), 0 12px 30px -16px rgb(0 0 0 / 0.65); --grain-opacity:0.03; --inverse:var(--paper); color-scheme:dark; }
 :root[data-theme=dark], :root[data-theme=ink] { --danger: #ffad94; }
 
+/* First paint for dark-OS users on "auto": appearance.js resolves auto to dark
+   only after it runs, so the dark tokens are duplicated here (keep in sync with
+   the dark theme above) to avoid a light flash. Must stay after the theme rules. */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme-mode=auto] { --paper:#151412; --card:#1d1b18; --soft:#24221e; --ink:#e9e3d6; --body:#b6ae9e; --muted:#878073; --faint:#5b564d; --line:#2c2a26; --rule-strong:#3e3a34; --pill:#34312b; --pop-shadow:0 1px 1px rgb(0 0 0 / 0.3), 0 18px 44px -14px rgb(0 0 0 / 0.65), 0 3px 8px -3px rgb(0 0 0 / 0.4); --card-shadow:0 1px 1px rgb(0 0 0 / 0.25), 0 12px 30px -16px rgb(0 0 0 / 0.6); --grain-opacity:0.035; --inverse:var(--paper); color-scheme:dark; --danger: #ffad94; }
+}
+
 /* Accents: light-scheme value by default, dark-scheme value under dark/ink. */
 :root, :root[data-accent=graphite] { --accent: #4b4a47; --accent-text: #3a3936; }
 :root[data-accent=vermilion] { --accent: #c1401b; --accent-text: #a9361a; }

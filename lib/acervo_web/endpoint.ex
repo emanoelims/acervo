@@ -8,7 +8,8 @@ defmodule AcervoWeb.Endpoint do
     store: :cookie,
     key: "_acervo_key",
     signing_salt: "Wat5NxID",
-    same_site: "Lax"
+    same_site: "Lax",
+    secure: Application.compile_env(:acervo, :secure_cookies, false)
   ]
 
   socket "/live", Phoenix.LiveView.Socket,

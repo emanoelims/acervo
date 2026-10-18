@@ -49,19 +49,19 @@ defmodule AcervoWeb.UserLive.Registration do
   def handle_event("save", %{"user" => user_params}, socket) do
     case Accounts.register_user(user_params) do
       {:ok, user} ->
-        {:ok, _} =
-          Accounts.deliver_login_instructions(
-            user,
-            &url(~p"/users/log-in/#{&1}")
-          )
+        case Accounts.deliver_login_instructions(user, &url(~p"/users/log-in/#{&1}")) do
+          {:ok, _} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, gettext("A sign-in link was sent to %{email}.", email: user.email))
+             |> push_navigate(to: ~p"/users/log-in")}
 
-        {:noreply,
-         socket
-         |> put_flash(
-           :info,
-           gettext("A sign-in link was sent to %{email}.", email: user.email)
-         )
-         |> push_navigate(to: ~p"/users/log-in")}
+          {:error, _reason} ->
+            {:noreply,
+             socket
+             |> put_flash(:error, gettext("We couldn't send the email. Try again in a moment."))
+             |> push_navigate(to: ~p"/users/log-in")}
+        end
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_form(socket, changeset)}

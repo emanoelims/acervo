@@ -38,9 +38,36 @@ defmodule AcervoWeb.LocaleTest do
     assert redirected_to(conn) == "/"
   end
 
+  test "ignores a percent-encoded tab return path", %{conn: conn} do
+    conn = get(conn, "/locale/en?return_to=/%2509evil.example")
+    assert redirected_to(conn) == "/"
+  end
+
+  test "ignores a return path with a tab", %{conn: conn} do
+    conn = get(conn, "/locale/en?return_to=/%09/evil.example")
+    assert redirected_to(conn) == "/"
+  end
+
+  test "ignores a return path with a literal backslash", %{conn: conn} do
+    conn = get(conn, "/locale/en?return_to=/%5Cevil")
+    assert redirected_to(conn) == "/"
+  end
+
+  test "keeps the query string of the return path", %{conn: conn} do
+    conn = get(conn, ~p"/locale/en?#{[return_to: "/inbox?x=1"]}")
+    assert redirected_to(conn) == "/inbox?x=1"
+  end
+
   test "the cookie selects English", %{conn: conn} do
     conn = conn |> put_req_cookie("acervo_locale", "en") |> get(~p"/users/log-in")
     assert conn.assigns.locale == "en"
     assert html_response(conn, 200) =~ ~s(lang="en")
+  end
+
+  test "browser responses carry a content security policy", %{conn: conn} do
+    [csp] = conn |> get(~p"/users/log-in") |> get_resp_header("content-security-policy")
+    assert csp =~ "default-src 'self'"
+    assert csp =~ "script-src 'self'"
+    assert csp =~ "frame-ancestors 'self'"
   end
 end

@@ -156,7 +156,7 @@ defmodule AcervoWeb.CoreComponents do
         @kind == :error && "flash-error"
       ]}>
         <.icon :if={@kind == :info} name="lucide-thin-info" class="size-5 shrink-0" />
-        <.icon :if={@kind == :error} name="lucide-thin-info" class="size-5 shrink-0" />
+        <.icon :if={@kind == :error} name="lucide-thin-circle-alert" class="size-5 shrink-0" />
         <div>
           <p :if={@title} class="font-semibold">{@title}</p>
           <p>{msg}</p>

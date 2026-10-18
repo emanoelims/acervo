@@ -19,6 +19,14 @@ defmodule AcervoWeb.ArchiveLiveTest do
       refute has_element?(view, "#column-inbox")
     end
 
+    test "the language switch returns to the current page with its query", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/inbox")
+      assert view |> element("#locale-option-en") |> render() =~ "return_to=%2Finbox"
+
+      {:ok, view, _html} = live(conn, ~p"/inbox?x=1")
+      assert view |> element("#locale-option-en") |> render() =~ "return_to=%2Finbox%3Fx%3D1"
+    end
+
     test "an empty archive reads as zero, not as one", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/")
       assert view |> element("#column-root .lead") |> render() =~ "No links · no collections."

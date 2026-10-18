@@ -34,7 +34,12 @@ config :acervo, Oban,
   engine: Oban.Engines.Basic,
   repo: Acervo.Repo,
   queues: [capture: 4, ai: 2, embed: 4],
-  plugins: [{Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7}]
+  # Below the 30 s kill_timeout in fly.toml, so jobs can finish before SIGKILL.
+  shutdown_grace_period: to_timeout(second: 20),
+  plugins: [
+    {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
+    {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 30)}
+  ]
 
 # Registration is open in dev and test; production restricts it to
 # ACERVO_ALLOWED_EMAILS (see config/runtime.exs).

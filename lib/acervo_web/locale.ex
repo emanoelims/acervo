@@ -24,7 +24,11 @@ defmodule AcervoWeb.Locale do
     conn = fetch_cookies(conn)
     locale = normalize(conn.cookies[@cookie])
     Gettext.put_locale(AcervoWeb.Gettext, locale)
-    conn |> put_session(:locale, locale) |> assign(:locale, locale)
+
+    conn =
+      if get_session(conn, :locale) == locale, do: conn, else: put_session(conn, :locale, locale)
+
+    assign(conn, :locale, locale)
   end
 
   def on_mount(:default, _params, session, socket) do

@@ -1,11 +1,16 @@
 defmodule Acervo.Accounts.UserNotifier do
   @moduledoc false
+  use Gettext, backend: AcervoWeb.Gettext
+
   import Swoosh.Email
 
   alias Acervo.Accounts.User
   alias Acervo.Mailer
 
-  # Delivers the email using the application mailer.
+  require Logger
+
+  # Delivers the email using the application mailer. Failures are logged (the
+  # reason only, never the recipient or the link) and returned to the caller.
   defp deliver(recipient, subject, body) do
     email =
       new()
@@ -14,8 +19,13 @@ defmodule Acervo.Accounts.UserNotifier do
       |> subject(subject)
       |> text_body(body)
 
-    with {:ok, _metadata} <- Mailer.deliver(email) do
-      {:ok, email}
+    case Mailer.deliver(email) do
+      {:ok, _metadata} ->
+        {:ok, email}
+
+      {:error, reason} = error ->
+        Logger.error("Email delivery failed: #{inspect(reason)}")
+        error
     end
   end
 
@@ -23,20 +33,23 @@ defmodule Acervo.Accounts.UserNotifier do
   Deliver instructions to update a user email.
   """
   def deliver_update_email_instructions(user, url) do
-    deliver(user.email, "Update email instructions", """
+    deliver(
+      user.email,
+      gettext("Confirm your new email"),
+      gettext(
+        """
+        Hi %{email},
 
-    ==============================
+        Open the link below to change your email:
 
-    Hi #{user.email},
+        %{url}
 
-    You can change your email by visiting the URL below:
-
-    #{url}
-
-    If you didn't request this change, please ignore this.
-
-    ==============================
-    """)
+        If you didn't ask for this, you can ignore this message.
+        """,
+        email: user.email,
+        url: url
+      )
+    )
   end
 
   @doc """
@@ -50,36 +63,42 @@ defmodule Acervo.Accounts.UserNotifier do
   end
 
   defp deliver_magic_link_instructions(user, url) do
-    deliver(user.email, "Log in instructions", """
+    deliver(
+      user.email,
+      gettext("Your sign-in link"),
+      gettext(
+        """
+        Hi %{email},
 
-    ==============================
+        Open the link below to sign in:
 
-    Hi #{user.email},
+        %{url}
 
-    You can log into your account by visiting the URL below:
-
-    #{url}
-
-    If you didn't request this email, please ignore this.
-
-    ==============================
-    """)
+        If you didn't ask for this, you can ignore this message.
+        """,
+        email: user.email,
+        url: url
+      )
+    )
   end
 
   defp deliver_confirmation_instructions(user, url) do
-    deliver(user.email, "Confirmation instructions", """
+    deliver(
+      user.email,
+      gettext("Confirm your account"),
+      gettext(
+        """
+        Hi %{email},
 
-    ==============================
+        Open the link below to confirm your account:
 
-    Hi #{user.email},
+        %{url}
 
-    You can confirm your account by visiting the URL below:
-
-    #{url}
-
-    If you didn't create an account with us, please ignore this.
-
-    ==============================
-    """)
+        If you didn't create an account, you can ignore this message.
+        """,
+        email: user.email,
+        url: url
+      )
+    )
   end
 end

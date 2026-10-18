@@ -2,8 +2,8 @@
 elixir = "1.20.4-otp-29"
 erlang = "29"
 
-# Envs compartilhadas (versionadas). Segredos e overrides locais vão em
-# `mise.local.toml` (gitignored) — veja `mise.local.toml.example`.
+# Shared envs (versioned). Secrets and local overrides go in
+# `mise.local.toml` (gitignored); see `mise.local.toml.example`.
 [env]
 PORT = "4200"
 

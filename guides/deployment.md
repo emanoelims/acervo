@@ -1,6 +1,6 @@
 # Production deployment
 
-Acervo runs at [acervo.fly.dev](https://acervo.fly.dev) in the Fly `personal`
+Acervo runs at [acervo-app.fly.dev](https://acervo-app.fly.dev) in the Fly `personal`
 organization, region `gru`. The app uses one shared CPU and 1 GB of memory, and
 one machine stays running. Provisioning (app, database, secrets, token) is done
 once by hand; nothing deploys until a release is published.
@@ -29,42 +29,83 @@ dashboard for emergency recovery, accounting for any applied migrations.
 
 ## Database
 
-The unmanaged Postgres app `sisteo-apps-db` hosts a separate `acervo` database
-and a non-superuser `acervo` role. The app connects over Fly's private IPv6
-network (`ECTO_IPV6=true`). Sisteo's schema is never modified.
+Acervo shares the unmanaged Fly Postgres app `sisteo-apps-db` (region `gru`,
+Postgres 18) with sisteo and leitor. Acervo has its own `acervo` database and a
+non-superuser `acervo` role; the other schemas are never modified. The app
+connects over Fly's private IPv6 network (`ECTO_IPV6=true`). The volume was
+extended to 10 GB because acervo stores images in the database.
 
-The first migration runs `CREATE EXTENSION` for `citext`, `unaccent` and
-`vector` (pgvector). The role must be allowed to create them: either the
-extension is marked trusted (`citext` and `unaccent` are in stock Postgres;
-check pgvector's control file on the server), or an administrator creates the
-extension in the `acervo` database beforehand, which makes the migration's
-`IF NOT EXISTS` a no-op. When bootstrapping with `--superuser=false`, also grant
-the role `CREATE` on its own database:
+### Custom image with pgvector
 
-```sql
-GRANT CREATE ON DATABASE acervo TO acervo;
+The stock `flyio/postgres-flex` image has no pgvector. The cluster runs a custom
+image, defined in `infra/sisteo-apps-db/Dockerfile`: `flyio/postgres-flex:18.1`
+pinned by digest, plus the PGDG package `postgresql-18-pgvector=0.8.6-1.pgdg24.04+1`.
+It is published as `registry.fly.io/sisteo-apps-db:pgvector-0.8.6`.
+
+Build and push it from that directory (its `fly.toml` only holds
+`app = "sisteo-apps-db"`):
+
+```sh
+cd infra/sisteo-apps-db
+fly deploy --build-only --push -a sisteo-apps-db --image-label pgvector-0.8.6 --remote-only
 ```
 
-Do not grant cluster-wide privileges or run schema migrations manually in the
-SQL console. The server image must ship the pgvector extension files.
+Applying it restarts the shared database for about a minute, which affects
+sisteo and leitor. Take a volume snapshot first, then update the machine:
+
+```sh
+fly volumes snapshots create <vol> -a sisteo-apps-db
+fly machine update <id> -a sisteo-apps-db --image registry.fly.io/sisteo-apps-db:pgvector-0.8.6
+```
+
+Upgrading postgres-flex (a new base tag or digest, or a new major version)
+means rebuilding this image with the new base and pgvector package.
+
+### Database and role
+
+Created on 2026-10-18 by attaching the app:
+
+```sh
+fly postgres attach sisteo-apps-db --app acervo-app --database-name acervo --database-user acervo --superuser=false
+```
+
+### Extensions
+
+`vector` is not a trusted extension, so the `acervo` role cannot create it. The
+cluster superuser `flypgadmin` (its password is the machine's `SU_PASSWORD`
+environment variable, on the direct Postgres port 5433) created the extensions
+and granted the role the rights it needs:
+
+```sh
+fly ssh console -a sisteo-apps-db -C "sh -c 'PGPASSWORD=\$SU_PASSWORD psql -h localhost -p 5433 -U flypgadmin -d acervo -c \"CREATE EXTENSION IF NOT EXISTS citext; CREATE EXTENSION IF NOT EXISTS unaccent; CREATE EXTENSION IF NOT EXISTS vector;\"'"
+fly ssh console -a sisteo-apps-db -C "sh -c 'PGPASSWORD=\$SU_PASSWORD psql -h localhost -p 5433 -U flypgadmin -d acervo -c \"GRANT CREATE ON DATABASE acervo TO acervo; GRANT CREATE ON SCHEMA public TO acervo;\"'"
+```
+
+The backslash makes the remote shell expand `$SU_PASSWORD`, so the password never touches your machine. The app's
+migrations then find the extensions already present (`IF NOT EXISTS`). Do not
+grant cluster-wide privileges or run schema migrations by hand.
 
 ## Secrets
 
-Fly secrets (the app refuses to boot in production without them):
+Secrets on `acervo-app` (the app refuses to boot in production without them),
+all staged with `fly secrets set --stage` to preserve the release-only
+deployment policy:
 
-- `DATABASE_URL`: assigned by the database attachment.
-- `SECRET_KEY_BASE`: a separate randomly generated application secret.
-- `ANTHROPIC_API_KEY`: the Claude API credential.
-- `ACERVO_ALLOWED_EMAILS`: comma-separated allowlist for magic-link sign-in.
-- `RESEND_API_KEY`: the authorized Resend credential.
-- `MAIL_FROM`: the verified sender email address only, without a display name.
+- `DATABASE_URL`: set by the database attachment above.
+- `SECRET_KEY_BASE`: newly generated, separate from every other app.
+- `ANTHROPIC_API_KEY`, `RESEND_API_KEY` and `MAIL_FROM`: reuse leitor's values,
+  copied machine to machine without printing them, for example
+  `fly ssh console -a leitor -C 'printenv RESEND_API_KEY'` piped into
+  `fly secrets set --stage --app acervo-app RESEND_API_KEY=...` (read from
+  stdin or a variable, never echoed). `MAIL_FROM` is the verified sender address
+  only, without a display name.
+- `ACERVO_ALLOWED_EMAILS`: the owner's address (comma-separated allowlist for
+  magic-link sign-in).
 
-GitHub's encrypted `FLY_API_TOKEN` secret contains an app-scoped deployment token
-for `acervo`, initially valid for one year. Rotate it before expiry with
-`fly tokens create deploy --app acervo --expiry 8760h` and replace the GitHub
-secret. Never paste its output into logs, release notes, or source files. Stage
-Fly secrets with `fly secrets import --stage` to preserve the release-only
-deployment policy.
+The GitHub encrypted secret `FLY_API_TOKEN` is a deploy token for `acervo-app`,
+valid for one year: `fly tokens create deploy --app acervo-app --expiry 8760h`.
+Rotate it before expiry and replace the GitHub secret. Never paste its output
+into logs, release notes, or source files.
 
 Non-secret settings live in `fly.toml` (`PHX_HOST`, `PORT`, `POOL_SIZE`,
 `ECTO_IPV6`, `DNS_CLUSTER_QUERY`).

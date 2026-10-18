@@ -11,7 +11,7 @@ defmodule AcervoWeb.ArchiveLive do
   def handle_params(_params, uri, socket) do
     {:noreply,
      assign(socket,
-       return_to: URI.parse(uri).path,
+       return_to: return_to(uri),
        page_title: title(socket.assigns.live_action)
      )}
   end
@@ -67,6 +67,11 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   # pt_BR treats 0 as singular, so zero gets its own wording.
+  defp return_to(uri) do
+    %URI{path: path, query: query} = URI.parse(uri)
+    path <> if(query, do: "?" <> query, else: "")
+  end
+
   defp links_count(0), do: gettext("No links")
   defp links_count(count), do: ngettext("One link", "%{count} links", count)
 

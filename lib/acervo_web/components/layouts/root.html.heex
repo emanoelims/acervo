@@ -9,7 +9,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#fbfbfa" />
+    <meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#151412" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/svg+xml" href={~p"/images/logo.svg"} />
     <meta name="csrf-token" content={get_csrf_token()} />
     <.live_title default="Acervo" phx-no-format>{assigns[:page_title]}</.live_title>

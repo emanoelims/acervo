@@ -16,7 +16,8 @@ defmodule AcervoWeb.UserAuth do
   @remember_me_options [
     sign: true,
     max_age: @max_cookie_age_in_days * 24 * 60 * 60,
-    same_site: "Lax"
+    same_site: "Lax",
+    secure: Application.compile_env(:acervo, :secure_cookies, false)
   ]
 
   # How old the session token should be before a new one is issued. When a request is made
@@ -59,7 +60,7 @@ defmodule AcervoWeb.UserAuth do
     conn
     |> renew_session(nil)
     |> delete_resp_cookie(@remember_me_cookie, @remember_me_options)
-    |> redirect(to: ~p"/")
+    |> redirect(to: ~p"/users/log-in")
   end
 
   @doc """

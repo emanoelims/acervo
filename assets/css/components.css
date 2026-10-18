@@ -107,3 +107,18 @@
 .popover[open]>.popover-panel[data-positioned] { animation:popover-in .18s cubic-bezier(.22,1,.36,1); }
 @keyframes popover-in { from { opacity:0; transform:scale(.97) translateY(var(--popover-enter-y)); } }
 @media(prefers-reduced-motion:reduce) { .popover[open]>.popover-panel[data-positioned] { animation:none; } }
+
+/* Flash notices: calm card above the dock (z-index 20), bottom right. */
+.icon-button { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border:0; border-radius:50%; background:transparent; color:var(--muted); cursor:pointer; transition:background .15s, color .15s; }
+.icon-button:hover { background:var(--soft); color:var(--ink); }
+.icon-button:focus-visible { outline:2px solid var(--muted); outline-offset:2px; }
+.flash-stack { position:fixed; right:20px; bottom:96px; z-index:70; max-width:400px; cursor:pointer; }
+.flash-message { display:flex; align-items:flex-start; gap:10px; padding:14px 14px 14px 16px; border-radius:16px; background:var(--card); color:var(--body); font-size:13.5px; line-height:1.45; box-shadow:var(--pop-shadow); animation:flash-in .22s var(--ease); }
+.flash-message > .icon { margin-top:1px; }
+.flash-message .icon-button { margin:-4px 0; }
+.flash-info > .icon { color:var(--muted); }
+.flash-error { color:var(--danger); }
+.flash-error > .icon { color:var(--danger); }
+@keyframes flash-in { from { opacity:0; transform:translateY(6px); } }
+@media(max-width:800px) { .flash-stack { left:16px; right:16px; max-width:none; } .flash-message { width:auto; max-width:none; } }
+@media(prefers-reduced-motion:reduce) { .flash-message { animation:none; } }
