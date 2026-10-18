@@ -101,17 +101,17 @@ msgstr "deve ser maior ou igual a %{number}"
 msgid "must be equal to %{number}"
 msgstr "deve ser igual a %{number}"
 
-#: lib/acervo/accounts/user.ex:69
+#: lib/acervo/accounts/user.ex:71
 #, elixir-autogen, elixir-format
 msgid "did not change"
 msgstr "não foi alterado"
 
-#: lib/acervo/accounts/user.ex:64
+#: lib/acervo/accounts/user.ex:66
 #, elixir-autogen, elixir-format
 msgid "is not allowed to register"
 msgstr "não está autorizado a se cadastrar"
 
-#: lib/acervo/accounts/user.ex:41
+#: lib/acervo/accounts/user.ex:42
 #, elixir-autogen, elixir-format
 msgid "must have the @ sign and no spaces"
 msgstr "deve ter @ e não pode ter espaços"

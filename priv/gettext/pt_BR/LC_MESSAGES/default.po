@@ -21,13 +21,13 @@ msgstr "Enviamos um link para confirmar o novo e-mail."
 msgid "A sign-in link was sent to %{email}."
 msgstr "Enviamos um link de acesso para %{email}."
 
-#: lib/acervo_web/components/layouts.ex:86
+#: lib/acervo_web/components/layouts.ex:53
 #, elixir-autogen, elixir-format
 msgid "Acervo"
 msgstr "Acervo"
 
-#: lib/acervo_web/components/layouts.ex:123
-#: lib/acervo_web/components/layouts.ex:138
+#: lib/acervo_web/components/layouts.ex:90
+#: lib/acervo_web/components/layouts.ex:105
 #, elixir-autogen, elixir-format
 msgid "Attempting to reconnect"
 msgstr "Tentando reconectar"
@@ -86,6 +86,7 @@ msgstr "Se o e-mail estiver cadastrado, um link de acesso está a caminho."
 msgid "Log in"
 msgstr "Entrar"
 
+#: lib/acervo_web/components/archive_components.ex:140
 #: lib/acervo_web/live/user_live/settings.ex:30
 #, elixir-autogen, elixir-format
 msgid "Log out"
@@ -111,7 +112,7 @@ msgstr "Caixa de entrada"
 msgid "Send link"
 msgstr "Enviar link de acesso"
 
-#: lib/acervo_web/components/layouts.ex:130
+#: lib/acervo_web/components/layouts.ex:97
 #, elixir-autogen, elixir-format
 msgid "Something went wrong!"
 msgstr "Algo deu errado."
@@ -123,7 +124,7 @@ msgstr "Algo deu errado."
 msgid "The link is invalid or it has expired."
 msgstr "O link é inválido ou expirou."
 
-#: lib/acervo_web/components/layouts.ex:115
+#: lib/acervo_web/components/layouts.ex:82
 #, elixir-autogen, elixir-format
 msgid "We can't find the internet"
 msgstr "Sem conexão com a internet"
@@ -148,3 +149,143 @@ msgstr "Entre para acessar esta página."
 #, elixir-autogen, elixir-format
 msgid "You must re-authenticate to access this page."
 msgstr "Entre novamente para acessar esta página."
+
+#: lib/acervo_web/components/archive_components.ex:193
+#, elixir-autogen, elixir-format
+msgid "Accent"
+msgstr "Destaque"
+
+#: lib/acervo_web/live/archive_live.ex:46
+#: lib/acervo_web/live/archive_live.ex:55
+#: lib/acervo_web/live/archive_live.ex:77
+#, elixir-autogen, elixir-format
+msgid "All"
+msgstr "Tudo"
+
+#: lib/acervo_web/components/archive_components.ex:155
+#, elixir-autogen, elixir-format
+msgid "Auto"
+msgstr "Automático"
+
+#: lib/acervo_web/components/archive_components.ex:165
+#, elixir-autogen, elixir-format
+msgid "Cobalt"
+msgstr "Cobalto"
+
+#: lib/acervo_web/components/archive_components.ex:207
+#, elixir-autogen, elixir-format
+msgid "Font"
+msgstr "Fonte"
+
+#: lib/acervo_web/live/archive_live.ex:27
+#, elixir-autogen, elixir-format
+msgid "Good things I find on the internet."
+msgstr "Coisas boas que eu encontro pela internet."
+
+#: lib/acervo_web/components/archive_components.ex:167
+#, elixir-autogen, elixir-format
+msgid "Graphite"
+msgstr "Grafite"
+
+#: lib/acervo_web/components/archive_components.ex:122
+#: lib/acervo_web/components/archive_components.ex:124
+#: lib/acervo_web/live/archive_live.ex:38
+#: lib/acervo_web/live/archive_live.ex:51
+#: lib/acervo_web/live/archive_live.ex:76
+#, elixir-autogen, elixir-format
+msgid "Inbox"
+msgstr "Caixa de entrada"
+
+#: lib/acervo_web/components/archive_components.ex:161
+#, elixir-autogen, elixir-format
+msgid "Ink"
+msgstr "Tinta"
+
+#: lib/acervo_web/components/archive_components.ex:223
+#, elixir-autogen, elixir-format
+msgid "Language"
+msgstr "Idioma"
+
+#: lib/acervo_web/components/archive_components.ex:166
+#, elixir-autogen, elixir-format
+msgid "Moss"
+msgstr "Musgo"
+
+#: lib/acervo_web/components/archive_components.ex:107
+#, elixir-autogen, elixir-format
+msgid "Navigation"
+msgstr "Navegação"
+
+#: lib/acervo_web/components/archive_components.ex:160
+#, elixir-autogen, elixir-format
+msgid "Night"
+msgstr "Noite"
+
+#: lib/acervo_web/live/archive_live.ex:70
+#, elixir-autogen, elixir-format
+msgid "No links"
+msgstr "Nenhum link"
+
+#: lib/acervo_web/live/archive_live.ex:56
+#, elixir-autogen, elixir-format
+msgid "Nothing saved yet."
+msgstr "Nada salvo ainda."
+
+#: lib/acervo_web/live/archive_live.ex:52
+#, elixir-autogen, elixir-format
+msgid "Nothing waiting."
+msgstr "Nada esperando."
+
+#: lib/acervo_web/live/archive_live.ex:71
+#, elixir-autogen, elixir-format
+msgid "One link"
+msgid_plural "%{count} links"
+msgstr[0] "Um link"
+msgstr[1] "%{count} links"
+
+#: lib/acervo_web/components/archive_components.ex:157
+#, elixir-autogen, elixir-format
+msgid "Paper"
+msgstr "Papel"
+
+#: lib/acervo_web/components/archive_components.ex:158
+#, elixir-autogen, elixir-format
+msgid "Sepia"
+msgstr "Sépia"
+
+#: lib/acervo_web/components/archive_components.ex:129
+#, elixir-autogen, elixir-format
+msgid "Settings"
+msgstr "Ajustes"
+
+#: lib/acervo_web/components/archive_components.ex:159
+#, elixir-autogen, elixir-format
+msgid "Snow"
+msgstr "Neve"
+
+#: lib/acervo_web/components/archive_components.ex:156
+#, elixir-autogen, elixir-format
+msgid "Studio"
+msgstr "Estúdio"
+
+#: lib/acervo_web/components/archive_components.ex:179
+#, elixir-autogen, elixir-format
+msgid "Theme"
+msgstr "Tema"
+
+#: lib/acervo_web/components/archive_components.ex:164
+#, elixir-autogen, elixir-format
+msgid "Vermilion"
+msgstr "Vermelhão"
+
+#: lib/acervo_web/live/archive_live.ex:73
+#, elixir-autogen, elixir-format
+msgid "no collections"
+msgstr "nenhuma coleção"
+
+#: lib/acervo_web/live/archive_live.ex:74
+#, elixir-autogen, elixir-format
+msgid "one collection"
+msgid_plural "%{count} collections"
+msgstr[0] "uma coleção"
+msgstr[1] "%{count} coleções"

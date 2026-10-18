@@ -7,6 +7,8 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Column navigation with the inbox, all links and a floating dock with
+  appearance and language settings.
 - Portuguese (default) and English interface.
 - Email magic-link sign-in, with registration limited to
   `ACERVO_ALLOWED_EMAILS`.
