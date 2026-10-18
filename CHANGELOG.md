@@ -11,6 +11,8 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   delete, updating live while previews are captured.
 - Save links by pasting them anywhere or with the + in the dock, and organize
   them into collections you create, rename and describe.
+- Add a screenshot to a link whose preview couldn't be captured, by uploading
+  or pasting an image.
 
 ### Changed
 

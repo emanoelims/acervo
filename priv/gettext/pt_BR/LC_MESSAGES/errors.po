@@ -121,7 +121,7 @@ msgstr "deve ter @ e não pode ter espaços"
 msgid "must contain letters or numbers"
 msgstr "deve conter letras ou números"
 
-#: lib/acervo_web/live/archive_live.ex:146
+#: lib/acervo_web/live/archive_live.ex:314
 #, elixir-autogen, elixir-format
 msgid "That doesn't look like a link."
 msgstr "Isso não parece um link."

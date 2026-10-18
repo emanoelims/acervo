@@ -16,15 +16,24 @@ defmodule AcervoWeb.ArchiveLive do
   alias Acervo.Collections.Collection
   alias Acervo.Library
 
+  @max_screenshot_bytes 15_000_000
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: Library.subscribe(socket.assigns.current_scope)
 
     {:ok,
      socket
-     |> assign(filter: nil, collection: nil, link: nil, note_form: nil)
+     |> assign(filter: nil, collection: nil, link: nil, note_form: nil, screenshot_link_id: nil)
      |> assign(add_form: nil, new_collection_form: nil, editing: nil, collection_form: nil)
      |> assign(:collection_filter, collection_filter(""))
+     |> allow_upload(:screenshot,
+       accept: ~w(.png .jpg .jpeg .webp .heic),
+       max_entries: 1,
+       max_file_size: @max_screenshot_bytes,
+       auto_upload: true,
+       progress: &handle_progress/3
+     )
      |> refresh_counts()
      |> stream_configure(:links, dom_id: &"link-#{&1.id}")
      |> stream(:links, [])}
@@ -100,6 +109,22 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   defp assign_link(socket, link) do
+    socket
+    |> cancel_screenshots_unless_open(link)
+    |> assign_link_fields(link)
+  end
+
+  # A pending screenshot belongs to the link it started on, so moving to
+  # another link (or closing the column) drops it.
+  defp cancel_screenshots_unless_open(%{assigns: %{screenshot_link_id: id}} = socket, %{id: id}), do: socket
+
+  defp cancel_screenshots_unless_open(socket, _link) do
+    socket.assigns.uploads.screenshot.entries
+    |> Enum.reduce(socket, &cancel_upload(&2, :screenshot, &1.ref))
+    |> assign(:screenshot_link_id, nil)
+  end
+
+  defp assign_link_fields(socket, link) do
     assign(socket, link: link, note_form: link && note_form(link), collection_filter: collection_filter(""))
   end
 
@@ -122,6 +147,17 @@ defmodule AcervoWeb.ArchiveLive do
 
   def handle_event(event, _params, %{assigns: %{collection: nil}} = socket) when event in @collection_events,
     do: {:noreply, socket}
+
+  # The screenshot upload starts on its own; a new pick replaces a failed one.
+  def handle_event("validate_screenshot", _params, socket) do
+    socket =
+      case socket.assigns.uploads.screenshot.entries do
+        [_one] -> socket
+        entries -> Enum.reduce(Enum.drop(entries, -1), socket, &cancel_upload(&2, :screenshot, &1.ref))
+      end
+
+    {:noreply, assign(socket, :screenshot_link_id, socket.assigns.link && socket.assigns.link.id)}
+  end
 
   # Adding a link: the dock's pill and pasting anywhere share "add_link".
   def handle_event("toggle_add", _params, %{assigns: %{add_form: nil}} = socket),
@@ -269,6 +305,40 @@ defmodule AcervoWeb.ArchiveLive do
 
       {:error, :not_found} ->
         {:noreply, gone(socket)}
+    end
+  end
+
+  # Attaches the finished upload to the open link as its first image.
+  defp handle_progress(:screenshot, %{done?: true}, socket) do
+    socket = track_screenshot_link(socket)
+
+    results = consume_uploaded_entries(socket, :screenshot, fn %{path: path}, _entry -> {:ok, File.read(path)} end)
+
+    case {results, socket.assigns.link} do
+      {[{:ok, binary}], %{id: id} = link} when is_binary(binary) and id == socket.assigns.screenshot_link_id ->
+        attach_screenshot(socket, link, binary)
+
+      {_results, _link} ->
+        {:noreply, assign(socket, :screenshot_link_id, nil)}
+    end
+  end
+
+  defp handle_progress(:screenshot, _entry, socket), do: {:noreply, track_screenshot_link(socket)}
+
+  # Entries are cancelled whenever the open link changes, so one that is
+  # still around belongs to the link open now.
+  defp track_screenshot_link(%{assigns: %{screenshot_link_id: nil, link: %{id: id}}} = socket),
+    do: assign(socket, :screenshot_link_id, id)
+
+  defp track_screenshot_link(socket), do: socket
+
+  defp attach_screenshot(socket, link, binary) do
+    case Library.attach_screenshot(socket.assigns.current_scope, link, binary) do
+      {:ok, link} -> {:noreply, socket |> restream(link) |> refresh_open(link)}
+      {:error, :not_an_image} -> {:noreply, put_flash(socket, :error, gettext("That file isn't an image."))}
+      {:error, :too_large} -> {:noreply, put_flash(socket, :error, gettext("That image is too large."))}
+      {:error, :not_found} -> {:noreply, gone(socket)}
+      {:error, %Ecto.Changeset{}} -> {:noreply, put_flash(socket, :error, gettext("That image couldn't be added."))}
     end
   end
 
@@ -580,6 +650,7 @@ defmodule AcervoWeb.ArchiveLive do
             note_form={@note_form}
             collections={@collections}
             collection_filter={@collection_filter}
+            upload={@uploads.screenshot}
           />
         </.column>
       </div>
@@ -593,8 +664,8 @@ defmodule AcervoWeb.ArchiveLive do
       />
     </Layouts.app>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".PasteLink">
-      // Pasting a link anywhere outside a field saves it. Images are left
-      // alone here; they get their own flow.
+      // Pasting a link anywhere outside a field saves it. Pasted images are
+      // handled by the link column's own hook.
       const URL_LIKE = /^(https?:\/\/)?[^\s]+\.[^\s]{2,}$/
       export default {
         mounted() {
