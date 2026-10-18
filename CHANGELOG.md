@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Typography, spacing, columns and cards refined to match the design reference.
+
 ## [0.4.0] - 2026-10-18
 
 Easier notes and a guide to everything Acervo does.
