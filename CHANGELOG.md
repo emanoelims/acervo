@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Open a link's page in a new column by clicking its image; sites that can't be shown there open as a reader view.
+
 ## [0.5.0] - 2026-10-18
 
 A calmer, more refined look.

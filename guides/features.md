@@ -34,6 +34,25 @@ uses them. Their names start with a dot.
   while the link is open: the `.ScreenshotPaste` hook in `LinkComponents`
   handles it. `Acervo.Library.attach_screenshot/3` stores the image.
 
+## Read
+
+- **Web view column.** Clicking the open link's image (`#link-web-toggle`), or
+  the globe action (`#link-web`) on links without one, patches to
+  `…/l/:id/web` and opens one more column (`#column-web`, `web_view/1` in
+  `LinkComponents`). Clicking it again, the ✕ (`#web-close`) or Esc closes it.
+  The ↗ (`#web-open`) opens the original in a new tab.
+- **What it shows.** YouTube, X and Instagram use their official embeds. Other
+  pages are framed when they allow it, over https only. The frame is
+  sandboxed and sends no referrer (YouTube gets the app's origin, which its
+  player requires). `Acervo.Library.Embed` decides what to frame.
+- **Embeddability.** Capture reads the page's `X-Frame-Options` and CSP
+  `frame-ancestors` headers (`Acervo.Library.FramePolicy`) into the link's
+  `embeddable`. Links captured before that are checked once when the column
+  opens (`Acervo.Library.check_embeddable/2`, run with `start_async`).
+- **Reader view.** Pages that can't be framed, or whose check failed, show the
+  captured text (`#web-reader`) with a faint hint and an “Open original”
+  button.
+
 ## Organize
 
 - **Collections popover.** The folder-plus action on a link (`#link-collections`,
@@ -87,9 +106,11 @@ and hooks use it to pick the modifier key.
 | ⌘/Ctrl V     | with a link open  | adds a copied image as a screenshot  | `.ScreenshotPaste` (`LinkComponents`) |
 | ↩            | add pill          | saves the link                       | `#add-link-form` submit               |
 | Esc          | add pill, popover | closes it                            | `close_add`; `assets/js/floating.js`  |
+| Esc          | page column open  | closes the page column               | `.Shortcuts` → `close_web` event      |
 | ⌘/Ctrl ↩     | in a note         | saves the note                       | `.NoteShortcut` (`LinkComponents`)    |
 | ?            | outside fields    | opens the guide (`/guide`)           | `.Shortcuts` → `open_guide` event     |
 
 Page-wide keys do nothing while you type in an input, a textarea or a
 contenteditable element. The `?` key also does nothing when Ctrl, ⌘ or Alt is
-held.
+held. Esc closes the add pill or an open popover before the page column, and
+does nothing while focus is inside the framed page.

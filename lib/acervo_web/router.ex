@@ -11,6 +11,8 @@ defmodule AcervoWeb.Router do
                                "style-src 'self' 'unsafe-inline'",
                                "font-src 'self'",
                                "connect-src 'self' ws: wss:",
+                               # The web view column frames https pages and embeds.
+                               "frame-src https:",
                                "frame-ancestors 'self'",
                                "base-uri 'self'",
                                "form-action 'self'"
@@ -102,10 +104,13 @@ defmodule AcervoWeb.Router do
       live "/", ArchiveLive, :home
       live "/inbox", ArchiveLive, :inbox
       live "/inbox/l/:id", ArchiveLive, :inbox_link
+      live "/inbox/l/:id/web", ArchiveLive, :inbox_link_web
       live "/all", ArchiveLive, :all
       live "/all/l/:id", ArchiveLive, :all_link
+      live "/all/l/:id/web", ArchiveLive, :all_link_web
       live "/c/:slug", ArchiveLive, :collection
       live "/c/:slug/l/:id", ArchiveLive, :collection_link
+      live "/c/:slug/l/:id/web", ArchiveLive, :collection_link_web
       live "/guide", ArchiveLive, :guide
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email

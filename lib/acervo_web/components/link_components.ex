@@ -10,6 +10,7 @@ defmodule AcervoWeb.LinkComponents do
   import AcervoWeb.CoreComponents
 
   alias Acervo.Collections
+  alias Acervo.Library.Embed
   alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
 
@@ -83,6 +84,8 @@ defmodule AcervoWeb.LinkComponents do
   @doc """
   Renders the open link: its visual (every image stacked, the first one in the
   glow treatment), meta line, collections, description, note and actions.
+  The visual, or the globe action when there is no image, patches to
+  `web_path`, which opens or closes the web view column.
   """
   attr :link, :map, required: true
   attr :note_form, Form, required: true
@@ -90,6 +93,8 @@ defmodule AcervoWeb.LinkComponents do
   attr :collection_filter, Form, required: true
   attr :upload, :map, required: true, doc: "the `:screenshot` upload config"
   attr :note_saved, :boolean, default: false, doc: "shows the brief “Saved” status after a note save"
+  attr :web_path, :string, required: true, doc: "opens the web view column, or closes it when `web_open`"
+  attr :web_open, :boolean, default: false
 
   def link_detail(assigns) do
     images = assigns.link.images
@@ -113,15 +118,19 @@ defmodule AcervoWeb.LinkComponents do
               <div class="media skeleton" aria-hidden="true"></div>
             </div>
           <% :video -> %>
-            <div class="card card-static">
-              <.source_icon source={@link.source} />
-              <.video_media image={@image} />
-            </div>
+            <.web_toggle path={@web_path} open={@web_open}>
+              <div class="card card-static">
+                <.source_icon source={@link.source} />
+                <.video_media image={@image} />
+              </div>
+            </.web_toggle>
           <% :image -> %>
-            <div class="card card-static">
-              <.source_icon source={@link.source} />
-              <.glow image={@image} alt={@link.title} />
-            </div>
+            <.web_toggle path={@web_path} open={@web_open}>
+              <div class="card card-static">
+                <.source_icon source={@link.source} />
+                <.glow image={@image} alt={@link.title} />
+              </div>
+            </.web_toggle>
             <img
               :for={image <- @more_images}
               id={"link-image-#{image.id}"}
@@ -235,7 +244,7 @@ defmodule AcervoWeb.LinkComponents do
       <div class="acts">
         <a
           id="link-open"
-          href={@link.resolved_url || @link.canonical_url}
+          href={Embed.original_url(@link)}
           target="_blank"
           rel="noopener noreferrer"
           class="round"
@@ -244,6 +253,17 @@ defmodule AcervoWeb.LinkComponents do
         >
           <.icon name="lucide-external-link" class="size-4" />
         </a>
+        <.link
+          :if={@kind in [:text, :pending]}
+          id="link-web"
+          patch={@web_path}
+          class={["round", @web_open && "is-active"]}
+          title={web_label(@web_open)}
+          aria-label={web_label(@web_open)}
+          aria-expanded={to_string(@web_open)}
+        >
+          <.icon name="lucide-globe" class="size-4" />
+        </.link>
         <label
           id="link-screenshot"
           for={@upload.ref}
@@ -325,6 +345,161 @@ defmodule AcervoWeb.LinkComponents do
       }
     </script>
     """
+  end
+
+  attr :path, :string, required: true
+  attr :open, :boolean, required: true
+  slot :inner_block, required: true
+
+  defp web_toggle(assigns) do
+    ~H"""
+    <.link
+      id="link-web-toggle"
+      patch={@path}
+      class={["web-toggle", @open && "is-open"]}
+      aria-label={web_label(@open)}
+      aria-expanded={to_string(@open)}
+    >
+      {render_slot(@inner_block)}
+    </.link>
+    """
+  end
+
+  defp web_label(true = _open), do: gettext("Close page")
+  defp web_label(false), do: gettext("Show page")
+
+  @doc """
+  Renders the web view column's body: the page or its official embed in a
+  sandboxed frame, a quiet placeholder while its embeddability is checked,
+  or a reader view of the captured text when it can't be framed.
+  """
+  attr :link, :map, required: true
+  attr :check, :any, default: nil, doc: "`{:checking | :failed, link_id}` while or after a background check"
+
+  def web_view(assigns) do
+    assigns = assign(assigns, :view, web_state(Embed.frame(assigns.link), assigns.check, assigns.link.id))
+
+    ~H"""
+    <%= case @view do %>
+      <% {:frame, kind, url} -> %>
+        <div id="web-view" class={["web-view", "web-view-#{kind}"]}>
+          <iframe
+            id="web-frame"
+            class="web-frame"
+            src={url}
+            title={display_title(@link)}
+            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-presentation"
+            referrerpolicy={referrer_policy(kind)}
+            loading="lazy"
+            allow="fullscreen; picture-in-picture; encrypted-media"
+            data-kind={kind}
+            phx-hook=".EmbedHeight"
+            phx-mounted={JS.ignore_attributes(["style", "data-sized"])}
+          ></iframe>
+        </div>
+      <% :loading -> %>
+        <div
+          id="web-loading"
+          class="web-view web-loading"
+          role="status"
+          aria-label={gettext("Loading")}
+        >
+          <div class="skeleton" aria-hidden="true"></div>
+        </div>
+      <% :reader -> %>
+        <div id="web-reader" class="web-reader">
+          <div class="web-reader-head">
+            <p class="web-hint">
+              <.icon name="lucide-info" class="size-3.5" />{gettext("This page can't be shown here.")}
+            </p>
+            <a
+              id="web-reader-open"
+              href={Embed.original_url(@link)}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="pill-button"
+            >
+              {gettext("Open original")}<.icon name="lucide-arrow-up-right" class="size-4" />
+            </a>
+          </div>
+          <div :if={@link.text_excerpt} id="web-reader-text" class="web-reader-text">
+            <p :for={paragraph <- paragraphs(@link.text_excerpt)}>{paragraph}</p>
+          </div>
+        </div>
+    <% end %>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".EmbedHeight">
+      // X and Instagram embeds report their content's height to the parent;
+      // the frame takes it so a short post doesn't sit on a tall blank page.
+      // Only posts, and only messages from this frame's own window, count.
+      const height = data => {
+        if (typeof data === 'string') {
+          try { data = JSON.parse(data) } catch { return null }
+        }
+        const x = data?.['twttr.embed']
+        if (x?.method === 'twttr.private.resize') return x.params?.[0]?.height
+        if (data?.type === 'MEASURE') return data.details?.height
+        return null
+      }
+      export default {
+        mounted() {
+          this.onMessage = event => {
+            if (this.el.dataset.kind !== 'post' || event.source !== this.el.contentWindow) return
+            const value = Number(height(event.data))
+            if (!Number.isFinite(value) || value <= 0) return
+            this.el.style.height = `${Math.ceil(value)}px`
+            this.el.dataset.sized = ''
+          }
+          window.addEventListener('message', this.onMessage)
+        },
+        updated() {
+          if (this.el.dataset.kind === 'post') return
+          this.el.style.removeProperty('height')
+          delete this.el.dataset.sized
+        },
+        destroyed() {
+          window.removeEventListener('message', this.onMessage)
+        }
+      }
+    </script>
+    """
+  end
+
+  # Frames send no referrer, except YouTube's player, which refuses to play
+  # without one (error 153); it gets the app's origin only.
+  defp referrer_policy(:video), do: "strict-origin"
+  defp referrer_policy(_kind), do: "no-referrer"
+
+  defp web_state({:embed, kind, url}, _check, _id), do: {:frame, kind, url}
+  defp web_state({:page, url}, _check, _id), do: {:frame, :page, url}
+  defp web_state(:unknown, {:failed, id}, id), do: :reader
+  defp web_state(:unknown, _check, _id), do: :loading
+  defp web_state(:blocked, _check, _id), do: :reader
+
+  @paragraph_chars 480
+
+  # Captured text is a single run, so it is cut into paragraphs between
+  # sentences, each about `@paragraph_chars` long. Line breaks, if any, win.
+  defp paragraphs(text) do
+    text
+    |> String.split(~r/\R+/u, trim: true)
+    |> Enum.flat_map(&group_sentences/1)
+  end
+
+  defp group_sentences(text) do
+    ~r/(?<=[.!?…])\s+(?=\S)/u
+    |> Regex.split(String.trim(text), trim: true)
+    |> Enum.chunk_while(
+      "",
+      fn
+        sentence, "" -> {:cont, sentence}
+        sentence, acc when byte_size(acc) < @paragraph_chars -> {:cont, acc <> " " <> sentence}
+        sentence, acc -> {:cont, acc, sentence}
+      end,
+      fn
+        "" -> {:cont, ""}
+        acc -> {:cont, acc, ""}
+      end
+    )
   end
 
   defp upload_error(:not_accepted), do: gettext("That file isn't an image.")
@@ -527,6 +702,10 @@ defmodule AcervoWeb.LinkComponents do
   @doc "The link's title, falling back to its host while there is none."
   def display_title(%{title: title}) when is_binary(title) and title != "", do: title
   def display_title(link), do: host(link)
+
+  @doc "The link's site name, falling back to its title."
+  def site_title(%{site_name: name}) when is_binary(name) and name != "", do: name
+  def site_title(link), do: display_title(link)
 
   @doc "The link's host without a leading `www.`."
   def host(%{canonical_url: url}) do

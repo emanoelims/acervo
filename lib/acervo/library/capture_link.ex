@@ -120,6 +120,7 @@ defmodule Acervo.Library.CaptureLink do
       site_name: capture.site_name,
       published_at: capture.published_at,
       text_excerpt: capture.text,
+      embeddable: capture.embeddable,
       status: :ready,
       capture_error: nil
     }

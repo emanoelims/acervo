@@ -22,6 +22,7 @@ defmodule Acervo.Library.Link do
     field :site_name, :string
     field :published_at, :utc_datetime
     field :text_excerpt, :string
+    field :embeddable, :boolean
     field :note, :string
     field :triaged_at, :utc_datetime
 
@@ -56,7 +57,8 @@ defmodule Acervo.Library.Link do
       :text_excerpt,
       :status,
       :capture_error,
-      :resolved_url
+      :resolved_url,
+      :embeddable
     ])
     |> validate_length(:text_excerpt, max: 8000)
     |> validate_length(:resolved_url, max: 2048)

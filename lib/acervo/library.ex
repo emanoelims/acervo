@@ -17,9 +17,12 @@ defmodule Acervo.Library do
   alias Acervo.Accounts.Scope
   alias Acervo.Collections.CollectionLink
   alias Acervo.Library.CaptureLink
+  alias Acervo.Library.Embed
+  alias Acervo.Library.FramePolicy
   alias Acervo.Library.Images
   alias Acervo.Library.Link
   alias Acervo.Library.LinkImage
+  alias Acervo.Library.SafeFetch
   alias Acervo.Library.URL
   alias Acervo.Repo
   alias Acervo.Storage
@@ -171,6 +174,36 @@ defmodule Acervo.Library do
          {:ok, deleted} <- link |> preload_link() |> Repo.delete() do
       broadcast(scope, {:link_deleted, deleted})
       {:ok, deleted}
+    end
+  end
+
+  @doc """
+  Checks whether the link's page may be framed, for links captured before
+  capture recorded it, and stores the answer in `embeddable`.
+
+  The page is fetched through `Acervo.Library.SafeFetch` and judged from its
+  final URL and headers by `Acervo.Library.FramePolicy`. A fetch that will not
+  succeed on retry (see `Acervo.Library.CaptureLink.classify/1`) stores
+  `false`; a transient failure stores nothing and is returned.
+  """
+  @spec check_embeddable(Scope.t(), Link.t()) :: {:ok, Link.t()} | {:error, :not_found | term()}
+  def check_embeddable(%Scope{} = scope, %Link{} = link) do
+    with {:ok, link} <- owned(scope, link),
+         {:ok, embeddable} <- fetch_embeddable(Embed.original_url(link)) do
+      link |> Link.capture_changeset(%{embeddable: embeddable}) |> Repo.update() |> updated(scope)
+    end
+  end
+
+  defp fetch_embeddable(url) do
+    case SafeFetch.get(url, accept: "text/html,application/xhtml+xml") do
+      {:ok, response} ->
+        {:ok, FramePolicy.embeddable?(response.url, response.headers)}
+
+      {:error, reason} ->
+        case CaptureLink.classify(reason) do
+          :permanent -> {:ok, false}
+          :transient -> {:error, reason}
+        end
     end
   end
 

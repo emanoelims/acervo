@@ -201,6 +201,38 @@ defmodule Acervo.LibraryTest do
     end
   end
 
+  describe "check_embeddable/2" do
+    defp stub_page(fun), do: Req.Test.stub(Acervo.Library.SafeFetch, fun)
+
+    test "stores what the page's headers allow and broadcasts the link", %{scope: scope} do
+      link = link_fixture(scope)
+      stub_page(&Plug.Conn.send_resp(&1, 200, "<html></html>"))
+
+      assert {:ok, %Link{embeddable: true}} = Library.check_embeddable(scope, link)
+      assert %Link{embeddable: true} = Repo.get!(Link, link.id)
+      assert_receive {:link_updated, %Link{embeddable: true}}
+
+      stub_page(&(&1 |> Plug.Conn.put_resp_header("x-frame-options", "SAMEORIGIN") |> Plug.Conn.send_resp(200, "")))
+      assert {:ok, %Link{embeddable: false}} = Library.check_embeddable(scope, link)
+    end
+
+    test "a page that won't load stores false, a transient failure nothing", %{scope: scope} do
+      link = link_fixture(scope)
+
+      stub_page(&Plug.Conn.send_resp(&1, 503, ""))
+      assert {:error, {:http, 503}} = Library.check_embeddable(scope, link)
+      assert %Link{embeddable: nil} = Repo.get!(Link, link.id)
+
+      stub_page(&Plug.Conn.send_resp(&1, 404, ""))
+      assert {:ok, %Link{embeddable: false}} = Library.check_embeddable(scope, link)
+    end
+
+    test "another user's link is not found", %{scope: scope} do
+      link = link_fixture(user_scope_fixture())
+      assert {:error, :not_found} = Library.check_embeddable(scope, link)
+    end
+  end
+
   defp insert_image(link, position, char) do
     %LinkImage{link_id: link.id}
     |> LinkImage.changeset(%{
