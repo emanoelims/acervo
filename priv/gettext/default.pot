@@ -1,0 +1,150 @@
+## This file is a PO Template file.
+##
+## "msgid"s here are often extracted from source code.
+## Add new messages manually only if they're dynamic
+## messages that can't be statically extracted.
+##
+## Run "mix gettext.extract" to bring this file up to
+## date. Leave "msgstr"s empty as changing them here has no
+## effect: edit them in PO (.po) files instead.
+#
+msgid ""
+msgstr ""
+
+#: lib/acervo_web/live/user_live/settings.ex:86
+#, elixir-autogen, elixir-format
+msgid "A link to confirm the new email was sent."
+msgstr ""
+
+#: lib/acervo_web/live/user_live/registration.ex:62
+#, elixir-autogen, elixir-format
+msgid "A sign-in link was sent to %{email}."
+msgstr ""
+
+#: lib/acervo_web/components/layouts.ex:86
+#, elixir-autogen, elixir-format
+msgid "Acervo"
+msgstr ""
+
+#: lib/acervo_web/components/layouts.ex:123
+#: lib/acervo_web/components/layouts.ex:138
+#, elixir-autogen, elixir-format
+msgid "Attempting to reconnect"
+msgstr ""
+
+#: lib/acervo_web/live/user_live/settings.ex:23
+#, elixir-autogen, elixir-format
+msgid "Change email"
+msgstr ""
+
+#: lib/acervo_web/components/core_components.ex:165
+#, elixir-autogen, elixir-format
+msgid "Close"
+msgstr ""
+
+#: lib/acervo_web/live/user_live/confirmation.ex:31
+#, elixir-autogen, elixir-format
+msgid "Confirm"
+msgstr ""
+
+#: lib/acervo_web/live/user_live/confirmation.ex:29
+#, elixir-autogen, elixir-format
+msgid "Confirming..."
+msgstr ""
+
+#: lib/acervo_web/live/user_live/login.ex:30
+#: lib/acervo_web/live/user_live/registration.ex:23
+#, elixir-autogen, elixir-format
+msgid "Create account"
+msgstr ""
+
+#: lib/acervo_web/live/user_live/login.ex:16
+#: lib/acervo_web/live/user_live/registration.ex:16
+#: lib/acervo_web/live/user_live/settings.ex:17
+#, elixir-autogen, elixir-format
+msgid "Email"
+msgstr ""
+
+#: lib/acervo_web/live/user_live/settings.ex:45
+#, elixir-autogen, elixir-format
+msgid "Email change link is invalid or it has expired."
+msgstr ""
+
+#: lib/acervo_web/live/user_live/settings.ex:42
+#, elixir-autogen, elixir-format
+msgid "Email changed."
+msgstr ""
+
+#: lib/acervo_web/live/user_live/login.ex:63
+#, elixir-autogen, elixir-format
+msgid "If your email is registered, a sign-in link is on its way."
+msgstr ""
+
+#: lib/acervo_web/live/user_live/confirmation.ex:54
+#: lib/acervo_web/live/user_live/registration.ex:30
+#, elixir-autogen, elixir-format
+msgid "Log in"
+msgstr ""
+
+#: lib/acervo_web/live/user_live/settings.ex:30
+#, elixir-autogen, elixir-format
+msgid "Log out"
+msgstr ""
+
+#: lib/acervo_web/controllers/user_session_controller.ex:40
+#, elixir-autogen, elixir-format
+msgid "Logged out."
+msgstr ""
+
+#: lib/acervo_web/live/user_live/confirmation.ex:52
+#, elixir-autogen, elixir-format
+msgid "Logging in..."
+msgstr ""
+
+#: lib/acervo_web/live/user_live/login.ex:36
+#, elixir-autogen, elixir-format
+msgid "Mailbox"
+msgstr ""
+
+#: lib/acervo_web/live/user_live/login.ex:23
+#, elixir-autogen, elixir-format
+msgid "Send link"
+msgstr ""
+
+#: lib/acervo_web/components/layouts.ex:130
+#, elixir-autogen, elixir-format
+msgid "Something went wrong!"
+msgstr ""
+
+#: lib/acervo_web/controllers/user_session_controller.ex:27
+#: lib/acervo_web/controllers/user_session_controller.ex:34
+#: lib/acervo_web/live/user_live/confirmation.ex:71
+#, elixir-autogen, elixir-format
+msgid "The link is invalid or it has expired."
+msgstr ""
+
+#: lib/acervo_web/components/layouts.ex:115
+#, elixir-autogen, elixir-format
+msgid "We can't find the internet"
+msgstr ""
+
+#: lib/acervo_web/controllers/user_session_controller.ex:12
+#, elixir-autogen, elixir-format
+msgid "Welcome back."
+msgstr ""
+
+#: lib/acervo_web/controllers/user_session_controller.ex:8
+#, elixir-autogen, elixir-format
+msgid "Welcome to Acervo."
+msgstr ""
+
+#: lib/acervo_web/user_auth.ex:226
+#: lib/acervo_web/user_auth.ex:275
+#, elixir-autogen, elixir-format
+msgid "You must log in to access this page."
+msgstr ""
+
+#: lib/acervo_web/user_auth.ex:241
+#, elixir-autogen, elixir-format
+msgid "You must re-authenticate to access this page."
+msgstr ""

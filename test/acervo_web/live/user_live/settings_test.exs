@@ -132,7 +132,7 @@ defmodule AcervoWeb.UserLive.SettingsTest do
     end
 
     test "redirects if user is not logged in", %{token: token} do
-      conn = build_conn()
+      conn = put_req_cookie(build_conn(), "acervo_locale", "en")
       {:error, redirect} = live(conn, ~p"/users/settings/confirm-email/#{token}")
       assert {:redirect, %{to: path, flash: flash}} = redirect
       assert path == ~p"/users/log-in"

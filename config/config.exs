@@ -28,6 +28,8 @@ config :acervo, AcervoWeb.Endpoint,
   pubsub_server: Acervo.PubSub,
   live_view: [signing_salt: "+6cU70Fy"]
 
+config :acervo, AcervoWeb.Gettext, default_locale: "pt_BR", locales: ~w(pt_BR en)
+
 config :acervo, Oban,
   engine: Oban.Engines.Basic,
   repo: Acervo.Repo,
