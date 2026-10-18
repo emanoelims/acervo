@@ -171,9 +171,17 @@ defmodule Acervo.SearchTest do
                [interop.id, both.id]
     end
 
+    test "a link must match at least half of the meaningful words", %{scope: scope} do
+      _loose = link(scope, title: "Postmortem of a GitHub outage")
+      js = link(scope, title: "JavaScript interoperability in Phoenix LiveView")
+
+      assert Enum.map(Search.text_ranks(scope, "aquele post sobre interop de javascript"), &elem(&1, 0)) == [js.id]
+      assert scope |> Search.text_ranks("javascript github elixir phoenix") |> length() == 1
+    end
+
     test "builds a prefix OR tsquery from words of three letters or more" do
-      assert Search.text_query("Aquele post sobre interop de JS") ==
-               "aquele:* | post:* | sobre:* | interop:*"
+      assert Search.text_query("Aquele post sobre interop de JS") == "interop:*"
+      assert Search.text_query("queda do github") == "queda:* | github:*"
 
       assert Search.text_query("a & | ! :* <-> é") == nil
       assert Search.text_query("foo:* & !bar") == "foo:* | bar:*"

@@ -5,9 +5,10 @@ defmodule Acervo.Search do
 
     * **Text:** `links.search_tsv` against a prefix OR query built by
       `text_query/1` (`elixir:* | interop:*`), ranked by `ts_rank_cd`, top 50.
-      Any word may match, so a natural phrase ("aquele post sobre interop")
-      still finds its link, and links matching more words rank higher. Words
-      under three letters are ignored. Terms keep only letters and digits, so
+      Words under three letters and common Portuguese and English function
+      words are ignored, and a link must match at least half of what is
+      left, so a natural phrase ("aquele post sobre interop de javascript")
+      still finds its link without loose one-word hits. Terms keep only letters and digits, so
       the tsquery can't hold an operator from the input.
     * **Vector:** the query embedded with `input_type: :query`, top 50 by
       cosine distance among links embedded with the configured model (a
@@ -40,6 +41,17 @@ defmodule Acervo.Search do
   alias Acervo.Search.QueryCache
 
   require Logger
+
+  # Words that say nothing about a link; a natural phrase is full of them.
+  @stopwords MapSet.new(~w(
+    aquele aquela aqueles aquelas aquilo este esta estes estas isto esse essa esses essas isso
+    sobre para pela pelo pelas pelos com sem uma uns umas que qual quais quando onde como
+    mas mais muito muita das dos nas nos num numa até entre depois antes ainda também
+    ele ela eles elas meu minha seu sua nosso nossa vou foi era ser ter tem tinha
+    post posts link links coisa coisas algo alguma algum
+    the and for with from that this those these about into over what which when where how
+    was were are its his her their our your you any some thing things
+  ))
 
   @rrf_k 60
   @list_size 50
@@ -189,16 +201,27 @@ defmodule Acervo.Search do
   # generated column outside the `Link` schema, hence the schemaless source.
   @spec text_ranks(Scope.t(), String.t(), keyword()) :: ranked()
   def text_ranks(%Scope{user: user}, query, opts \\ []) do
-    case text_query(query) do
-      nil -> []
-      tsquery -> ranked_text(user, tsquery, opts)
+    case text_terms(query) do
+      [] -> []
+      terms -> ranked_text(user, terms, opts)
     end
   end
 
-  defp ranked_text(user, tsquery, opts) do
+  # A link must match at least half of the terms, so one loose prefix
+  # ("post" in "postmortem") doesn't make a phrase's text hit.
+  defp ranked_text(user, terms, opts) do
+    tsquery = Enum.join(terms, " | ")
+    needed = div(length(terms) + 1, 2)
+
     from(l in "links",
       where: l.user_id == type(^user.id, Ecto.UUID),
       where: fragment("? @@ to_tsquery('simple', acervo_unaccent(?))", l.search_tsv, ^tsquery),
+      where:
+        fragment(
+          "(SELECT count(*) FROM unnest(?::text[]) AS term WHERE ? @@ to_tsquery('simple', acervo_unaccent(term)))",
+          type(^terms, {:array, :string}),
+          l.search_tsv
+        ) >= ^needed,
       order_by: [
         desc: fragment("ts_rank_cd(?, to_tsquery('simple', acervo_unaccent(?)))", l.search_tsv, ^tsquery),
         desc: l.inserted_at,
@@ -212,19 +235,27 @@ defmodule Acervo.Search do
   end
 
   @doc false
-  # The words of `query` (letters and digits only, three or more, at most
-  # eight) as a prefix OR tsquery, or nil when none is left.
-  @spec text_query(String.t()) :: String.t() | nil
-  def text_query(query) when is_binary(query) do
+  # The words of `query` (letters and digits only, three or more, not a
+  # common Portuguese or English function word, at most eight) as prefix
+  # terms for `to_tsquery`.
+  @spec text_terms(String.t()) :: [String.t()]
+  def text_terms(query) when is_binary(query) do
     ~r/[\p{L}\p{N}]+/u
     |> Regex.scan(String.downcase(query))
     |> List.flatten()
-    |> Enum.filter(&(String.length(&1) >= 3))
+    |> Enum.filter(&(String.length(&1) >= 3 and not MapSet.member?(@stopwords, &1)))
     |> Enum.uniq()
     |> Enum.take(8)
-    |> case do
+    |> Enum.map(&(&1 <> ":*"))
+  end
+
+  @doc false
+  # `text_terms/1` as one OR tsquery, or nil when no term is left.
+  @spec text_query(String.t()) :: String.t() | nil
+  def text_query(query) when is_binary(query) do
+    case text_terms(query) do
       [] -> nil
-      terms -> Enum.map_join(terms, " | ", &(&1 <> ":*"))
+      terms -> Enum.join(terms, " | ")
     end
   end
 
