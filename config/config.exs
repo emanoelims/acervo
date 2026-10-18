@@ -38,7 +38,8 @@ config :acervo, Oban,
   shutdown_grace_period: to_timeout(second: 20),
   plugins: [
     {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
-    {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 30)}
+    {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 30)},
+    {Oban.Plugins.Cron, crontab: [{"*/10 * * * *", Acervo.Library.ReapStuckCaptures}]}
   ]
 
 # Registration is open in dev and test; production restricts it to
