@@ -110,6 +110,18 @@ defmodule Acervo.Library.HtmlMetaTest do
     assert String.valid?(capture.text)
   end
 
+  test "picks the longest article or main block over a short related article" do
+    related = String.duplicate("related link ", 20)
+    report = String.duplicate("availability report ", 100)
+
+    html =
+      "<html><body><article>#{related}</article><main>#{report}</main></body></html>"
+
+    capture = HtmlMeta.parse(html, @base)
+    assert capture.text =~ "availability report availability report"
+    refute capture.text =~ "related link"
+  end
+
   test "falls through an empty article to main" do
     long = String.duplicate("main text ", 40)
     capture = HtmlMeta.parse("<html><body><article></article><main>#{long}</main></body></html>", @base)

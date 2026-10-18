@@ -123,14 +123,27 @@ defmodule Acervo.Library.HtmlMeta do
   end
 
   defp main_text(doc) do
-    texts =
-      ["article", "main", "[role=main]", "body"]
-      |> Enum.flat_map(fn selector -> doc |> LazyHTML.query(selector) |> LazyHTML.to_tree() end)
-      |> Enum.map(&(&1 |> collect_text() |> Enum.join() |> collapse() |> blank_to_nil()))
-      |> Enum.reject(&is_nil/1)
+    best = doc |> candidate_texts(["article", "main", "[role=main]"]) |> longest()
 
-    truncate(Enum.find(texts, &(String.length(&1) >= @min_text)) || Enum.max_by(texts, &String.length/1, fn -> nil end))
+    chosen =
+      if is_nil(best) or String.length(best) < @min_text do
+        body = doc |> candidate_texts(["body"]) |> longest()
+        longest([best, body])
+      else
+        best
+      end
+
+    truncate(chosen)
   end
+
+  defp candidate_texts(doc, selectors) do
+    selectors
+    |> Enum.flat_map(fn selector -> doc |> LazyHTML.query(selector) |> LazyHTML.to_tree() end)
+    |> Enum.map(&(&1 |> collect_text() |> Enum.join() |> collapse() |> blank_to_nil()))
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp longest(texts), do: Enum.max_by(Enum.reject(texts, &is_nil/1), &String.length/1, fn -> nil end)
 
   defp collect_text(nil), do: []
   defp collect_text(text) when is_binary(text), do: [text]
