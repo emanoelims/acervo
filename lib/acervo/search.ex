@@ -271,10 +271,47 @@ defmodule Acervo.Search do
     |> Enum.take(8)
   end
 
+  @doc """
+  The scope's links nearest in meaning to `link`, nearest first: cosine
+  distance between embeddings from the configured model, kept only within
+  the search's cutoff (`max_distance`, similarity 0.27 or more). The link
+  itself and the ids in `:exclude` are left out. Empty when the link has no
+  embedding yet. No model call: the link's own vector is the query.
+
+  Options: `:limit` (5 by default, at most 50) and `:exclude`.
+  """
+  @spec similar_links(Scope.t(), Link.t(), keyword()) :: [Link.t()]
+  def similar_links(%Scope{user: user} = scope, %Link{id: id}, opts \\ []) do
+    opts = Keyword.validate!(opts, limit: 5, exclude: [])
+    model = AI.embedding_model()
+
+    vector =
+      Repo.one(
+        from l in Link,
+          where: l.id == ^id and l.user_id == ^user.id and l.embedding_model == ^model,
+          select: l.embedding
+      )
+
+    case vector do
+      %Pgvector{} ->
+        ranks =
+          vector_ranks(scope, vector,
+            max_distance: config(:max_distance, nil),
+            exclude: [id | opts[:exclude]],
+            limit: min(opts[:limit], @list_size)
+          )
+
+        Library.list_links_by_ids(scope, Enum.map(ranks, &elem(&1, 0)))
+
+      nil ->
+        []
+    end
+  end
+
   @doc false
-  # The top 50 links by cosine distance to `vector`, nearest first, among
-  # those embedded with the configured model; with `:max_distance`, farther
-  # ones are dropped. `relaxed_order` lets HNSW keep scanning past rows the
+  # The top 50 links (or `:limit`) by cosine distance to `vector`, nearest
+  # first, among those embedded with the configured model and not in
+  # `:exclude`; with `:max_distance`, farther ones are dropped. `relaxed_order` lets HNSW keep scanning past rows the
   # filters reject (so a filtered query still finds 50), at the cost of a
   # slightly unsorted result, which the outer query sorts again.
   @spec vector_ranks(Scope.t(), Pgvector.t(), keyword()) :: ranked()
@@ -285,8 +322,9 @@ defmodule Acervo.Search do
       scoped(
         from(l in Link,
           where: l.user_id == ^user.id and l.embedding_model == ^model and not is_nil(l.embedding),
+          where: l.id not in ^Keyword.get(opts, :exclude, []),
           order_by: fragment("? <=> ?", l.embedding, ^vector),
-          limit: @list_size,
+          limit: ^Keyword.get(opts, :limit, @list_size),
           select: %{id: l.id, inserted_at: l.inserted_at, distance: fragment("? <=> ?", l.embedding, ^vector)}
         ),
         user,

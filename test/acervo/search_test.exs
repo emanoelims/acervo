@@ -471,4 +471,43 @@ defmodule Acervo.SearchTest do
         eventually(fun, tries - 1)
     end
   end
+
+  describe "similar_links/3" do
+    test "nearest first, within the cutoff, without the link itself", %{scope: scope} do
+      source = link(scope, title: "Source", vector: FakeEmbedder.axis(0))
+      near = link(scope, title: "Near", vector: FakeEmbedder.blend([{0, 1.0}, {1, 0.2}]))
+      nearer = link(scope, title: "Nearer", vector: FakeEmbedder.blend([{0, 1.0}, {1, 0.05}]))
+      _far = link(scope, title: "Far", vector: FakeEmbedder.axis(1))
+      _unembedded = link(scope, title: "Unembedded")
+
+      assert ids(%{links: Search.similar_links(scope, source)}) == [nearer.id, near.id]
+      assert ids(%{links: Search.similar_links(scope, source, limit: 1)}) == [nearer.id]
+      assert FakeEmbedder.calls() == 0
+    end
+
+    test "leaves out the excluded ids", %{scope: scope} do
+      source = link(scope, vector: FakeEmbedder.axis(0))
+      related = link(scope, vector: FakeEmbedder.blend([{0, 1.0}, {1, 0.1}]))
+      other = link(scope, vector: FakeEmbedder.blend([{0, 1.0}, {1, 0.3}]))
+
+      assert ids(%{links: Search.similar_links(scope, source, exclude: [related.id])}) == [other.id]
+    end
+
+    test "only the scope's links, from the configured model", %{scope: scope} do
+      source = link(scope, vector: FakeEmbedder.axis(0))
+      _old_model = link(scope, vector: FakeEmbedder.axis(0), model: "openrouter:old/model")
+      other = user_scope_fixture()
+      _theirs = link(other, vector: FakeEmbedder.axis(0))
+
+      assert Search.similar_links(scope, source) == []
+      assert Search.similar_links(other, source) == []
+    end
+
+    test "is empty for a link without an embedding", %{scope: scope} do
+      source = link(scope, title: "Not embedded yet")
+      _near = link(scope, vector: FakeEmbedder.axis(0))
+
+      assert Search.similar_links(scope, source) == []
+    end
+  end
 end
