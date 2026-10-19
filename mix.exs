@@ -4,7 +4,7 @@ defmodule Acervo.MixProject do
   def project do
     [
       app: :acervo,
-      version: "0.11.0",
+      version: "0.12.0",
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,

@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-18
+
+Bring your browser bookmarks in.
+
 ### Added
 
 - Import bookmarks from Chrome, Safari, Firefox and other browsers, with each folder becoming a collection, going to the inbox, or skipped.
