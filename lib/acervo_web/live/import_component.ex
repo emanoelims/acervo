@@ -242,30 +242,17 @@ defmodule AcervoWeb.ImportComponent do
       </ul>
       <.form for={%{}} id="import-form" phx-change="validate" phx-target={@target}>
         <.live_file_input upload={@upload} class="sr-only" tabindex="-1" />
-        <label
+        <.drop_zone
           id="import-drop"
-          for={@upload.ref}
-          class={["shot-drop import-drop", @upload.entries != [] && "is-busy"]}
-          phx-drop-target={@upload.ref}
+          upload={@upload}
+          icon="lucide-file-up"
+          hint={gettext("Drop or choose the .html file")}
+          error_id="import-upload-error"
+          error_message={&upload_error/1}
+          class="import-drop"
         >
-          <.icon name="lucide-file-up" class="size-[18px]" />
-          <span class="shot-hint">{gettext("Drop or choose the .html file")}</span>
-          <span :for={entry <- @upload.entries} class="shot-bar" aria-hidden="true">
-            <i style={"width: #{entry.progress}%"}></i>
-          </span>
-          <span
-            :for={
-              error <-
-                upload_errors(@upload) ++ Enum.flat_map(@upload.entries, &upload_errors(@upload, &1))
-            }
-            id="import-upload-error"
-            class="shot-error"
-            role="alert"
-          >
-            {upload_error(error)}
-          </span>
           <span :if={@error} id="import-error" class="shot-error" role="alert">{upload_error(@error)}</span>
-        </label>
+        </.drop_zone>
       </.form>
     </div>
     """
@@ -341,17 +328,14 @@ defmodule AcervoWeb.ImportComponent do
         <span>{Format.usd(@estimate.cost_usd)} · {Format.duration(@estimate.seconds)}</span>
       </p>
       <div class="import-actions">
-        <button
+        <.icon_button
           id="import-reset"
-          type="button"
-          class="head-button"
+          variant="head"
+          icon="lucide-rotate-ccw"
+          label={gettext("Choose another file")}
           phx-click="reset"
           phx-target={@target}
-          title={gettext("Choose another file")}
-          aria-label={gettext("Choose another file")}
-        >
-          <.icon name="lucide-rotate-ccw" class="size-4" />
-        </button>
+        />
         <.button
           id="import-start"
           variant="primary"

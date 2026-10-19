@@ -87,6 +87,9 @@ defmodule AcervoWeb do
       # Core UI components
       import AcervoWeb.CoreComponents
 
+      # Design-system primitives
+      import AcervoWeb.UIComponents
+
       # HTML escaping functionality
       import Phoenix.HTML
 

@@ -1,5 +1,9 @@
 defmodule AcervoWeb.ArchiveComponents do
-  @moduledoc "Columns, navigation and the floating dock (approved prototype, option A)."
+  @moduledoc """
+  The archive's chrome (approved prototype, option A): the floating dock and
+  its settings, the add and search pills, and a collection's menu. Built from
+  `AcervoWeb.UIComponents`.
+  """
   # Imported by every template through `AcervoWeb.html_helpers/0`, so this
   # module cannot `use AcervoWeb, :html` (it would import itself).
   use Phoenix.Component
@@ -7,107 +11,10 @@ defmodule AcervoWeb.ArchiveComponents do
   use AcervoWeb, :verified_routes
 
   import AcervoWeb.CoreComponents
+  import AcervoWeb.UIComponents
 
   alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
-
-  @doc """
-  Renders one Finder-style column. Titled columns get a heading and the ↑ pill
-  that appears once the column scrolls, returning it to the top. A changed
-  `key` (the item the column shows) scrolls the column back to the top.
-  """
-  attr :id, :string, required: true
-  attr :title, :string, default: nil
-  attr :class, :string, default: nil
-  attr :key, :string, default: nil
-  slot :heading, doc: "replaces the title in the heading, as an inline rename form does"
-  slot :actions
-  slot :inner_block, required: true
-
-  def column(assigns) do
-    ~H"""
-    <section id={@id} class={["column", @class]}>
-      <button
-        :if={@title}
-        id={"#{@id}-up"}
-        type="button"
-        class="column-up"
-        data-column-up
-        title={@title}
-      >
-        <.icon name="lucide-arrow-up" class="size-3.5" /><span>{@title}</span>
-      </button>
-      <div class="column-scroll" id={"#{@id}-scroll"} data-key={@key} phx-hook=".ColumnScroll">
-        <header :if={@title} class="column-head">
-          <h2 :if={@heading == []}>
-            <span class="column-title">{@title}</span>
-          </h2>
-          {render_slot(@heading)}
-          {render_slot(@actions)}
-        </header>
-        {render_slot(@inner_block)}
-      </div>
-    </section>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".ColumnScroll">
-      export default {
-        mounted() {
-          this.pill = this.el.parentElement.querySelector('[data-column-up]')
-          this.onScroll = () => this.pill?.classList.toggle('is-shown', this.el.scrollTop > 150)
-          this.onPill = () => this.el.scrollTo({top: 0, behavior: 'smooth'})
-          this.el.addEventListener('scroll', this.onScroll, {passive: true})
-          this.pill?.addEventListener('click', this.onPill)
-          this.el.closest('.columns')?.scrollTo({left: 1e6, behavior: 'smooth'})
-          this.key = this.el.dataset.key
-        },
-        updated() {
-          if (this.el.dataset.key === this.key) return
-          this.key = this.el.dataset.key
-          this.el.scrollTo({top: 0})
-        },
-        destroyed() {
-          this.el.removeEventListener('scroll', this.onScroll)
-          this.pill?.removeEventListener('click', this.onPill)
-        }
-      }
-    </script>
-    """
-  end
-
-  @doc "Renders a root navigation row that patches to its section."
-  attr :id, :string, required: true
-  attr :navigate, :string, required: true
-  attr :active, :boolean, default: false
-  attr :count, :integer, default: nil
-  attr :dot, :boolean, default: false
-  slot :inner_block, required: true
-
-  def nav_item(assigns) do
-    ~H"""
-    <li>
-      <.link
-        id={@id}
-        patch={@navigate}
-        class={["nav-item", @active && "is-active"]}
-        aria-current={@active && "page"}
-      >
-        {render_slot(@inner_block)}
-        <span :if={@dot} class="nav-dot" aria-hidden="true"></span>
-        <span :if={@count} class="nav-count">{@count}</span>
-      </.link>
-    </li>
-    """
-  end
-
-  @doc "Renders a quiet empty-state line."
-  attr :id, :string, default: nil
-  attr :class, :any, default: nil
-  slot :inner_block, required: true
-
-  def empty(assigns) do
-    ~H"""
-    <p id={@id} class={["empty", @class]}>{render_slot(@inner_block)}</p>
-    """
-  end
 
   @doc "Renders the floating glass dock with home, search, inbox, settings and add."
   attr :active, :atom, values: [:home, :search, :inbox], required: true
@@ -197,14 +104,7 @@ defmodule AcervoWeb.ArchiveComponents do
 
   def add_pill(assigns) do
     ~H"""
-    <div
-      id="add-pill"
-      class="float"
-      phx-window-keydown="close_add"
-      phx-key="Escape"
-      phx-remove={JS.transition("is-leaving", time: 200)}
-    >
-      <.icon name="lucide-link" class="float-icon size-[18px]" />
+    <.float_pill id="add-pill" icon="lucide-link" phx-window-keydown="close_add" phx-key="Escape">
       <.form for={@form} id="add-link-form" class="float-form" phx-submit="add_link">
         <.input
           field={@form[:url]}
@@ -219,8 +119,8 @@ defmodule AcervoWeb.ArchiveComponents do
           phx-mounted={JS.focus()}
         />
       </.form>
-      <kbd class="float-kbd" aria-hidden="true">↵</kbd>
-    </div>
+      <:kbd>↵</:kbd>
+    </.float_pill>
     """
   end
 
@@ -236,29 +136,24 @@ defmodule AcervoWeb.ArchiveComponents do
 
   def search_pill(assigns) do
     ~H"""
-    <div
+    <.float_pill
       id="search-pill"
-      class="float search-float"
+      icon="lucide-search"
+      loading={@loading}
+      class="search-float"
       role="search"
       phx-window-keydown="close_search"
       phx-key="Escape"
-      phx-remove={JS.transition("is-leaving", time: 200)}
     >
-      <.icon name="lucide-search" class={["float-icon size-[18px]", @loading && "is-loading"]} />
-      <span :if={@scope} id="search-scope" class="chip chip-sm search-scope" title={@scope.name}>
+      <.chip :if={@scope} id="search-scope" size="sm" class="search-scope" title={@scope.name}>
         <.icon name="lucide-folder" class="size-3.5 flex-none" />
         <span class="search-scope-name">{@scope.name}</span>
-        <button
+        <.chip_remove
           id="search-scope-clear"
-          type="button"
-          class="chip-x"
+          label={gettext("Search everything")}
           phx-click="clear_search_scope"
-          title={gettext("Search everything")}
-          aria-label={gettext("Search everything")}
-        >
-          <.icon name="lucide-x" class="size-3" />
-        </button>
-      </span>
+        />
+      </.chip>
       <.form for={@form} id="search-form" class="float-form" phx-change="search" phx-submit="search">
         <.input
           field={@form[:q]}
@@ -276,8 +171,8 @@ defmodule AcervoWeb.ArchiveComponents do
           phx-mounted={JS.focus()}
         />
       </.form>
-      <kbd class="float-kbd" aria-hidden="true"><.mod_key />K</kbd>
-    </div>
+      <:kbd><.mod_key />K</:kbd>
+    </.float_pill>
     """
   end
 
@@ -293,41 +188,27 @@ defmodule AcervoWeb.ArchiveComponents do
       panel_class="dropdown-menu"
     >
       <:trigger><.icon name="lucide-ellipsis" class="size-4" /></:trigger>
-      <button
+      <.dropdown_item
         id="rename-collection"
-        type="button"
-        role="menuitem"
-        tabindex="-1"
-        class="dropdown-item"
+        icon="lucide-pen-line"
+        label={gettext("Rename")}
         phx-click={JS.push("edit_collection", value: %{field: "name"}) |> close_menu()}
-      >
-        <.icon name="lucide-pen-line" class="size-4" />
-        <span class="dropdown-item-label">{gettext("Rename")}</span>
-      </button>
-      <button
+      />
+      <.dropdown_item
         id="describe-collection"
-        type="button"
-        role="menuitem"
-        tabindex="-1"
-        class="dropdown-item"
+        icon="lucide-align-left"
+        label={gettext("Description")}
         phx-click={JS.push("edit_collection", value: %{field: "description"}) |> close_menu()}
-      >
-        <.icon name="lucide-align-left" class="size-4" />
-        <span class="dropdown-item-label">{gettext("Description")}</span>
-      </button>
+      />
       <div class="dropdown-divider" role="separator"></div>
-      <button
+      <.dropdown_item
         id="delete-collection"
-        type="button"
-        role="menuitem"
-        tabindex="-1"
-        class="dropdown-item dropdown-item-danger"
+        icon="lucide-trash-2"
+        label={gettext("Delete")}
+        danger
         phx-click="delete_collection"
         data-confirm={gettext("Delete this collection? Its links stay in your archive.")}
-      >
-        <.icon name="lucide-trash-2" class="size-4" />
-        <span class="dropdown-item-label">{gettext("Delete")}</span>
-      </button>
+      />
     </.popover>
     """
   end
@@ -440,19 +321,6 @@ defmodule AcervoWeb.ArchiveComponents do
         }
       }
     </script>
-    """
-  end
-
-  @doc """
-  Renders the platform's modifier key: ⌘ on Apple devices, Ctrl elsewhere.
-  Both are rendered; CSS keeps the one matching `<html data-platform>`, which
-  `app.js` sets. With `plus`, Ctrl is followed by "+" (⌘↩ but Ctrl+↩).
-  """
-  attr :plus, :boolean, default: false
-
-  def mod_key(assigns) do
-    ~H"""
-    <span class="key-mac">⌘</span><span class="key-other">Ctrl{if @plus, do: "+"}</span>
     """
   end
 

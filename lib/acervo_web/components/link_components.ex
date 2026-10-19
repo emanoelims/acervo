@@ -6,11 +6,12 @@ defmodule AcervoWeb.LinkComponents do
   use Gettext, backend: AcervoWeb.Gettext
   use AcervoWeb, :verified_routes
 
-  import AcervoWeb.ArchiveComponents, only: [mod_key: 1]
   import AcervoWeb.CoreComponents
 
   import AcervoWeb.LinkPresenter,
     only: [kind: 1, first_image: 1, image_src: 1, meta: 1, suggestion_name: 1, paragraphs: 1, collection_choices: 2]
+
+  import AcervoWeb.UIComponents
 
   alias Acervo.Library.Embed
   alias AcervoWeb.Format
@@ -116,45 +117,39 @@ defmodule AcervoWeb.LinkComponents do
       <.card id={"card-#{@link.id}"} link={@link} patch={@patch} selected={@selected} />
       <div class="ibar">
         <div class="ibar-chips">
-          <span
+          <.chip
             :for={collection <- @collections}
             id={"card-chip-#{@link.id}-#{collection.id}"}
-            class="chip chip-sm"
+            size="sm"
           >
             {collection.name}
-          </span>
+          </.chip>
           <.suggestion_button
             :for={suggestion <- @suggestions}
             id={"suggestion-#{suggestion.id}"}
             suggestion={suggestion}
             class="chip chip-sm ai"
           />
-          <.waiting_chip :if={@waiting?} class="chip-sm" />
+          <.waiting_chip :if={@waiting?} size="sm" />
         </div>
         <div class="ibar-acts">
-          <button
+          <.icon_button
             :if={length(@link.suggestions) > 1}
             id={"accept-all-#{@link.id}"}
-            type="button"
-            class="round round-sm"
+            size="sm"
+            icon="lucide-check-check"
+            label={gettext("Accept all and finish")}
             phx-click="accept_all"
             phx-value-id={@link.id}
-            title={gettext("Accept all and finish")}
-            aria-label={gettext("Accept all and finish")}
-          >
-            <.icon name="lucide-check-check" class="size-[15px]" />
-          </button>
-          <button
+          />
+          <.icon_button
             id={"done-#{@link.id}"}
-            type="button"
-            class="round round-sm"
+            size="sm"
+            icon="lucide-check"
+            label={gettext("Done")}
             phx-click="finish"
             phx-value-id={@link.id}
-            title={gettext("Done")}
-            aria-label={gettext("Done")}
-          >
-            <.icon name="lucide-check" class="size-[15px]" />
-          </button>
+          />
         </div>
       </div>
     </div>
@@ -196,18 +191,6 @@ defmodule AcervoWeb.LinkComponents do
   defp suggestion_glyph(assigns) do
     ~H"""
     <.icon name="lucide-sparkle" class="chip-glyph size-[11px]" />
-    """
-  end
-
-  attr :class, :string, default: nil
-
-  # Holds the suggestions' place while the link is read, so nothing jumps
-  # when they land.
-  defp waiting_chip(assigns) do
-    ~H"""
-    <span class={["chip ai is-waiting", @class]} aria-hidden="true">
-      <.icon name="lucide-sparkle" class="chip-glyph size-[11px]" /><i class="wait-bar"></i>
-    </span>
     """
   end
 
@@ -327,45 +310,36 @@ defmodule AcervoWeb.LinkComponents do
       <p class="meta">{@meta}</p>
 
       <div :if={@link.collections != [] or @waiting?} class="chips">
-        <span :for={collection <- @link.collections} id={"link-chip-#{collection.id}"} class="chip">
+        <.chip :for={collection <- @link.collections} id={"link-chip-#{collection.id}"}>
           <.link patch={~p"/c/#{collection.slug}"} class="chip-link">
             <.icon name="lucide-folder" class="size-[13px]" />{collection.name}
           </.link>
-          <button
+          <.chip_remove
             id={"chip-remove-#{collection.id}"}
-            type="button"
-            class="chip-x"
+            label={gettext("Remove from collection")}
             phx-click="remove_from_collection"
             phx-value-id={collection.id}
-            title={gettext("Remove from collection")}
-            aria-label={gettext("Remove from collection")}
-          >
-            <.icon name="lucide-x" class="size-3" />
-          </button>
-        </span>
+          />
+        </.chip>
         <.waiting_chip :if={@waiting?} />
       </div>
 
       <ul :if={@link.suggestions != []} id="link-suggestions" class="sugs">
         <li :for={suggestion <- @link.suggestions} class="sug">
-          <span id={"link-suggestion-#{suggestion.id}"} class="chip ai">
+          <.chip id={"link-suggestion-#{suggestion.id}"} ai>
             <.suggestion_button
               id={"link-suggestion-accept-#{suggestion.id}"}
               suggestion={suggestion}
               class="chip-link"
             />
-            <button
+            <.chip_remove
               id={"suggestion-dismiss-#{suggestion.id}"}
-              type="button"
-              class="chip-x"
+              title={gettext("Dismiss")}
+              label={gettext("Dismiss %{name}", name: suggestion_name(suggestion))}
               phx-click="dismiss_suggestion"
               phx-value-id={suggestion.id}
-              title={gettext("Dismiss")}
-              aria-label={gettext("Dismiss %{name}", name: suggestion_name(suggestion))}
-            >
-              <.icon name="lucide-x" class="size-3" />
-            </button>
-          </span>
+            />
+          </.chip>
           <span :if={suggestion.reason} class="sug-why">{suggestion.reason}</span>
         </li>
       </ul>
@@ -638,15 +612,15 @@ defmodule AcervoWeb.LinkComponents do
             <p class="web-hint">
               <.icon name="lucide-info" class="size-3.5" />{gettext("This page can't be shown here.")}
             </p>
-            <a
+            <.pill_button
               id="web-reader-open"
               href={Embed.original_url(@link)}
               target="_blank"
               rel="noopener noreferrer"
-              class="pill-button"
+              icon="lucide-arrow-up-right"
             >
-              {gettext("Open original")}<.icon name="lucide-arrow-up-right" class="size-4" />
-            </a>
+              {gettext("Open original")}
+            </.pill_button>
           </div>
           <div :if={@link.text_excerpt} id="web-reader-text" class="web-reader-text">
             <p :for={paragraph <- paragraphs(@link.text_excerpt)}>{paragraph}</p>
