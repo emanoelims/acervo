@@ -157,6 +157,34 @@ uses them. Their names start with a dot.
   `ArchiveComponents`) renames, describes or deletes the collection. Deleting
   keeps its links. Business rules live in `Acervo.Collections`.
 
+## Related links
+
+- **Section.** The link column ends with “Related” (`#link-related`,
+  `related_links/1` in `LinkComponents`): up to 5 compact cards (`card/1`
+  with `compact`), two by two. They open the link in the current list, like
+  a card of that list. `Acervo.Search.related_links/3` builds it and
+  `ArchiveLive` loads it with `assign_async`, once per open link, again when
+  a relation changes (`{:relations_changed, ids}`), when the link is
+  embedded again or when a listed link changes.
+- **By hand first.** Links related by hand come first, all of them, marked
+  with the link glyph; the ✕ on their card (`#related-remove-<id>`, on
+  hover) removes the relation (`Library.unrelate/3`). The link action
+  (`#link-relations`, `relation_picker/1`) opens a picker: type to find
+  links by their words (`Search.relation_candidates/4`, the full-text list of
+  search, title first, at most 8, without the link itself and the ones
+  already related); click one, or press ↩ for the first, to relate it
+  (`Library.relate/3`). Relations are symmetric: one `link_relations` row
+  per pair (`link_a_id < link_b_id`, unique, deleted with either link).
+- **Then similar.** The nearest links by embedding
+  (`Search.similar_links/3`: cosine distance, HNSW, the search's cutoff of
+  0.27 similarity, the same user's links only, no model call) fill the rest.
+  A link without an embedding yet shows only its manual relations.
+- **See more similar.** When more similar links exist than fit, “See more
+  similar” (`#link-more-similar`) opens `/search/l/:id?similar=:id`: a
+  search column (`#column-similar`, “Similar to <title>”) listing every
+  similar link, up to 50, nearest first. Its links open under
+  `/search/l/:id?similar=…`. Another user's link answers “Not found.”
+
 ## Search
 
 - **Pill.** The dock's search item (`#dock-search`, between Acervo and
@@ -181,14 +209,15 @@ uses them. Their names start with a dot.
   current cards stay until the results arrive. Two lists are merged with
   Reciprocal Rank Fusion (k = 60):
   - **text:** the generated `links.search_tsv` (title; description, image
-    description and note; site, author and article text), any word of three
+    description and note; site, author and article text; AI notes, at the
+    lowest weight), any word of three
     letters or more, by prefix, accents ignored;
   - **meaning:** the query's embedding against each link's, by cosine
     distance, past a similarity cutoff (`max_distance`), only among links
     embedded with the configured model.
 - **Embeddings.** `Acervo.Search.EmbedLink` (Oban, queue `embed`) embeds a
   link's title, site, author, collections, description, image description,
-  note and article text (`Acervo.Search.Document`, about 2,000 tokens) when
+  note, AI notes and article text (`Acervo.Search.Document`, about 2,000 tokens) when
   that text changes. Query vectors are cached for 10 minutes per user
   (`Acervo.Search.QueryCache`). `mix acervo.reindex` (`Acervo.Release.reindex/1`)
   embeds links whose embedding is missing or from another model.
@@ -273,11 +302,36 @@ uses them. Their names start with a dot.
   after 1.5 s with `{:clear_saved, :note_saved, ref}`. A save that changes nothing
   shows nothing.
 
+## AI notes
+
+- **Generate.** Under the note, “Generate notes” (`#ai-notes-generate`)
+  asks Claude for a short summary and 3–7 key points, in Portuguese
+  (`Library.request_notes/2`). `Acervo.AI.GenerateNotes` (Oban, queue `ai`,
+  one waiting job per link) sends the reader text, else the title,
+  description and excerpt (`Acervo.AI.Notes`, capped at 24,000 characters),
+  inside a random per-call delimiter like enrichment, and normalizes the
+  structured output. The notes are stored as text in `ai_notes` (summary, a
+  blank line, `- ` points) with `ai_notes_at`. The button shows progress
+  while the job runs and “Generate again” afterwards, which replaces only the
+  AI notes; a failure flashes (`{:notes_failed, link}`). Each call's cost
+  goes to `ai_calls` as `generate_notes`.
+- **Edit.** The notes are a field of their own (`#ai-notes-form`,
+  `#link-ai-notes`, with a faint ✦), never the owner's note. They save on
+  blur or ⌘↩ (Ctrl+↩) like the note (`Library.update_ai_notes/3`), and they
+  join the link's search text and embedding.
+- **Automatic notes.** In the dock settings (`#auto-notes`,
+  `auto_notes_setting/1` in `ArchiveComponents`), stored per user in
+  `users.auto_notes`: never (the default), long (reader text over 1,500
+  words) or always. When it applies, a finished enrichment of a link without
+  notes enqueues them at the enrichment's priority
+  (`GenerateNotes.enqueue_auto/4`).
+
 ## Appearance and language
 
 - **Dock settings.** The settings popover (`#dock-settings`, `dock/1` and
   `appearance_panel/1` in `ArchiveComponents`) holds:
   - theme, accent and font, saved per browser by `assets/js/appearance.js`;
+  - automatic notes (never, long, always), saved on the user;
   - PT/EN, through `AcervoWeb.LocaleController`;
   - “Shortcuts and features” (`#dock-guide`), which opens the guide;
   - “Import bookmarks” (`#dock-import`), which opens the import column;
@@ -300,7 +354,8 @@ and hooks use it to pick the modifier key.
 | Esc          | add pill, popover | closes it                            | `close_add`; `assets/js/floating.js`  |
 | Esc          | search pill       | closes it, keeping the results       | `close_search` event                  |
 | Esc          | page column open  | closes the page column               | `.Shortcuts` → `close_web` event      |
-| ⌘/Ctrl ↩     | note, description | saves the field                      | `.SubmitShortcut` (`LinkComponents`)  |
+| ⌘/Ctrl ↩     | note, description | saves the field (AI notes too)       | `.SubmitShortcut` (`LinkComponents`)  |
+| ↩            | relation picker   | relates the first match              | `#relation-filter-form` submit        |
 | ?            | outside fields    | opens the guide (`/guide`)           | `.Shortcuts` → `open_guide` event     |
 
 Page-wide keys do nothing while you type in an input, a textarea or a

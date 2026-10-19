@@ -6,7 +6,9 @@ defmodule Acervo.Library do
   preview in the background. Mutations broadcast on the `"links:<user_id>"`
   topic of `Acervo.PubSub`: `{:link_created, link}`, `{:links_created, links}`
   (for `save_links/2`), `{:link_updated, link}`, `{:link_deleted, link}` and
-  `{:snapshot_failed, link}` (see `request_snapshot/2`). Broadcast links
+  `{:snapshot_failed, link}` (see `request_snapshot/2`), `{:notes_failed,
+  link}` (see `request_notes/2`) and `{:relations_changed, link_ids}` (see
+  `relate/3`). Broadcast links
   carry their images, collections and pending collection suggestions
   preloaded.
 
@@ -20,6 +22,7 @@ defmodule Acervo.Library do
 
   alias Acervo.Accounts.Scope
   alias Acervo.AI.EnrichLink
+  alias Acervo.AI.GenerateNotes
   alias Acervo.Collections.Collection
   alias Acervo.Collections.CollectionLink
   alias Acervo.Collections.Suggestion
@@ -30,6 +33,7 @@ defmodule Acervo.Library do
   alias Acervo.Library.Images
   alias Acervo.Library.Link
   alias Acervo.Library.LinkImage
+  alias Acervo.Library.LinkRelation
   alias Acervo.Library.SafeFetch
   alias Acervo.Library.Screenshots
   alias Acervo.Library.URL
@@ -325,6 +329,31 @@ defmodule Acervo.Library do
   def change_note(%Link{} = link, attrs \\ %{}), do: Link.note_changeset(link, attrs)
 
   @doc """
+  Saves the owner's edit of the AI notes. Like the note, a change is
+  embedded again for search; generating notes again replaces it.
+  """
+  @spec update_ai_notes(Scope.t(), Link.t(), map()) :: {:ok, Link.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def update_ai_notes(%Scope{} = scope, %Link{} = link, attrs) do
+    scope |> update_embedded(link, :ai_notes, &Link.ai_notes_changeset(&1, attrs)) |> updated(scope)
+  end
+
+  @doc "Returns a changeset for tracking AI notes changes."
+  @spec change_ai_notes(Link.t(), map()) :: Ecto.Changeset.t()
+  def change_ai_notes(%Link{} = link, attrs \\ %{}), do: Link.ai_notes_changeset(link, attrs)
+
+  @doc """
+  Asks the model for the link's AI notes: enqueues
+  `Acervo.AI.GenerateNotes`, which replaces the link's AI notes and
+  broadcasts `{:link_updated, link}`. A job for the link already waiting is
+  returned as is. When it fails for good the scope's topic gets
+  `{:notes_failed, link}`.
+  """
+  @spec request_notes(Scope.t(), Link.t()) :: {:ok, Oban.Job.t()} | {:error, :not_found | term()}
+  def request_notes(%Scope{} = scope, %Link{} = link) do
+    with {:ok, link} <- owned(scope, link), do: GenerateNotes.enqueue(link)
+  end
+
+  @doc """
   Saves the owner's edit of the image description, stamping
   `image_description_edited_at` so enrichment never overwrites it.
   """
@@ -376,6 +405,95 @@ defmodule Acervo.Library do
       broadcast(scope, {:link_deleted, deleted})
       {:ok, deleted}
     end
+  end
+
+  ## Relations
+
+  @doc """
+  Connects two of the scope's links by hand. The relation is symmetric and
+  stored once per pair, so it lists from either link (`list_related/2`).
+
+  Fails with `:self` for the link itself, `:duplicate` for a pair already
+  related and `:not_found` when either link isn't the scope's. Broadcasts
+  `{:relations_changed, [link_id, other_id]}`.
+  """
+  @spec relate(Scope.t(), Link.t(), Link.t() | Ecto.UUID.t()) ::
+          {:ok, LinkRelation.t()} | {:error, :not_found | :self | :duplicate}
+  def relate(%Scope{user: user} = scope, %Link{id: id}, other) do
+    with {:ok, other_id} <- cast_id(other),
+         :ok <- not_self(id, other_id),
+         :ok <- owned_pair(user, id, other_id) do
+      %LinkRelation{user_id: user.id}
+      |> LinkRelation.changeset(id, other_id)
+      |> Ecto.Changeset.foreign_key_constraint(:link_a_id)
+      |> Ecto.Changeset.foreign_key_constraint(:link_b_id)
+      |> Repo.insert()
+      |> case do
+        {:ok, relation} ->
+          broadcast(scope, {:relations_changed, [id, other_id]})
+          {:ok, relation}
+
+        # The same pair, or a link deleted meanwhile.
+        {:error, changeset} ->
+          {:error, if(unique_error?(changeset), do: :duplicate, else: :not_found)}
+      end
+    end
+  end
+
+  @doc """
+  Disconnects two of the scope's links. Idempotent; broadcasts
+  `{:relations_changed, [link_id, other_id]}` when a relation was removed.
+  """
+  @spec unrelate(Scope.t(), Link.t(), Link.t() | Ecto.UUID.t()) :: :ok | {:error, :not_found}
+  def unrelate(%Scope{user: user} = scope, %Link{id: id}, other) do
+    with {:ok, other_id} <- cast_id(other) do
+      {a, b} = if id < other_id, do: {id, other_id}, else: {other_id, id}
+
+      {count, _} =
+        Repo.delete_all(from r in LinkRelation, where: r.user_id == ^user.id and r.link_a_id == ^a and r.link_b_id == ^b)
+
+      if count > 0, do: broadcast(scope, {:relations_changed, [id, other_id]})
+      :ok
+    end
+  end
+
+  @doc """
+  The links the scope's user connected to `link` by hand, most recently
+  connected first, each with only its first image (all the compact card
+  shows).
+  """
+  @spec list_related(Scope.t(), Link.t()) :: [Link.t()]
+  def list_related(%Scope{user: user}, %Link{id: id}) do
+    first_image = from i in images_query(), where: i.position == 0
+
+    Repo.all(
+      from l in Link,
+        join: r in LinkRelation,
+        on: (r.link_a_id == l.id and r.link_b_id == ^id) or (r.link_b_id == l.id and r.link_a_id == ^id),
+        where: r.user_id == ^user.id and l.user_id == ^user.id,
+        order_by: [desc: r.inserted_at, desc: r.id],
+        preload: [images: ^first_image]
+    )
+  end
+
+  defp cast_id(%Link{id: id}), do: {:ok, id}
+
+  defp cast_id(id) when is_binary(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, id} -> {:ok, id}
+      :error -> {:error, :not_found}
+    end
+  end
+
+  defp unique_error?(%Ecto.Changeset{errors: errors}),
+    do: Enum.any?(errors, fn {_field, {_message, opts}} -> opts[:constraint] == :unique end)
+
+  defp not_self(id, id), do: {:error, :self}
+  defp not_self(_id, _other_id), do: :ok
+
+  defp owned_pair(user, id, other_id) do
+    count = Repo.aggregate(from(l in Link, where: l.user_id == ^user.id and l.id in ^[id, other_id]), :count)
+    if count == 2, do: :ok, else: {:error, :not_found}
   end
 
   @doc """
@@ -496,6 +614,18 @@ defmodule Acervo.Library do
   def broadcast_snapshot_failed(%Scope{user: user} = scope, link_id) do
     case Repo.get_by(Link, id: link_id, user_id: user.id) do
       %Link{} = link -> broadcast(scope, {:snapshot_failed, preload_link(link)})
+      nil -> :error
+    end
+  end
+
+  @doc false
+  # Broadcasts `{:notes_failed, link}` when notes the user asked for, or
+  # automatic ones, fail for good. Used by `Acervo.AI.GenerateNotes`;
+  # returns `:error` if the link is gone.
+  @spec broadcast_notes_failed(Scope.t(), Ecto.UUID.t()) :: :ok | :error
+  def broadcast_notes_failed(%Scope{user: user} = scope, link_id) do
+    case Repo.get_by(Link, id: link_id, user_id: user.id) do
+      %Link{} = link -> broadcast(scope, {:notes_failed, preload_link(link)})
       nil -> :error
     end
   end

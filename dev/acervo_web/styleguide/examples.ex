@@ -121,6 +121,12 @@ defmodule AcervoWeb.Styleguide.Examples do
           collections: [collection("design")],
           suggestions: suggestions(),
           note: "Good reference for the onboarding illustration.",
+          ai_notes:
+            "A flat poster of a mountain range at dusk, built from a few layered shapes and a warm gradient.\n\n" <>
+              "- Three ridges in purple, darkest in front, give depth without detail.\n" <>
+              "- The sky runs from peach to violet; the sun is a pale disc.\n" <>
+              "- Works as a calm, wordless header image.",
+          ai_notes_at: ~U[2026-10-18 09:05:00Z],
           image_description: "Layered purple mountains under an orange sky with a pale sun."
         ),
       generic_image:
@@ -154,6 +160,15 @@ defmodule AcervoWeb.Styleguide.Examples do
           enrichment_status: :pending
         )
     }
+  end
+
+  @doc """
+  The open link's related section: the text link connected by hand, then
+  two similar ones, with more to see.
+  """
+  def related do
+    links = links()
+    %{manual: [links.text], similar: [links.video, links.generic_image], more?: true}
   end
 
   defp link(n, attrs) do

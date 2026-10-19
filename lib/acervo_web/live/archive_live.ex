@@ -25,6 +25,14 @@ defmodule AcervoWeb.ArchiveLive do
   links as compact cards (`Acervo.Library.home_columns/2`). Broadcasts reload
   only the columns they touch.
 
+  The link column lists related links, loaded with `assign_async`: the ones
+  connected by hand, then the nearest by meaning (`Acervo.Search.related_links/3`).
+  "See more similar" opens `/search?similar=<id>`, a search variant listing
+  every similar link (filter `{:similar, id}`), whose results open under
+  `/search/l/:id`, keeping `similar`. The link's AI notes are written on
+  request by `Acervo.AI.GenerateNotes`; the button shows progress until the
+  link arrives with new notes, or `{:notes_failed, link}`.
+
   `/import` opens a column that imports bookmarks from a browser's export
   (`AcervoWeb.ImportComponent`), opened from the dock's settings. The
   import's progress arrives here as `{:import_updated, import}` and is sent
@@ -35,6 +43,7 @@ defmodule AcervoWeb.ArchiveLive do
   import AcervoWeb.GuideComponents
   import AcervoWeb.LinkComponents
 
+  alias Acervo.Accounts
   alias Acervo.Collections
   alias Acervo.Collections.Collection
   alias Acervo.Library
@@ -44,11 +53,14 @@ defmodule AcervoWeb.ArchiveLive do
   alias Acervo.Search
   alias AcervoWeb.ImportComponent
   alias Ecto.Query.CastError
+  alias Phoenix.LiveView.AsyncResult
 
   @max_screenshot_bytes 15_000_000
   @note_saved_ms 1500
   @web_actions [:all_link_web, :inbox_link_web, :collection_link_web, :search_link_web]
   @search_actions [:search, :search_link, :search_link_web]
+  # The most a similar list shows: Acervo.Search's vector list size.
+  @similar_max 50
 
   @impl true
   def mount(params, _session, socket) do
@@ -60,7 +72,10 @@ defmodule AcervoWeb.ArchiveLive do
     {:ok,
      socket
      |> assign(filter: nil, collection: nil, link: nil, screenshot_link_id: nil, home_columns: nil)
-     |> assign(snapshots?: Screenshots.enabled?(), snapshot_requests: %{})
+     |> assign(snapshots?: Screenshots.enabled?(), snapshot_requests: %{}, notes_requests: %{})
+     |> assign(similar_source: nil, related: nil, related_for: nil)
+     |> assign(relation_filter: relation_filter(""), relation_options: nil)
+     |> assign(ai_notes_form: nil, ai_notes_saved: nil)
      |> assign(search_form: search_form, search_scope: nil, search_loading: false)
      |> assign(search_partial: false, search_count: nil)
      |> assign(note_form: nil, note_saved: nil, description_form: nil, description_saved: nil)
@@ -86,12 +101,13 @@ defmodule AcervoWeb.ArchiveLive do
     action = socket.assigns.live_action
 
     with {:ok, collection} <- fetch_collection(socket, action, params),
-         filter = filter(action, collection, params),
+         {:ok, source} <- fetch_similar_source(socket, action, params),
+         filter = filter(action, collection, source, params),
          reset? = filter != socket.assigns.filter or renamed?(socket.assigns.collection, collection),
          socket =
            socket
            |> stop_editing(filter, collection)
-           |> assign(:collection, collection)
+           |> assign(collection: collection, similar_source: source)
            |> apply_filter(filter, reset?)
            |> sync_search(filter, collection),
          {:ok, link} <- fetch_link(socket, params) do
@@ -132,6 +148,16 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp fetch_collection(_socket, _action, _params), do: {:ok, nil}
 
+  # A search's `similar` names the link whose similar links it lists.
+  defp fetch_similar_source(socket, action, %{"similar" => id}) when action in @search_actions and is_binary(id) do
+    case own_link(socket, id) do
+      {:ok, link} -> {:ok, link}
+      {:error, :not_found} -> {:error, :not_found, ~p"/all"}
+    end
+  end
+
+  defp fetch_similar_source(_socket, _action, _params), do: {:ok, nil}
+
   # Leaving a collection, or searching, drops its rename or description form.
   defp stop_editing(socket, {:collection, id}, %{id: id}), do: socket
   defp stop_editing(socket, _filter, _collection), do: assign(socket, editing: nil, collection_form: nil)
@@ -144,16 +170,19 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp fetch_link(_socket, _params), do: {:ok, nil}
 
-  defp filter(action, _collection, _params) when action in [:all, :all_link, :all_link_web], do: :all
-  defp filter(action, _collection, _params) when action in [:inbox, :inbox_link, :inbox_link_web], do: :inbox
+  defp filter(action, _collection, _source, _params) when action in [:all, :all_link, :all_link_web], do: :all
 
-  defp filter(action, collection, _params) when action in [:collection, :collection_link, :collection_link_web],
+  defp filter(action, _collection, _source, _params) when action in [:inbox, :inbox_link, :inbox_link_web], do: :inbox
+
+  defp filter(action, collection, _source, _params) when action in [:collection, :collection_link, :collection_link_web],
     do: {:collection, collection.id}
 
-  defp filter(action, collection, params) when action in @search_actions,
+  defp filter(action, _collection, %{id: id}, _params) when action in @search_actions, do: {:similar, id}
+
+  defp filter(action, collection, nil, params) when action in @search_actions,
     do: {:search, search_query(params), collection && collection.id}
 
-  defp filter(action, _collection, _params) when action in [:home, :guide, :import], do: nil
+  defp filter(action, _collection, _source, _params) when action in [:home, :guide, :import], do: nil
 
   defp search_query(%{"q" => q}) when is_binary(q), do: q |> String.trim() |> String.slice(0, 200)
   defp search_query(_params), do: ""
@@ -188,6 +217,19 @@ defmodule AcervoWeb.ArchiveLive do
     end
   end
 
+  # Every similar link, nearest first; no model call, but run like a search.
+  defp apply_filter(socket, {:similar, _id} = filter, true) do
+    scope = socket.assigns.current_scope
+    source = socket.assigns.similar_source
+
+    socket
+    |> assign(filter: filter, search_partial: false, search_count: nil, search_loading: true)
+    |> stream(:links, [], reset: true)
+    |> start_async(:search, fn ->
+      {filter, %{links: Search.similar_links(scope, source, limit: @similar_max), partial: false}}
+    end)
+  end
+
   defp apply_filter(socket, filter, true) do
     links = Library.list_links(socket.assigns.current_scope, filter: filter)
     socket |> assign(:filter, filter) |> reset_search() |> stream(:links, links, reset: true)
@@ -215,7 +257,36 @@ defmodule AcervoWeb.ArchiveLive do
     socket
     |> cancel_screenshots_unless_open(link)
     |> assign_link_fields(link)
+    |> assign_related(link)
   end
+
+  # Related links load once per open link, without holding up the column;
+  # `reload_related/1` refreshes them in place.
+  defp assign_related(socket, nil), do: assign(socket, related: nil, related_for: nil)
+  defp assign_related(%{assigns: %{related_for: id}} = socket, %{id: id}), do: socket
+
+  defp assign_related(socket, link) do
+    socket
+    |> assign(relation_filter: relation_filter(""), relation_options: nil)
+    |> load_related(link, reset: true)
+  end
+
+  defp load_related(socket, link, opts) do
+    scope = socket.assigns.current_scope
+
+    socket
+    |> assign(:related_for, link.id)
+    |> assign_async(:related, fn -> {:ok, %{related: Search.related_links(scope, link)}} end, opts)
+  end
+
+  defp reload_related(%{assigns: %{link: %{} = link}} = socket), do: load_related(socket, link, [])
+  defp reload_related(socket), do: socket
+
+  # The links the related section shows now.
+  defp related_ids(%{assigns: %{related: %AsyncResult{ok?: true, result: %{} = related}}}),
+    do: Enum.map(related.manual ++ related.similar, & &1.id)
+
+  defp related_ids(_socket), do: []
 
   # A pending screenshot belongs to the link it started on, so moving to
   # another link (or closing the column) drops it.
@@ -234,6 +305,8 @@ defmodule AcervoWeb.ArchiveLive do
       note_saved: nil,
       description_form: link && description_form(link),
       description_saved: nil,
+      ai_notes_form: link && ai_notes_form(link),
+      ai_notes_saved: nil,
       collection_filter: collection_filter("")
     )
   end
@@ -309,6 +382,10 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp description_form(link), do: to_form(Library.change_image_description(link), as: :link)
 
+  defp ai_notes_form(link), do: to_form(Library.change_ai_notes(link), as: :link)
+
+  defp relation_filter(query), do: to_form(%{"query" => query})
+
   defp collection_filter(query), do: to_form(%{"query" => query})
 
   defp picker_error(query),
@@ -318,7 +395,8 @@ defmodule AcervoWeb.ArchiveLive do
   # The paste hook sends at most 20,000 UTF-16 code units: 60,000 bytes of UTF-8.
   @max_text_bytes 60_000
   @link_events ~w(save_note save_image_description delete add_to_collection remove_from_collection
-                  create_collection_for_link pick_collection generate_snapshot)
+                  create_collection_for_link pick_collection generate_snapshot save_ai_notes generate_notes
+                  filter_relations relate_link relate_first unrelate_link)
   @collection_events ~w(edit_collection validate_collection save_collection delete_collection)
 
   @impl true
@@ -357,6 +435,54 @@ defmodule AcervoWeb.ArchiveLive do
 
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, gettext("Couldn't generate the image."))}
+    end
+  end
+
+  # AI notes for the open link, written in the background. The button shows
+  # progress until the link arrives with new notes, or the job gives up
+  # (`{:notes_failed, link}`).
+  def handle_event("generate_notes", _params, socket) do
+    link = socket.assigns.link
+
+    case Library.request_notes(socket.assigns.current_scope, link) do
+      {:ok, _job} -> {:noreply, update(socket, :notes_requests, &Map.put(&1, link.id, link.ai_notes_at))}
+      {:error, :not_found} -> {:noreply, gone(socket)}
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, gettext("Couldn't write the notes."))}
+    end
+  end
+
+  def handle_event("save_ai_notes", %{"link" => %{"ai_notes" => text}}, socket), do: save_ai_notes(socket, text)
+  def handle_event("save_ai_notes", %{"value" => text}, socket), do: save_ai_notes(socket, text)
+
+  # Relating the open link by hand, from its picker; the related section
+  # follows `{:relations_changed, ids}`.
+  def handle_event("filter_relations", %{"query" => query}, socket) when is_binary(query) do
+    options =
+      if String.trim(query) != "",
+        do: Search.relation_candidates(socket.assigns.current_scope, socket.assigns.link, query)
+
+    {:noreply, assign(socket, relation_filter: relation_filter(query), relation_options: options)}
+  end
+
+  def handle_event("relate_link", %{"id" => id}, socket) when is_binary(id), do: relate(socket, id)
+
+  def handle_event("relate_first", _params, %{assigns: %{relation_options: [first | _]}} = socket),
+    do: relate(socket, first.id)
+
+  def handle_event("relate_first", _params, socket), do: {:noreply, socket}
+
+  def handle_event("unrelate_link", %{"id" => id}, socket) when is_binary(id) do
+    _ok = Library.unrelate(socket.assigns.current_scope, socket.assigns.link, id)
+    {:noreply, socket}
+  end
+
+  # The dock settings' "Automatic notes", read by the enrichment worker.
+  def handle_event("set_auto_notes", %{"value" => value}, socket) do
+    scope = socket.assigns.current_scope
+
+    case Accounts.update_auto_notes(scope, value) do
+      {:ok, user} -> {:noreply, assign(socket, :current_scope, %{scope | user: user})}
+      {:error, _changeset} -> {:noreply, socket}
     end
   end
 
@@ -747,6 +873,31 @@ defmodule AcervoWeb.ArchiveLive do
     end
   end
 
+  defp save_ai_notes(%{assigns: %{link: link}} = socket, text) do
+    if text == (link.ai_notes || "") do
+      {:noreply, socket}
+    else
+      case Library.update_ai_notes(socket.assigns.current_scope, link, %{ai_notes: text}) do
+        {:ok, link} ->
+          {:noreply, socket |> assign(link: link, ai_notes_form: ai_notes_form(link)) |> show_saved(:ai_notes_saved)}
+
+        {:error, :not_found} ->
+          {:noreply, gone(socket)}
+
+        {:error, changeset} ->
+          {:noreply, assign(socket, :ai_notes_form, to_form(changeset, as: :link, action: :validate))}
+      end
+    end
+  end
+
+  defp relate(socket, id) do
+    case Library.relate(socket.assigns.current_scope, socket.assigns.link, id) do
+      {:ok, _relation} -> {:noreply, assign(socket, relation_filter: relation_filter(""), relation_options: nil)}
+      {:error, reason} when reason in [:self, :duplicate] -> {:noreply, socket}
+      {:error, :not_found} -> {:noreply, put_flash(socket, :error, gettext("Not found."))}
+    end
+  end
+
   defp save_image_description(%{assigns: %{link: link}} = socket, text) do
     if text == (link.image_description || "") do
       {:noreply, socket}
@@ -792,7 +943,17 @@ defmodule AcervoWeb.ArchiveLive do
 
     case fetch_link(socket, %{"id" => id}) do
       {:ok, link} ->
-        {:noreply, socket |> restream(link) |> refresh_open(link) |> settle_snapshot(link) |> refresh_home([link])}
+        before = socket.assigns.link
+
+        {:noreply,
+         socket
+         |> restream(link)
+         |> refresh_open(link)
+         |> refresh_related(before, link)
+         |> refresh_similar_source(link)
+         |> settle_snapshot(link)
+         |> settle_notes(link)
+         |> refresh_home([link])}
 
       {:error, :not_found, _to} ->
         {:noreply, socket}
@@ -812,8 +973,26 @@ defmodule AcervoWeb.ArchiveLive do
     end
   end
 
+  # Notes the user asked for (or automatic ones on the open link) that
+  # failed, from this page or another one showing the same link.
+  def handle_info({:notes_failed, %{id: id}}, socket) do
+    if Map.has_key?(socket.assigns.notes_requests, id) or open?(socket, %{id: id}) do
+      {:noreply,
+       socket
+       |> update(:notes_requests, &Map.delete(&1, id))
+       |> put_flash(:error, gettext("Couldn't write the notes."))}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:relations_changed, ids}, socket) do
+    if Enum.any?(ids, &open?(socket, %{id: &1})), do: {:noreply, reload_related(socket)}, else: {:noreply, socket}
+  end
+
   def handle_info({:link_deleted, link}, socket) do
     socket = socket |> stream_delete(:links, link) |> refresh_counts() |> refresh_home([link])
+    socket = if link.id in related_ids(socket), do: reload_related(socket), else: socket
 
     if open?(socket, link) do
       {:noreply, push_patch(socket, to: list_path(socket.assigns))}
@@ -844,7 +1023,7 @@ defmodule AcervoWeb.ArchiveLive do
     {:noreply, socket}
   end
 
-  def handle_info({:clear_saved, key, ref}, socket) when key in [:note_saved, :description_saved] do
+  def handle_info({:clear_saved, key, ref}, socket) when key in [:note_saved, :description_saved, :ai_notes_saved] do
     if socket.assigns[key] == ref, do: {:noreply, assign(socket, key, nil)}, else: {:noreply, socket}
   end
 
@@ -859,7 +1038,7 @@ defmodule AcervoWeb.ArchiveLive do
   # The page left the search (or moved to another query) before this result
   # arrived: it is dropped, and the spinner stops unless a newer search runs.
   def handle_async(:search, {:ok, _stale}, socket) do
-    if match?({:search, _q, _id}, socket.assigns.filter),
+    if results?(socket.assigns.filter),
       do: {:noreply, socket},
       else: {:noreply, reset_search(socket)}
   end
@@ -891,6 +1070,28 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   defp snapshot_ids(link), do: for(%{kind: :snapshot, id: id} <- link.images, into: MapSet.new(), do: id)
+
+  # Requested notes are done once the link has notes newer than it had when
+  # they were requested.
+  defp settle_notes(socket, link) do
+    case Map.fetch(socket.assigns.notes_requests, link.id) do
+      {:ok, before} when before != link.ai_notes_at -> update(socket, :notes_requests, &Map.delete(&1, link.id))
+      _waiting -> socket
+    end
+  end
+
+  # The open link's similar links change once it is embedded again, and a
+  # listed link may have a new title or image.
+  defp refresh_related(socket, before, link) do
+    embedded? = selected?(before, link) and before.embedded_at != link.embedded_at
+    if embedded? or link.id in related_ids(socket), do: reload_related(socket), else: socket
+  end
+
+  # The similar list's title follows its link.
+  defp refresh_similar_source(%{assigns: %{similar_source: %{id: id}}} = socket, %{id: id} = link),
+    do: socket |> assign(similar_source: link) |> assign_page_title()
+
+  defp refresh_similar_source(socket, _link), do: socket
 
   # The home reloads only the columns a link event touches: the inbox and the
   # collections the links belong to now, and the columns that listed them
@@ -939,7 +1140,7 @@ defmodule AcervoWeb.ArchiveLive do
 
   # Search results only change by searching again: updates refresh the cards
   # already listed.
-  defp restream(%{assigns: %{filter: {:search, _q, _id}}} = socket, link),
+  defp restream(%{assigns: %{filter: filter}} = socket, link) when elem(filter, 0) in [:search, :similar],
     do: stream_insert(socket, :links, link, update_only: true)
 
   defp restream(socket, link) do
@@ -952,7 +1153,12 @@ defmodule AcervoWeb.ArchiveLive do
     if open?(socket, link),
       do:
         socket
-        |> assign(link: link, note_form: note_form(link), description_form: description_form(link))
+        |> assign(
+          link: link,
+          note_form: note_form(link),
+          description_form: description_form(link),
+          ai_notes_form: ai_notes_form(link)
+        )
         |> refresh_reader(link)
         |> assign_page_title(),
       else: socket
@@ -968,6 +1174,7 @@ defmodule AcervoWeb.ArchiveLive do
   defp matches?(:inbox, link), do: is_nil(link.triaged_at)
   defp matches?({:collection, id}, link), do: Enum.any?(link.collections, &(&1.id == id))
   defp matches?({:search, _q, _id}, _link), do: false
+  defp matches?({:similar, _id}, _link), do: false
 
   defp refresh_counts(socket) do
     scope = socket.assigns.current_scope
@@ -989,7 +1196,8 @@ defmodule AcervoWeb.ArchiveLive do
     do: assign(socket, :page_title, gettext("Import bookmarks"))
 
   defp assign_page_title(socket) do
-    assign(socket, :page_title, list_title(socket.assigns.filter, socket.assigns.collection) || "Acervo")
+    %{filter: filter, collection: collection, similar_source: source} = socket.assigns
+    assign(socket, :page_title, list_title(filter, collection, source) || "Acervo")
   end
 
   @impl true
@@ -1096,7 +1304,11 @@ defmodule AcervoWeb.ArchiveLive do
           </.column>
         </div>
 
-        <.column :if={@filter} id={list_column_id(@filter)} title={list_title(@filter, @collection)}>
+        <.column
+          :if={@filter}
+          id={list_column_id(@filter)}
+          title={list_title(@filter, @collection, @similar_source)}
+        >
           <:heading :if={@editing == :name}>
             <.form
               for={@collection_form}
@@ -1158,7 +1370,7 @@ defmodule AcervoWeb.ArchiveLive do
             {list_desc(@filter, @collection)}
           </p>
           <div
-            :if={match?({:search, _q, _id}, @filter)}
+            :if={results?(@filter)}
             id="search-status"
             role="status"
             aria-live="polite"
@@ -1205,6 +1417,14 @@ defmodule AcervoWeb.ArchiveLive do
             upload={@uploads.screenshot}
             snapshots={@snapshots?}
             snapshot_busy={Map.has_key?(@snapshot_requests, @link.id)}
+            ai_notes_form={@ai_notes_form}
+            ai_notes_saved={!!@ai_notes_saved}
+            notes_busy={Map.has_key?(@notes_requests, @link.id)}
+            related={related_result(@related)}
+            related_path={&link_path(@filter, @collection, &1)}
+            similar_path={similar_path(@link)}
+            relation_filter={@relation_filter}
+            relation_options={@relation_options}
             note_saved={!!@note_saved}
             description_form={@description_form}
             description_saved={!!@description_saved}
@@ -1278,6 +1498,7 @@ defmodule AcervoWeb.ArchiveLive do
         searching={!!@search_form}
         locale={@locale}
         return_to={@return_to}
+        auto_notes={@current_scope.user.auto_notes}
       />
     </Layouts.app>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".HomeScroll">
@@ -1403,27 +1624,40 @@ defmodule AcervoWeb.ArchiveLive do
   defp list_column_id(:inbox), do: "column-inbox"
   defp list_column_id({:collection, _id}), do: "column-collection"
   defp list_column_id({:search, _q, _id}), do: "column-search"
+  defp list_column_id({:similar, _id}), do: "column-similar"
 
-  defp list_title(:all, _collection), do: gettext("All")
-  defp list_title(:inbox, _collection), do: gettext("Inbox")
-  defp list_title({:collection, _id}, collection), do: collection.name
-  defp list_title({:search, q, _id}, _collection), do: if(short_query?(q), do: gettext("Search"), else: q)
-  defp list_title(nil, _collection), do: nil
+  defp list_title(:all, _collection, _source), do: gettext("All")
+  defp list_title(:inbox, _collection, _source), do: gettext("Inbox")
+  defp list_title({:collection, _id}, collection, _source), do: collection.name
+  defp list_title({:search, q, _id}, _collection, _source), do: if(short_query?(q), do: gettext("Search"), else: q)
+  defp list_title({:similar, _id}, _collection, source), do: gettext("Similar to %{title}", title: display_title(source))
+  defp list_title(nil, _collection, _source), do: nil
+
+  # Search and similar lists come from a query, with a status line.
+  defp results?(filter), do: is_tuple(filter) and elem(filter, 0) in [:search, :similar]
+
+  defp related_result(%AsyncResult{ok?: true, result: result}), do: result
+  defp related_result(_loading), do: nil
+
+  defp similar_path(link), do: with_query(~p"/search/l/#{link.id}", similar: link.id)
 
   defp list_desc(:all, _collection), do: gettext("Everything you saved, newest first.")
   defp list_desc(:inbox, _collection), do: gettext("Links waiting for a place.")
   defp list_desc({:collection, _id}, collection), do: collection.description
   defp list_desc({:search, _q, _id}, _collection), do: nil
+  defp list_desc({:similar, _id}, _collection), do: nil
 
   defp empty_text(:inbox), do: gettext("Nothing waiting.")
   defp empty_text(:all), do: gettext("Nothing saved yet.")
   defp empty_text({:collection, _id}), do: gettext("Nothing here yet.")
   # A search says "Nothing found." itself, once its results arrive.
   defp empty_text({:search, _q, _id}), do: nil
+  defp empty_text({:similar, _id}), do: nil
 
   defp list_path(%{filter: :inbox}), do: ~p"/inbox"
   defp list_path(%{filter: {:collection, _id}, collection: collection}), do: ~p"/c/#{collection.slug}"
   defp list_path(%{filter: {:search, q, _id}, collection: collection}), do: search_path(q, collection)
+  defp list_path(%{filter: {:similar, id}}), do: with_query(~p"/search", similar: id)
   defp list_path(_assigns), do: ~p"/all"
 
   defp link_path(:inbox, _collection, link), do: ~p"/inbox/l/#{link.id}"
@@ -1432,6 +1666,7 @@ defmodule AcervoWeb.ArchiveLive do
   defp link_path({:search, q, _id}, collection, link),
     do: with_query(~p"/search/l/#{link.id}", search_params(q, collection))
 
+  defp link_path({:similar, id}, _collection, link), do: with_query(~p"/search/l/#{link.id}", similar: id)
   defp link_path(_filter, _collection, link), do: ~p"/all/l/#{link.id}"
 
   defp web_path(filter, collection, link, extra \\ [])
@@ -1442,6 +1677,9 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp web_path({:search, q, _id}, collection, link, extra),
     do: with_query(~p"/search/l/#{link.id}/web", search_params(q, collection) ++ extra)
+
+  defp web_path({:similar, id}, _collection, link, extra),
+    do: with_query(~p"/search/l/#{link.id}/web", [similar: id] ++ extra)
 
   defp web_path(_filter, _collection, link, extra), do: with_query(~p"/all/l/#{link.id}/web", extra)
 
@@ -1455,6 +1693,7 @@ defmodule AcervoWeb.ArchiveLive do
   defp with_query(path, params), do: path <> "?" <> URI.encode_query(params)
 
   defp dock_active({:search, _q, _id}), do: :search
+  defp dock_active({:similar, _id}), do: :search
   defp dock_active(:inbox), do: :inbox
   defp dock_active(_filter), do: :home
 

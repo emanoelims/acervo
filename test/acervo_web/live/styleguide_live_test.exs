@@ -21,6 +21,11 @@ defmodule AcervoWeb.StyleguideLiveTest do
     assert has_element?(view, "#sg-inbox-suggested .ibar .chip.ai")
     assert has_element?(view, "#sg-inbox-reading .chip.is-waiting")
     assert has_element?(view, "#sg-column-link #link-detail")
+    assert has_element?(view, "#sg-column-link #link-ai-notes")
+    assert has_element?(view, "#sg-column-link #link-related .related-item .lucide-link")
+    assert has_element?(view, "#sg-column-link #link-more-similar")
+    assert has_element?(view, "#sg-column-link #relation-options .pick-row")
+    assert has_element?(view, "#dock #auto-notes")
     assert has_element?(view, "#sg-column-web #web-reader")
     assert has_element?(view, "#dock")
 

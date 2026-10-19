@@ -108,17 +108,17 @@ msgstr ""
 msgid "must be equal to %{number}"
 msgstr ""
 
-#: lib/acervo/accounts/user.ex:71
+#: lib/acervo/accounts/user.ex:73
 #, elixir-autogen, elixir-format
 msgid "did not change"
 msgstr ""
 
-#: lib/acervo/accounts/user.ex:66
+#: lib/acervo/accounts/user.ex:68
 #, elixir-autogen, elixir-format
 msgid "is not allowed to register"
 msgstr ""
 
-#: lib/acervo/accounts/user.ex:42
+#: lib/acervo/accounts/user.ex:44
 #, elixir-autogen, elixir-format
 msgid "must have the @ sign and no spaces"
 msgstr ""
@@ -128,7 +128,7 @@ msgstr ""
 msgid "must contain letters or numbers"
 msgstr ""
 
-#: lib/acervo_web/live/archive_live.ex:605
+#: lib/acervo_web/live/archive_live.ex:731
 #, elixir-autogen, elixir-format
 msgid "That doesn't look like a link."
 msgstr ""

@@ -34,6 +34,7 @@ defmodule Acervo.Search.DocumentTest do
         description: "All about bees.",
         image_description: "A bee on a flower.",
         note: "for the garden\nask Ana",
+        ai_notes: "Bees matter.\n\n- They pollinate.",
         text_excerpt: "Bees pollinate crops."
       )
 
@@ -51,6 +52,8 @@ defmodule Acervo.Search.DocumentTest do
              Image: A bee on a flower.
              Note: for the garden
              ask Ana
+             AI notes: Bees matter.
+             - They pollinate.
              Text: Bees pollinate crops.\
              """
   end

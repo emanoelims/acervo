@@ -10,6 +10,8 @@ defmodule Acervo.Accounts.User do
   schema "users" do
     field :email, :string
     field :confirmed_at, :utc_datetime
+    # When AI notes are written without asking (see `Acervo.AI.GenerateNotes`).
+    field :auto_notes, Ecto.Enum, values: [:never, :long, :always], default: :never
     field :authenticated_at, :utc_datetime, virtual: true
 
     timestamps()
@@ -72,6 +74,13 @@ defmodule Acervo.Accounts.User do
     else
       changeset
     end
+  end
+
+  @doc "The automatic notes setting: `:never`, `:long` or `:always`."
+  def auto_notes_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:auto_notes])
+    |> validate_required([:auto_notes])
   end
 
   @doc """

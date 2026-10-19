@@ -16,6 +16,10 @@ defmodule Acervo.AI.EnrichLink do
   description and language but no suggestions. Every finished run broadcasts
   `{:link_updated, link}`.
 
+  A stored run also enqueues `Acervo.AI.GenerateNotes`, at the job's
+  priority, when the user's `auto_notes` setting asks for notes and the link
+  has none yet.
+
   Every terminal outcome (stored, nothing to read, given up) enqueues
   `Acervo.Search.EmbedLink`, so each link is embedded once enrichment has
   had its say; a transient retry does not.
@@ -41,6 +45,7 @@ defmodule Acervo.AI.EnrichLink do
   alias Acervo.Accounts.Scope
   alias Acervo.AI
   alias Acervo.AI.Enrichment
+  alias Acervo.AI.GenerateNotes
   alias Acervo.Collections
   alias Acervo.Library
   alias Acervo.Library.Link
@@ -109,7 +114,7 @@ defmodule Acervo.AI.EnrichLink do
 
     with {:ok, object} <- AI.generate_object(scope, meta, Enrichment.context(input), Enrichment.schema()),
          {:ok, output} <- Enrichment.normalize(object, input) do
-      store(scope, link, input, output)
+      store(job, scope, link, input, output)
     else
       {:error, reason} -> failed(job, scope, link, reason)
     end
@@ -117,8 +122,8 @@ defmodule Acervo.AI.EnrichLink do
 
   ## Success
 
-  defp store(scope, link, input, output) do
-    case Repo.transact(fn -> store_output(scope, link, input, output) end) do
+  defp store(job, scope, link, input, output) do
+    case Repo.transact(fn -> store_output(job, scope, link, input, output) end) do
       {:ok, _} ->
         Library.broadcast_updated(scope, link.id)
         :ok
@@ -129,16 +134,16 @@ defmodule Acervo.AI.EnrichLink do
     end
   end
 
-  defp store_output(scope, link, input, output) do
+  defp store_output(job, scope, link, input, output) do
     # Same lock as `Acervo.Collections.finish_triage/2`, so a link triaged
     # meanwhile is seen as triaged.
     case Repo.one(from l in Link, where: l.id == ^link.id and l.user_id == ^scope.user.id, lock: "FOR NO KEY UPDATE") do
       nil -> {:error, :not_found}
-      %Link{} = fresh -> update_and_suggest(scope, fresh, input, output)
+      %Link{} = fresh -> update_and_suggest(job, scope, fresh, input, output)
     end
   end
 
-  defp update_and_suggest(scope, link, input, output) do
+  defp update_and_suggest(job, scope, link, input, output) do
     attrs = %{language: output.language, enriched_at: DateTime.utc_now(:second), enrichment_status: :ready}
 
     # The owner's edit always wins.
@@ -149,7 +154,8 @@ defmodule Acervo.AI.EnrichLink do
 
     with {:ok, link} <- link |> Link.enrichment_changeset(attrs) |> Repo.update(),
          {:ok, _suggestions} <- suggest(scope, link, input, output),
-         {:ok, _job} <- EmbedLink.enqueue(link) do
+         {:ok, _job} <- EmbedLink.enqueue(link),
+         {:ok, _notes} <- GenerateNotes.enqueue_auto(scope, link, input.text, priority: job.priority) do
       {:ok, link}
     end
   end

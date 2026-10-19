@@ -49,6 +49,12 @@ defmodule Acervo.Search.SchemaTest do
     end
   end
 
+  test "search_tsv covers the AI notes", %{link: link} do
+    link |> Link.generated_notes_changeset(%{ai_notes: "Resumo sobre colmeias urbanas."}) |> Repo.update!()
+
+    assert matching_ids("colmeias") == [link.id]
+  end
+
   test "the embedding round-trips a 1024-dimension vector and is not loaded by lists", %{scope: scope, link: link} do
     vector = FakeEmbedder.vector("praia")
 

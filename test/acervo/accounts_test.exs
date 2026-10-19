@@ -337,4 +337,21 @@ defmodule Acervo.AccountsTest do
       assert {:ok, %Swoosh.Email{}} = Accounts.deliver_login_instructions(user, &"[TOKEN]#{&1}[TOKEN]")
     end
   end
+
+  describe "update_auto_notes/2" do
+    test "defaults to never and takes long or always" do
+      scope = user_scope_fixture()
+      assert scope.user.auto_notes == :never
+
+      assert {:ok, %User{auto_notes: :long}} = Accounts.update_auto_notes(scope, "long")
+      assert {:ok, %User{auto_notes: :always}} = Accounts.update_auto_notes(scope, :always)
+      assert Accounts.get_user!(scope.user.id).auto_notes == :always
+    end
+
+    test "rejects anything else" do
+      scope = user_scope_fixture()
+      assert {:error, %Ecto.Changeset{}} = Accounts.update_auto_notes(scope, "sometimes")
+      assert Accounts.get_user!(scope.user.id).auto_notes == :never
+    end
+  end
 end
