@@ -57,4 +57,97 @@ defmodule Acervo.Library.Extractors.GenericTest do
     assert {:error, {:http, 500}} = Generic.extract(URI.parse("https://example.com/boom"))
     assert {:error, :blocked_address} = Generic.extract(URI.parse("https://internal.test/"))
   end
+
+  describe "meta refresh" do
+    defp stub_page(refresh) do
+      "<html><head><title>Redirecting to: elsewhere</title>#{refresh}</head><body></body></html>"
+    end
+
+    defp serve(routes) do
+      Req.Test.stub(SafeFetch, fn conn -> html(conn, 200, Map.fetch!(routes, conn.request_path)) end)
+    end
+
+    test "follows a refresh to the target page" do
+      serve(%{
+        "/old" => stub_page(~s(<meta http-equiv="refresh" content="0; url=https://example.com/new">)),
+        "/new" => page("article.html")
+      })
+
+      assert {:ok, capture, "https://example.com/new"} = Generic.fetch_page(URI.parse("https://example.com/old"), [])
+      assert capture.title == "An Article About Bees"
+      assert capture.final_url == "https://example.com/new"
+    end
+
+    test "resolves a relative target, matching http-equiv case-insensitively" do
+      serve(%{
+        "/docs/old" => stub_page(~s(<meta HTTP-EQUIV="Refresh" content="0;url=../new/page">)),
+        "/new/page" => page("minimal.html")
+      })
+
+      assert {:ok, %{title: "Plain Page"}, "https://example.com/new/page"} =
+               Generic.fetch_page(URI.parse("https://example.com/docs/old"), [])
+    end
+
+    test "accepts a quoted target and a short delay" do
+      serve(%{
+        "/old" => stub_page(~s(<meta http-equiv="refresh" content="5; URL='/new'">)),
+        "/new" => page("minimal.html")
+      })
+
+      assert {:ok, %{title: "Plain Page"}, "https://example.com/new"} =
+               Generic.fetch_page(URI.parse("https://example.com/old"), [])
+    end
+
+    test "does not follow a delay above five seconds" do
+      serve(%{"/old" => stub_page(~s(<meta http-equiv="refresh" content="6;url=/new">))})
+
+      assert {:ok, %{title: "Redirecting to: elsewhere"}, "https://example.com/old"} =
+               Generic.fetch_page(URI.parse("https://example.com/old"), [])
+    end
+
+    test "ignores non-http targets, bare reloads and the page itself" do
+      for content <- [
+            "0;url=javascript:alert(1)",
+            "0;url=data:text/html,hi",
+            "0;url=mailto:a@example.com",
+            "30",
+            "0;url=",
+            "0;url=/old",
+            "0;url=https://example.com/old#top"
+          ] do
+        serve(%{"/old" => stub_page(~s(<meta http-equiv="refresh" content="#{content}">))})
+
+        assert {:ok, %{title: "Redirecting to: elsewhere"}, "https://example.com/old"} =
+                 Generic.fetch_page(URI.parse("https://example.com/old"), []),
+               content
+      end
+    end
+
+    test "stops after two hops, keeping the last page" do
+      serve(%{
+        "/a" => stub_page(~s(<meta http-equiv="refresh" content="0;url=/b">)),
+        "/b" => stub_page(~s(<meta http-equiv="refresh" content="0;url=/c">)),
+        "/c" => stub_page(~s(<meta http-equiv="refresh" content="0;url=/d">))
+      })
+
+      assert {:ok, _, "https://example.com/c"} = Generic.fetch_page(URI.parse("https://example.com/a"), [])
+    end
+
+    test "a refresh loop is bounded" do
+      serve(%{
+        "/a" => stub_page(~s(<meta http-equiv="refresh" content="0;url=/b">)),
+        "/b" => stub_page(~s(<meta http-equiv="refresh" content="0;url=/a">))
+      })
+
+      assert {:ok, _, url} = Generic.fetch_page(URI.parse("https://example.com/a"), [])
+      assert url in ["https://example.com/a", "https://example.com/b"]
+    end
+
+    test "refuses a target on a private address like any other request" do
+      serve(%{"/old" => stub_page(~s(<meta http-equiv="refresh" content="0;url=https://internal.test/admin">))})
+
+      assert {:ok, %{title: "Redirecting to: elsewhere"}, "https://example.com/old"} =
+               Generic.fetch_page(URI.parse("https://example.com/old"), [])
+    end
+  end
 end
