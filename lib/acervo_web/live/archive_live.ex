@@ -900,7 +900,9 @@ defmodule AcervoWeb.ArchiveLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div id="columns" class="columns" phx-hook=".Shortcuts">
         <.column id="column-root" class="column-root">
-          <h1 class="root-title">Acervo</h1>
+          <header class="column-head">
+            <h1><span class="column-title">Acervo</span></h1>
+          </header>
           <p class="lead" phx-no-format>
             {gettext("Good things I find on the internet.")}
             <.count_link id="lead-all" patch={~p"/all"} count={@total_count}>{links_count(@total_count)}</.count_link> · {collections_count(@collections_count)}<%= if @inbox_count > 0 do %> · <.count_link id="lead-inbox" patch={~p"/inbox"} count={@inbox_count}>{inbox_waiting(@inbox_count)}</.count_link><% end %>.
