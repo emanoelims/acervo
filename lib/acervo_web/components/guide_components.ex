@@ -20,6 +20,9 @@ defmodule AcervoWeb.GuideComponents do
           {gettext("Paste a link anywhere. It must start with http(s):// or www.")}
         </:row>
         <:row icon="lucide-plus">{gettext("Or tap + in the dock, paste and press ↩.")}</:row>
+        <:row icon="lucide-list">
+          {gettext("Paste a list, or text with several links, to save them all at once.")}
+        </:row>
         <:row icon="lucide-inbox">
           {gettext("It lands in the Inbox while its preview loads in the background.")}
         </:row>

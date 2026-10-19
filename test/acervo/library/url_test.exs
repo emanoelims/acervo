@@ -57,4 +57,129 @@ defmodule Acervo.Library.URLTest do
       assert Extractor.for(URI.parse(url)) == YouTube
     end
   end
+
+  describe "extract_all/1" do
+    test "reads a list copied from notes, one per line" do
+      text = """
+      Read later:
+      - https://elixir-lang.org/blog/
+      - https://hexdocs.pm/phoenix_live_view/welcome.html
+        * www.example.com/notes
+      https://fly.io/docs/
+      """
+
+      assert URL.extract_all(text) == [
+               "https://elixir-lang.org/blog/",
+               "https://hexdocs.pm/phoenix_live_view/welcome.html",
+               "www.example.com/notes",
+               "https://fly.io/docs/"
+             ]
+    end
+
+    test "finds links inside a chat message, without the punctuation around them" do
+      text =
+        "hey, did you see this? https://example.com/a-post. And (https://example.com/b), " <>
+          "also \"https://example.com/c\"! last one: <https://example.com/d>, ok?"
+
+      assert URL.extract_all(text) == [
+               "https://example.com/a-post",
+               "https://example.com/b",
+               "https://example.com/c",
+               "https://example.com/d"
+             ]
+    end
+
+    test "splits links separated by commas, with or without a space" do
+      assert URL.extract_all("https://a.com/1,https://b.com/2, https://c.com/3,www.d.com") ==
+               ["https://a.com/1", "https://b.com/2", "https://c.com/3", "www.d.com"]
+    end
+
+    test "keeps commas, queries and fragments inside a link" do
+      assert URL.extract_all("see https://example.com/a,b?ids=1,2&q=x#top.") ==
+               ["https://example.com/a,b?ids=1,2&q=x#top"]
+    end
+
+    test "reads markdown links and bare links in markdown" do
+      text = """
+      ## Links
+      - [Phoenix](https://www.phoenixframework.org/) is **great**
+      - [https://hexdocs.pm/ecto](https://hexdocs.pm/ecto)
+      - **https://example.com/bold**
+      - [titled](https://example.com/titled "The title")
+      """
+
+      assert URL.extract_all(text) == [
+               "https://www.phoenixframework.org/",
+               "https://hexdocs.pm/ecto",
+               "https://example.com/bold",
+               "https://example.com/titled"
+             ]
+    end
+
+    test "lists a link once, comparing canonical forms" do
+      text = """
+      https://example.com/a?utm_source=news
+      https://Example.com/a/
+      https://youtu.be/dQw4w9WgXcQ
+      https://www.youtube.com/watch?v=dQw4w9WgXcQ&feature=share
+      https://twitter.com/jack/status/20 and https://x.com/jack/status/20
+      """
+
+      assert URL.extract_all(text) == [
+               "https://example.com/a?utm_source=news",
+               "https://youtu.be/dQw4w9WgXcQ",
+               "https://twitter.com/jack/status/20"
+             ]
+    end
+
+    test "returns at most 50 links" do
+      text = Enum.map_join(1..60, "\n", &"https://example.com/#{&1}")
+
+      urls = URL.extract_all(text)
+
+      assert length(urls) == 50
+      assert List.first(urls) == "https://example.com/1"
+      assert List.last(urls) == "https://example.com/50"
+    end
+
+    test "counts duplicates once toward the cap" do
+      text = String.duplicate("https://example.com/same ", 60) <> "https://example.com/other"
+
+      assert URL.extract_all(text) == ["https://example.com/same", "https://example.com/other"]
+    end
+
+    test "ignores other schemes" do
+      text = """
+      [click](javascript:alert(1)) javascript:https://evil.example.com
+      ftp://example.com/file mailto:me@example.com data:text/html,hi
+      file:///etc/passwd me@www.example.com
+      """
+
+      assert URL.extract_all(text) == []
+    end
+
+    test "keeps Wikipedia's balanced parentheses" do
+      text = """
+      https://en.wikipedia.org/wiki/Elixir_(programming_language)
+      (see https://en.wikipedia.org/wiki/Erlang_(programming_language))
+      [BEAM](https://en.wikipedia.org/wiki/BEAM_(Erlang_virtual_machine)).
+      """
+
+      assert URL.extract_all(text) == [
+               "https://en.wikipedia.org/wiki/Elixir_(programming_language)",
+               "https://en.wikipedia.org/wiki/Erlang_(programming_language)",
+               "https://en.wikipedia.org/wiki/BEAM_(Erlang_virtual_machine)"
+             ]
+    end
+
+    test "keeps links that don't normalize, so they count as invalid" do
+      assert URL.extract_all("https://nodot and https://example.com") == ["https://nodot", "https://example.com"]
+    end
+
+    test "returns nothing for text without links" do
+      assert URL.extract_all("") == []
+      assert URL.extract_all("just some words, and example.com") == []
+      assert URL.extract_all("https:// and www. alone") == []
+    end
+  end
 end

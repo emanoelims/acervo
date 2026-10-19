@@ -4,8 +4,8 @@ defmodule Acervo.Library do
 
   Saving a link enqueues `Acervo.Library.CaptureLink`, which fetches its
   preview in the background. Mutations broadcast on the `"links:<user_id>"`
-  topic of `Acervo.PubSub`: `{:link_created, link}`, `{:link_updated, link}`
-  and `{:link_deleted, link}`. Broadcast links carry their images,
+  topic of `Acervo.PubSub`: `{:link_created, link}`, `{:links_created, links}`
+  (for `save_links/2`), `{:link_updated, link}` and `{:link_deleted, link}`. Broadcast links carry their images,
   collections and pending collection suggestions preloaded.
 
   Preloaded images never carry their bytes, which are served separately
@@ -46,16 +46,45 @@ defmodule Acervo.Library do
   saved, as a link's `canonical_url` or as the `resolved_url` its capture
   found, returns that link as `:existing`; otherwise the link is inserted with
   its capture job in one transaction and broadcast as `{:link_created, link}`.
+
+  Pass `broadcast: false` to skip the broadcast, as `save_links/2` does.
   """
-  @spec save_link(Scope.t(), String.t()) ::
+  @spec save_link(Scope.t(), String.t(), keyword()) ::
           {:ok, Link.t(), :created | :existing} | {:error, :invalid_url | Ecto.Changeset.t()}
-  def save_link(%Scope{user: user} = scope, url) when is_binary(url) do
+  def save_link(%Scope{user: user} = scope, url, opts \\ []) when is_binary(url) do
     with {:ok, canonical_url} <- URL.normalize(url) do
       case find_saved(user, canonical_url) do
         %Link{} = link -> {:ok, preload_link(link), :existing}
-        nil -> insert_link(scope, String.trim(url), canonical_url)
+        nil -> insert_link(scope, String.trim(url), canonical_url, opts)
       end
     end
+  end
+
+  @doc """
+  Saves each of `urls` with `save_link/2`, in order, and broadcasts the new
+  links once, as `{:links_created, links}`, so a long paste refreshes each
+  subscriber once instead of once per link. Returns the new and already saved
+  links, and the URLs that couldn't be saved.
+  """
+  @spec save_links(Scope.t(), [String.t()]) :: %{
+          created: [Link.t()],
+          existing: [Link.t()],
+          invalid: [String.t()]
+        }
+  def save_links(%Scope{} = scope, urls) when is_list(urls) do
+    result =
+      urls
+      |> Enum.reduce(%{created: [], existing: [], invalid: []}, fn url, acc ->
+        case save_link(scope, url, broadcast: false) do
+          {:ok, link, :created} -> %{acc | created: [link | acc.created]}
+          {:ok, link, :existing} -> %{acc | existing: [link | acc.existing]}
+          {:error, _reason} -> %{acc | invalid: [url | acc.invalid]}
+        end
+      end)
+      |> Map.new(fn {key, list} -> {key, Enum.reverse(list)} end)
+
+    if result.created != [], do: broadcast(scope, {:links_created, result.created})
+    result
   end
 
   # `resolved_url` is not unique, so prefer the link saved under that exact
@@ -72,9 +101,9 @@ defmodule Acervo.Library do
   @doc false
   # Inserts a link for `canonical_url` with its capture job. Public only so
   # tests can exercise the lost race against a concurrent save.
-  @spec insert_link(Scope.t(), String.t(), String.t()) ::
+  @spec insert_link(Scope.t(), String.t(), String.t(), keyword()) ::
           {:ok, Link.t(), :created | :existing} | {:error, Ecto.Changeset.t()}
-  def insert_link(%Scope{user: user} = scope, url, canonical_url) do
+  def insert_link(%Scope{user: user} = scope, url, canonical_url, opts \\ []) do
     changeset =
       Link.create_changeset(%Link{user_id: user.id}, %{
         url: url,
@@ -89,7 +118,7 @@ defmodule Acervo.Library do
     |> case do
       {:ok, %{link: link}} ->
         link = preload_link(link)
-        broadcast(scope, {:link_created, link})
+        if Keyword.get(opts, :broadcast, true), do: broadcast(scope, {:link_created, link})
         {:ok, link, :created}
 
       {:error, :link, changeset, _changes} ->

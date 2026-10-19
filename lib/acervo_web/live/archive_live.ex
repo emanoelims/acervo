@@ -29,6 +29,7 @@ defmodule AcervoWeb.ArchiveLive do
   alias Acervo.Collections.Collection
   alias Acervo.Library
   alias Acervo.Library.Embed
+  alias Acervo.Library.URL
   alias Acervo.Search
   alias Ecto.Query.CastError
 
@@ -292,6 +293,8 @@ defmodule AcervoWeb.ArchiveLive do
     do: to_form(%{"query" => query}, errors: [query: {gettext("Couldn't create that collection."), []}])
 
   @max_url_bytes 2048
+  # The paste hook sends at most 20,000 UTF-16 code units: 60,000 bytes of UTF-8.
+  @max_text_bytes 60_000
   @link_events ~w(save_note save_image_description delete add_to_collection remove_from_collection
                   create_collection_for_link pick_collection)
   @collection_events ~w(edit_collection validate_collection save_collection delete_collection)
@@ -325,36 +328,17 @@ defmodule AcervoWeb.ArchiveLive do
     do: {:noreply, assign(socket, :add_form, nil)}
 
   # Nothing legitimate is this long; don't echo it back into the input.
-  def handle_event("add_link", %{"url" => url}, socket) when is_binary(url) and byte_size(url) > @max_url_bytes,
+  def handle_event("add_link", %{"url" => text}, socket) when is_binary(text) and byte_size(text) > @max_text_bytes,
     do: {:noreply, add_error(socket, "", invalid_link_error())}
 
-  def handle_event("add_link", %{"url" => url}, socket) when is_binary(url) do
-    case Library.save_link(socket.assigns.current_scope, url) do
-      {:ok, link, :created} ->
-        {:noreply,
-         socket
-         |> assign(:add_form, nil)
-         |> put_flash(:info, gettext("Saved."))
-         |> push_patch(to: ~p"/inbox/l/#{link.id}")}
-
-      {:ok, link, :existing} ->
-        {:noreply,
-         socket
-         |> assign(:add_form, nil)
-         |> put_flash(:info, gettext("Already in your archive."))
-         |> push_patch(to: existing_path(link))}
-
-      {:error, :invalid_url} ->
-        {:noreply, add_error(socket, url, invalid_link_error())}
-
-      {:error, %Ecto.Changeset{errors: errors}} ->
-        error =
-          case errors do
-            [{_field, error} | _] -> error
-            _ -> invalid_link_error()
-          end
-
-        {:noreply, add_error(socket, url, error)}
+  # Every link in the text is saved. One opens, as before; several stay put,
+  # the inbox streaming them in, with one summary. Text without an http(s) or
+  # www. link is tried whole, so the pill still takes bare hosts.
+  def handle_event("add_link", %{"url" => text}, socket) when is_binary(text) do
+    case URL.extract_all(text) do
+      [] -> add_link(socket, text)
+      [url] -> add_link(socket, url)
+      urls -> add_links(socket, urls)
     end
   end
 
@@ -582,6 +566,58 @@ defmodule AcervoWeb.ArchiveLive do
 
   defp add_error(socket, url, error), do: assign(socket, :add_form, to_form(%{"url" => url}, errors: [url: error]))
 
+  defp add_link(socket, url) when byte_size(url) > @max_url_bytes,
+    do: {:noreply, add_error(socket, "", invalid_link_error())}
+
+  defp add_link(socket, url) do
+    case Library.save_link(socket.assigns.current_scope, url) do
+      {:ok, link, :created} ->
+        {:noreply,
+         socket
+         |> assign(:add_form, nil)
+         |> put_flash(:info, gettext("Saved."))
+         |> push_patch(to: ~p"/inbox/l/#{link.id}")}
+
+      {:ok, link, :existing} ->
+        {:noreply,
+         socket
+         |> assign(:add_form, nil)
+         |> put_flash(:info, gettext("Already in your archive."))
+         |> push_patch(to: existing_path(link))}
+
+      {:error, :invalid_url} ->
+        {:noreply, add_error(socket, url, invalid_link_error())}
+
+      {:error, %Ecto.Changeset{errors: errors}} ->
+        error =
+          case errors do
+            [{_field, error} | _] -> error
+            _ -> invalid_link_error()
+          end
+
+        {:noreply, add_error(socket, url, error)}
+    end
+  end
+
+  defp add_links(socket, urls) do
+    case Library.save_links(socket.assigns.current_scope, urls) do
+      %{created: [], existing: []} ->
+        {:noreply, add_error(socket, "", invalid_link_error())}
+
+      %{created: created, existing: existing, invalid: invalid} ->
+        summary =
+          [
+            created != [] && saved_count(length(created)),
+            existing != [] && already_saved_count(length(existing)),
+            invalid != [] && invalid_count(length(invalid))
+          ]
+          |> Enum.filter(& &1)
+          |> Enum.join(" · ")
+
+        {:noreply, socket |> assign(:add_form, nil) |> put_flash(:info, summary)}
+    end
+  end
+
   # A new link waits in the inbox; a saved one opens where it lives.
   defp existing_path(%{triaged_at: nil} = link), do: ~p"/inbox/l/#{link.id}"
   defp existing_path(link), do: ~p"/all/l/#{link.id}"
@@ -704,10 +740,11 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   @impl true
-  def handle_info({:link_created, link}, socket) do
-    socket = if matches?(socket.assigns.filter, link), do: stream_insert(socket, :links, link, at: 0), else: socket
-    {:noreply, refresh_counts(socket)}
-  end
+  def handle_info({:link_created, link}, socket), do: {:noreply, socket |> insert_new(link) |> refresh_counts()}
+
+  # A paste of several links arrives at once, refreshing the counts once.
+  def handle_info({:links_created, links}, socket),
+    do: {:noreply, links |> Enum.reduce(socket, &insert_new(&2, &1)) |> refresh_counts()}
 
   def handle_info({:link_updated, %{id: id}}, socket) do
     socket =
@@ -776,6 +813,10 @@ defmodule AcervoWeb.ArchiveLive do
     do: {:noreply, assign(socket, :web_check, {:failed, id})}
 
   def handle_async(:embeddable, _failed, socket), do: {:noreply, socket}
+
+  defp insert_new(socket, link) do
+    if matches?(socket.assigns.filter, link), do: stream_insert(socket, :links, link, at: 0), else: socket
+  end
 
   defp collection_gone_path(%{filter: {:search, q, _id}}), do: search_path(q, nil)
   defp collection_gone_path(_assigns), do: ~p"/"
@@ -1099,16 +1140,28 @@ defmodule AcervoWeb.ArchiveLive do
     </Layouts.app>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".Shortcuts">
       // Page-wide keys, ignored while typing in a field:
-      // - pasting a link saves it. Only text that starts like a URL counts, so
-      //   stray pasted words are never saved; the dock's add field still takes
-      //   bare hosts. Pasted images are handled by the link column's own hook.
+      // - pasting text with links saves every one of them. Only links that
+      //   start with http(s):// or www. count, so stray pasted words are never
+      //   saved; the dock's add field still takes bare hosts. A list pasted
+      //   in that field is saved the same way, since a one-line input would
+      //   glue its lines together. Pasted images are handled by the link
+      //   column's own hook.
       // - `?` opens the guide.
       // - `/` opens the search pill, or focuses it.
       // - Esc closes the web view column, unless a menu or a pill is open:
       //   those close first, on their own.
       // And one key that works in fields too: ⌘K (Ctrl+K) toggles the search
       // pill, or focuses it when it is open but not focused.
-      const URL_LIKE = /^(https?:\/\/|www\.)[^\s]+\.[^\s]{2,}$/i
+      const HAS_LINK = /(https?:\/\/|\bwww\.)\S+\.\S{2,}/i
+      // The server finds the links; long text is cut at a space, so no link
+      // arrives cut in half.
+      const MAX_TEXT = 20000
+      const bound = text => {
+        if (text.length <= MAX_TEXT) return text
+        const cut = text.slice(0, MAX_TEXT)
+        const space = cut.search(/\s\S*$/)
+        return space > 0 ? cut.slice(0, space) : cut
+      }
       const typing = target => target instanceof Element &&
         (target.closest('input, textarea, select, [contenteditable]') || target.isContentEditable)
       const plain = event => !(event.ctrlKey || event.metaKey || event.altKey)
@@ -1147,14 +1200,16 @@ defmodule AcervoWeb.ArchiveLive do
             this.pushEvent('close_web', {})
           }
           this.onPaste = event => {
-            if (typing(event.target)) return
+            const addField = event.target instanceof Element && event.target.id === 'add-link-url'
+            if (typing(event.target) && !addField) return
             const data = event.clipboardData
             if (!data) return
             if (Array.from(data.files || []).some(file => file.type.startsWith('image/'))) return
-            const url = data.getData('text/plain').trim()
-            if (url.length > 2048 || !URL_LIKE.test(url)) return
+            const text = data.getData('text/plain')
+            if (addField && !/[\r\n]/.test(text.trim())) return
+            if (!HAS_LINK.test(text)) return
             event.preventDefault()
-            this.pushEvent('add_link', {url})
+            this.pushEvent('add_link', {url: bound(text)})
           }
           window.addEventListener('paste', this.onPaste)
           window.addEventListener('keydown', this.onKeydown)
@@ -1275,4 +1330,12 @@ defmodule AcervoWeb.ArchiveLive do
   defp collections_count(count), do: ngettext("one collection", "%{count} collections", count)
 
   defp inbox_waiting(count), do: ngettext("one in the inbox", "%{count} in the inbox", count)
+
+  # The summary of a paste of several links; zero counts are left out.
+  defp saved_count(count), do: ngettext("%{count} link saved", "%{count} links saved", count)
+
+  defp already_saved_count(count),
+    do: ngettext("%{count} already in your archive", "%{count} already in your archive", count)
+
+  defp invalid_count(count), do: ngettext("%{count} invalid", "%{count} invalid", count)
 end
