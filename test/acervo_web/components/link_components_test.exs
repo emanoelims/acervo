@@ -33,27 +33,27 @@ defmodule AcervoWeb.LinkComponentsTest do
       html = compact(link(images: [image()]))
 
       assert html |> find("a#c.card.card-compact.card-image[href='/x'] > .thumb > img") |> Enum.count() == 1
-      assert html |> find(".ttl") |> LazyHTML.text() == "A title"
+      assert html |> find(".ttl") |> LazyHTML.text() |> String.trim() == "A title"
       assert html |> find(".sub, .date, .src, .glow") |> Enum.empty?()
     end
 
     test "a card without an image shows the title and the host" do
       html = compact(link([]))
-      assert html |> find(".card-text .ttl") |> LazyHTML.text() == "A title"
-      assert html |> find(".card-text .host") |> LazyHTML.text() == "example.com"
+      assert html |> find(".card-text .ttl") |> LazyHTML.text() |> String.trim() == "A title"
+      assert html |> find(".card-text .host") |> LazyHTML.text() |> String.trim() == "example.com"
       assert html |> find(".thumb") |> Enum.empty?()
     end
 
     test "a link without a title shows its host once" do
       html = compact(link(title: nil))
-      assert html |> find(".ttl") |> LazyHTML.text() == "example.com"
+      assert html |> find(".ttl") |> LazyHTML.text() |> String.trim() == "example.com"
       assert html |> find(".host") |> Enum.empty?()
     end
 
     test "a pending link shows the skeleton and its host" do
       html = compact(link(status: :pending))
       assert html |> find(".card-pending > .media.skeleton") |> Enum.count() == 1
-      assert html |> find(".ttl") |> LazyHTML.text() == "example.com"
+      assert html |> find(".ttl") |> LazyHTML.text() |> String.trim() == "example.com"
     end
 
     test "a video shows its thumbnail with the play mark" do
@@ -63,7 +63,7 @@ defmodule AcervoWeb.LinkComponentsTest do
 
     test "the regular card is unchanged" do
       html = render_component(&LinkComponents.card/1, id: "c", link: link([]), patch: "/x")
-      assert html |> find("a#c.card.text:not(.card-compact) .sub") |> LazyHTML.text() == "A description"
+      assert html |> find("a#c.card.text:not(.card-compact) .sub") |> LazyHTML.text() |> String.trim() == "A description"
     end
   end
 end
