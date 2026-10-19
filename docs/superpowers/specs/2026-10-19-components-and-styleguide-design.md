@@ -96,9 +96,3 @@ No other LiveComponent is needed.
   shows a one-line usage snippet.
 - Its own styles are colocated CSS in the LiveView, so nothing ships to
   production.
-
-## Follow-ups
-
-- `link_detail/1`'s action row and screenshot drop zone still use inline
-  markup; switch them to `icon_button/1` and `drop_zone/1` once the concurrent
-  link-detail work lands, to avoid conflicting edits.

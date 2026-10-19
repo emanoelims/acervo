@@ -609,6 +609,7 @@ defmodule AcervoWeb.StyleguideLive do
                     upload={@uploads.screenshot}
                     description_form={@description_form}
                     web_path={link_patch(@open)}
+                    snapshots
                   />
                 </.column>
                 <.column id="sg-column-web" class="column-web" title={site_title(@links.text)}>
