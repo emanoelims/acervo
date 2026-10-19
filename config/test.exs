@@ -39,6 +39,11 @@ config :acervo, :embedder, Acervo.FakeEmbedder
 # its requests go to `Req.Test` stubs named `Acervo.Library.SafeFetch`.
 config :acervo, :resolver, Acervo.StaticResolver
 config :acervo, :safe_fetch_req_options, plug: {Req.Test, Acervo.Library.SafeFetch}
+
+# The screenshot service is off in tests (no URL or token); tests that turn
+# it on send its requests to `Req.Test` stubs named `Acervo.Library.Screenshots`.
+config :acervo, :shots_req_options, plug: {Req.Test, Acervo.Library.Screenshots}
+
 config :acervo, :search, embed_timeout: 200, query_receive_timeout: 1_000, max_distance: 0.73
 
 config :acervo, :static_hosts, %{

@@ -33,7 +33,7 @@ config :acervo, AcervoWeb.Gettext, default_locale: "pt_BR", locales: ~w(pt_BR en
 config :acervo, Oban,
   engine: Oban.Engines.Basic,
   repo: Acervo.Repo,
-  queues: [capture: 2, ai: 2, embed: 4, content: 1, import: 1],
+  queues: [capture: 2, ai: 2, embed: 4, content: 1, import: 1, snapshot: 1],
   # Below the 30 s kill_timeout in fly.toml, so jobs can finish before SIGKILL.
   shutdown_grace_period: to_timeout(second: 20),
   plugins: [
@@ -42,6 +42,10 @@ config :acervo, Oban,
     {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 5)},
     {Oban.Plugins.Cron, crontab: [{"*/10 * * * *", Acervo.Library.ReapStuckCaptures}]}
   ]
+
+# The screenshot service (`infra/screenshots/`). Off unless ACERVO_SHOTS_URL
+# and ACERVO_SHOTS_TOKEN are set (see config/runtime.exs).
+config :acervo, Acervo.Library.Screenshots, url: nil, token: nil
 
 # The model client; tests use `Acervo.FakeAIClient` (see config/test.exs).
 config :acervo, :ai_client, Acervo.AI.Claude
