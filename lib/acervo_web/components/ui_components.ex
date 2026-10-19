@@ -182,25 +182,25 @@ defmodule AcervoWeb.UIComponents do
           assigns.active && "is-active",
           assigns.class
         ],
-        icon_class: if(assigns.variant == "round" and assigns.size == "sm", do: "size-[15px]", else: "size-4")
+        icon_class: icon_size(assigns.variant, assigns.size)
       )
 
-    cond do
-      assigns.rest[:href] || assigns.rest[:navigate] || assigns.rest[:patch] ->
+    case element(assigns.rest) do
+      :link ->
         ~H"""
         <.link class={@classes} title={@label} aria-label={@label} {@rest}>
           <.icon name={@icon} class={@icon_class} />
         </.link>
         """
 
-      assigns.rest[:for] ->
+      :label ->
         ~H"""
         <label class={@classes} title={@label} aria-label={@label} {@rest}>
           <.icon name={@icon} class={@icon_class} />
         </label>
         """
 
-      true ->
+      :button ->
         ~H"""
         <button type={@type} class={@classes} title={@label} aria-label={@label} {@rest}>
           <.icon name={@icon} class={@icon_class} />
@@ -208,6 +208,20 @@ defmodule AcervoWeb.UIComponents do
         """
     end
   end
+
+  # A destination makes a link, as in `button/1`; `for` a file input's label.
+  defp element(rest) do
+    cond do
+      link?(rest) -> :link
+      rest[:for] -> :label
+      true -> :button
+    end
+  end
+
+  defp link?(rest), do: !!(rest[:href] || rest[:navigate] || rest[:patch])
+
+  defp icon_size("round", "sm"), do: "size-[15px]"
+  defp icon_size(_variant, _size), do: "size-4"
 
   defp variant_class("round", "sm"), do: "round round-sm"
   defp variant_class("round", _size), do: "round"
@@ -230,7 +244,7 @@ defmodule AcervoWeb.UIComponents do
   slot :inner_block, required: true
 
   def pill_button(assigns) do
-    if assigns.rest[:href] || assigns.rest[:navigate] || assigns.rest[:patch] do
+    if link?(assigns.rest) do
       ~H"""
       <.link class={["pill-button", @class]} {@rest}>
         {render_slot(@inner_block)}<.icon :if={@icon} name={@icon} class="size-4" />
