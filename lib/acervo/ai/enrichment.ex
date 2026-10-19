@@ -138,7 +138,7 @@ defmodule Acervo.AI.Enrichment do
       Repo.one(
         from i in LinkImage,
           join: l in assoc(i, :link),
-          where: i.link_id == ^link_id and l.user_id == ^user.id and i.kind in [:preview, :screenshot],
+          where: i.link_id == ^link_id and l.user_id == ^user.id and i.kind in ^LinkImage.card_kinds(),
           order_by: [asc: i.position, asc: i.id],
           limit: 1,
           select: i.id

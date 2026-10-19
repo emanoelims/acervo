@@ -5,13 +5,15 @@ defmodule Acervo.Library do
   Saving a link enqueues `Acervo.Library.CaptureLink`, which fetches its
   preview in the background. Mutations broadcast on the `"links:<user_id>"`
   topic of `Acervo.PubSub`: `{:link_created, link}`, `{:links_created, links}`
-  (for `save_links/2`), `{:link_updated, link}` and `{:link_deleted, link}`. Broadcast links carry their images,
-  collections and pending collection suggestions preloaded.
+  (for `save_links/2`), `{:link_updated, link}`, `{:link_deleted, link}` and
+  `{:snapshot_failed, link}` (see `request_snapshot/2`). Broadcast links
+  carry their images, collections and pending collection suggestions
+  preloaded.
 
   Preloaded images never carry their bytes, which are served separately
-  through `Acervo.Storage.fetch/2`, and are only the card's: previews and
-  screenshots. The reader view's images and HTML are loaded on their own by
-  `reader_content/2`.
+  through `Acervo.Storage.fetch/2`, and are only the card's: previews,
+  screenshots and snapshots. The reader view's images and HTML are loaded on
+  their own by `reader_content/2`.
   """
 
   import Ecto.Query
@@ -21,12 +23,14 @@ defmodule Acervo.Library do
   alias Acervo.Collections.CollectionLink
   alias Acervo.Collections.Suggestion
   alias Acervo.Library.CaptureLink
+  alias Acervo.Library.CaptureSnapshot
   alias Acervo.Library.Embed
   alias Acervo.Library.FramePolicy
   alias Acervo.Library.Images
   alias Acervo.Library.Link
   alias Acervo.Library.LinkImage
   alias Acervo.Library.SafeFetch
+  alias Acervo.Library.Screenshots
   alias Acervo.Library.URL
   alias Acervo.Repo
   alias Acervo.Search.EmbedLink
@@ -344,6 +348,23 @@ defmodule Acervo.Library do
   end
 
   @doc """
+  Asks for a new screenshot of the link's page: enqueues
+  `Acervo.Library.CaptureSnapshot` with `replace: true`, which stores it as
+  the link's first image, replacing its earlier snapshot, and enriches the
+  link again. A job for the link already waiting is returned as is. When it
+  fails for good the scope's topic gets `{:snapshot_failed, link}`.
+  """
+  @spec request_snapshot(Scope.t(), Link.t()) :: {:ok, Oban.Job.t()} | {:error, :not_found | :disabled | term()}
+  def request_snapshot(%Scope{} = scope, %Link{} = link) do
+    with :ok <- snapshots_enabled(),
+         {:ok, link} <- owned(scope, link) do
+      CaptureSnapshot.enqueue(link, replace: true)
+    end
+  end
+
+  defp snapshots_enabled, do: if(Screenshots.enabled?(), do: :ok, else: {:error, :disabled})
+
+  @doc """
   The link's reader HTML, sanitized at capture by `Acervo.Library.Sanitizer`
   and safe to render raw, or `nil` when it has none.
   """
@@ -368,6 +389,18 @@ defmodule Acervo.Library do
 
       nil ->
         :error
+    end
+  end
+
+  @doc false
+  # Broadcasts `{:snapshot_failed, link}` when a snapshot the user asked for
+  # fails for good. Used by `Acervo.Library.CaptureSnapshot`; returns
+  # `:error` if the link is gone.
+  @spec broadcast_snapshot_failed(Scope.t(), Ecto.UUID.t()) :: :ok | :error
+  def broadcast_snapshot_failed(%Scope{user: user} = scope, link_id) do
+    case Repo.get_by(Link, id: link_id, user_id: user.id) do
+      %Link{} = link -> broadcast(scope, {:snapshot_failed, preload_link(link)})
+      nil -> :error
     end
   end
 

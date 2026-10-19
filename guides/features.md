@@ -75,12 +75,26 @@ uses them. Their names start with a dot.
 ## Previews and screenshots
 
 - **Cards.** Web pages, YouTube, X and Instagram each get a card:
-  `LinkComponents.card/1` and `link_detail/1`.
+  `LinkComponents.card/1` and `link_detail/1`. Card images, YouTube
+  thumbnails and the capture skeleton share one 16:10 shape, cropped from the
+  top; the link column's extra images keep their natural size.
 - **Screenshots.** When capture fails (`capture_error`, often on Instagram),
   the open link shows a drop zone (`#screenshot-drop`). Drop or pick an image,
   or use the camera action (`#link-screenshot`). You can also paste an image
   while the link is open: the `.ScreenshotPaste` hook in `LinkComponents`
   handles it. `Acervo.Library.attach_screenshot/3` stores the image.
+- **Snapshots.** With the screenshot service on (`ACERVO_SHOTS_URL` and
+  `ACERVO_SHOTS_TOKEN`, see `infra/screenshots/README.md`), a web page whose
+  capture ends with no card image, saved or with an error a browser may get
+  past, gets a picture of its first screen: `Acervo.Library.CaptureSnapshot`
+  (Oban, queue `snapshot`) stores it as a `:snapshot` image at position 0,
+  then enqueues the link's first enrichment, so the model sees it. The
+  camera action becomes a menu (`#link-image-menu`): “Generate a new image”
+  (`#link-snapshot`, `Library.request_snapshot/2`) replaces the link's
+  snapshot, never its uploads or previews, and enriches it again; the row
+  shows progress while the job runs and a failure flashes. “Upload an
+  image” (`#link-screenshot`) picks a file. Without the service the camera
+  only uploads, as before.
 
 ## Read
 
@@ -212,8 +226,10 @@ uses them. Their names start with a dot.
 
 ## Enrichment
 
-- **Worker.** `Acervo.AI.EnrichLink` (Oban, queue `ai`) runs after a capture,
-  after reader content is extracted, and again when a screenshot is attached.
+- **Worker.** `Acervo.AI.EnrichLink` (Oban, queue `ai`) runs after a capture
+  (or after its snapshot, when the page had no image), after reader content
+  is extracted, and again when a screenshot is attached or a new image is
+  generated.
   One Claude call per link (`Acervo.AI.Enrichment`) gets the page's title,
   description, site, article text, first image and the user's collections
   (up to 50, with three example titles each).

@@ -40,3 +40,6 @@ npm-debug.log
 mise.local.toml
 .env
 .env.*
+
+# Agent worktrees
+/.claude/worktrees/

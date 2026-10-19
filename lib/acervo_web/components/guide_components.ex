@@ -10,6 +10,8 @@ defmodule AcervoWeb.GuideComponents do
   import AcervoWeb.CoreComponents
 
   @doc "Renders the guide's sections and its shortcuts table."
+  attr :snapshots, :boolean, default: false, doc: "the screenshot service is on"
+
   def guide(assigns) do
     ~H"""
     <div id="guide" class="guide">
@@ -67,6 +69,11 @@ defmodule AcervoWeb.GuideComponents do
         <:row icon="lucide-camera">
           {gettext(
             "No preview (Instagram often blocks it)? Drop, pick or paste a screenshot while the link is open."
+          )}
+        </:row>
+        <:row :if={@snapshots} icon="lucide-refresh-cw">
+          {gettext(
+            "Pages without a preview get a picture of their first screen. The camera makes a new one."
           )}
         </:row>
         <:row icon="lucide-sparkle">

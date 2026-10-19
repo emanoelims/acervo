@@ -5,6 +5,15 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Pages without a preview image get a picture of their first screen, also when the site blocks the usual capture.
+- Generate a new image for any link from the camera menu in the link column.
+
+### Changed
+
+- Every card image has the same shape, so the grid looks even.
+
 ## [0.12.1] - 2026-10-19
 
 A calmer, more even layout.

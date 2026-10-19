@@ -23,6 +23,14 @@ defmodule Acervo.Library.CaptureLink do
   that ends with a permanent error, enqueue `Acervo.Search.EmbedLink`
   directly.
 
+  When the screenshot service is on (`Acervo.Library.Screenshots`), a generic
+  link that ends with no card image, saved or with a permanent error (a real
+  browser often gets past a bot wall), enqueues
+  `Acervo.Library.CaptureSnapshot` at the capture's priority. That job then
+  enqueues the first enrichment in the capture's place, so the model sees
+  the image. Errors a browser can't help with (a missing page, a page that
+  is not HTML, an address or URL SafeFetch refuses) get no snapshot.
+
   A run never leaves the link `:processing` on its own. A job killed mid-run
   (by its timeout or a node restart rescued by `Oban.Plugins.Lifeline`) is
   retried, and every run starts over whatever the link's status. When the
@@ -37,12 +45,14 @@ defmodule Acervo.Library.CaptureLink do
   alias Acervo.AI.EnrichLink
   alias Acervo.Library
   alias Acervo.Library.Capture
+  alias Acervo.Library.CaptureSnapshot
   alias Acervo.Library.Extractor
   alias Acervo.Library.Images
   alias Acervo.Library.Link
   alias Acervo.Library.LinkImage
   alias Acervo.Library.Reader
   alias Acervo.Library.SafeFetch
+  alias Acervo.Library.Screenshots
   alias Acervo.Library.URL
   alias Acervo.Repo
   alias Acervo.Search.EmbedLink
@@ -55,6 +65,7 @@ defmodule Acervo.Library.CaptureLink do
   @content_ms 150_000
   @max_image_bytes 15_000_000
   @permanent_errors [:blocked, :not_found, :not_html, :blocked_address, :bad_port, :invalid_url, :too_many_redirects]
+  @no_snapshot_errors [:not_found, :not_html, :blocked_address, :bad_port, :invalid_url]
 
   @impl Oban.Worker
   def timeout(_job), do: to_timeout(minute: 3)
@@ -100,7 +111,7 @@ defmodule Acervo.Library.CaptureLink do
   rescue
     exception ->
       log_crash(link, exception, __STACKTRACE__)
-      handle_error(link, :crashed, run.final_attempt?)
+      handle_error(link, :crashed, run)
   end
 
   # Logs the exception's type and stacktrace only: its message and the call
@@ -121,7 +132,7 @@ defmodule Acervo.Library.CaptureLink do
   defp extract(scope, link, run) do
     case Extractor.extract(link.canonical_url) do
       {:ok, %Capture{} = capture} -> apply_capture(scope, link, capture, run)
-      {:error, reason} -> handle_error(link, reason, run.final_attempt?)
+      {:error, reason} -> handle_error(link, reason, run)
     end
   end
 
@@ -148,11 +159,38 @@ defmodule Acervo.Library.CaptureLink do
     |> Link.capture_changeset(Map.merge(attrs, resolved_url(capture)))
     |> save()
     |> tap(&store_content(scope, &1, capture, run))
-    |> tap(&enrich(&1, run.priority))
+    |> tap(&follow_up(&1, run.priority))
     |> finish(:ok)
   end
 
-  ## Enrichment
+  ## Snapshot, enrichment and embedding
+
+  # A link left without a card image gets a snapshot, which enriches the link
+  # when it ends if it was never enriched; an enriched one is embedded now.
+  defp follow_up({:ok, %Link{} = link} = saved, priority) do
+    if snapshot?(link) do
+      enqueue_snapshot(link, priority)
+      if link.enriched_at, do: embed(saved)
+    else
+      enrich(saved, priority)
+    end
+  end
+
+  defp follow_up(gone_or_error, _priority), do: gone_or_error
+
+  defp snapshot?(%Link{source: :generic} = link) do
+    Screenshots.enabled?() and
+      not Repo.exists?(from i in LinkImage, where: i.link_id == ^link.id and i.kind in ^LinkImage.card_kinds())
+  end
+
+  defp snapshot?(_link), do: false
+
+  defp enqueue_snapshot(link, priority) do
+    case CaptureSnapshot.enqueue(link, priority: priority) do
+      {:ok, _job} -> :ok
+      {:error, reason} -> Logger.error("could not enqueue snapshot of link #{link.id}: #{inspect(reason)}")
+    end
+  end
 
   # Once per link: a re-capture, or a retry after the link was saved, does
   # not pay for the model again. A screenshot enqueues it on its own.
@@ -253,12 +291,13 @@ defmodule Acervo.Library.CaptureLink do
 
   ## Errors
 
-  defp handle_error(link, reason, final_attempt?) do
-    case {classify(reason), final_attempt?} do
+  defp handle_error(link, reason, run) do
+    case {classify(reason), run.final_attempt?} do
       {:permanent, _} ->
         link
         |> update_link(%{status: :ready, capture_error: error_code(reason)})
         |> tap(&embed/1)
+        |> tap(&snapshot_after_error(&1, reason, run.priority))
         |> finish(:ok)
 
       {:transient, false} ->
@@ -268,6 +307,12 @@ defmodule Acervo.Library.CaptureLink do
         link |> update_link(%{status: :failed, capture_error: error_code(reason)}) |> finish({:error, reason})
     end
   end
+
+  defp snapshot_after_error({:ok, %Link{} = link}, reason, priority) when reason not in @no_snapshot_errors do
+    if snapshot?(link), do: enqueue_snapshot(link, priority)
+  end
+
+  defp snapshot_after_error(_saved, _reason, _priority), do: :ok
 
   @doc false
   @spec classify(term()) :: :permanent | :transient

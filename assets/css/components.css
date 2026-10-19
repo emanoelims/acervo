@@ -79,6 +79,7 @@
 .dropdown-menu>.dropdown-item:is(:hover,:focus-visible,[aria-current=page]) { background:var(--soft); color:var(--ink); text-decoration:none; }
 .dropdown-menu>.dropdown-item:focus-visible { outline:1px solid var(--rule-strong); outline-offset:-1px; }
 .dropdown-menu>.dropdown-item-danger { color:var(--danger); }
+.dropdown-menu>.dropdown-item:disabled { background:transparent; color:var(--muted); cursor:progress; }
 @media(prefers-reduced-motion:reduce) { .dropdown-menu>.dropdown-item { transition:none; } }
 
 /* Native form values, custom selection popups, and a usable no-script fallback. */

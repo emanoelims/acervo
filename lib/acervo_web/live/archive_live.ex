@@ -34,6 +34,7 @@ defmodule AcervoWeb.ArchiveLive do
   alias Acervo.Collections.Collection
   alias Acervo.Library
   alias Acervo.Library.Embed
+  alias Acervo.Library.Screenshots
   alias Acervo.Library.URL
   alias Acervo.Search
   alias AcervoWeb.ImportComponent
@@ -54,6 +55,7 @@ defmodule AcervoWeb.ArchiveLive do
     {:ok,
      socket
      |> assign(filter: nil, collection: nil, link: nil, screenshot_link_id: nil)
+     |> assign(snapshots?: Screenshots.enabled?(), snapshot_requests: %{})
      |> assign(search_form: search_form, search_scope: nil, search_loading: false)
      |> assign(search_partial: false, search_count: nil)
      |> assign(note_form: nil, note_saved: nil, description_form: nil, description_saved: nil)
@@ -302,7 +304,7 @@ defmodule AcervoWeb.ArchiveLive do
   # The paste hook sends at most 20,000 UTF-16 code units: 60,000 bytes of UTF-8.
   @max_text_bytes 60_000
   @link_events ~w(save_note save_image_description delete add_to_collection remove_from_collection
-                  create_collection_for_link pick_collection)
+                  create_collection_for_link pick_collection generate_snapshot)
   @collection_events ~w(edit_collection validate_collection save_collection delete_collection)
 
   @impl true
@@ -324,6 +326,24 @@ defmodule AcervoWeb.ArchiveLive do
       end
 
     {:noreply, assign(socket, :screenshot_link_id, socket.assigns.link && socket.assigns.link.id)}
+  end
+
+  # A new image for the open link, from the screenshot service. The menu
+  # item shows progress until the link arrives with a new snapshot, or the
+  # job gives up (`{:snapshot_failed, link}`).
+  def handle_event("generate_snapshot", _params, socket) do
+    link = socket.assigns.link
+
+    case Library.request_snapshot(socket.assigns.current_scope, link) do
+      {:ok, _job} ->
+        {:noreply, update(socket, :snapshot_requests, &Map.put(&1, link.id, snapshot_ids(link)))}
+
+      {:error, :not_found} ->
+        {:noreply, gone(socket)}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, gettext("Couldn't generate the image."))}
+    end
   end
 
   # Adding a link: the dock's pill and pasting anywhere share "add_link".
@@ -755,11 +775,24 @@ defmodule AcervoWeb.ArchiveLive do
   def handle_info({:link_updated, %{id: id}}, socket) do
     socket =
       case fetch_link(socket, %{"id" => id}) do
-        {:ok, link} -> socket |> restream(link) |> refresh_open(link)
+        {:ok, link} -> socket |> restream(link) |> refresh_open(link) |> settle_snapshot(link)
         {:error, :not_found, _to} -> socket
       end
 
     {:noreply, refresh_counts(socket)}
+  end
+
+  # A requested snapshot that failed, from this page or another one showing
+  # the same link.
+  def handle_info({:snapshot_failed, %{id: id}}, socket) do
+    if Map.has_key?(socket.assigns.snapshot_requests, id) or open?(socket, %{id: id}) do
+      {:noreply,
+       socket
+       |> update(:snapshot_requests, &Map.delete(&1, id))
+       |> put_flash(:error, gettext("Couldn't generate the image."))}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info({:link_deleted, link}, socket) do
@@ -825,6 +858,22 @@ defmodule AcervoWeb.ArchiveLive do
     do: {:noreply, assign(socket, :web_check, {:failed, id})}
 
   def handle_async(:embeddable, _failed, socket), do: {:noreply, socket}
+
+  # A requested snapshot is done once the link has a snapshot it did not
+  # have when it was requested.
+  defp settle_snapshot(socket, link) do
+    case Map.fetch(socket.assigns.snapshot_requests, link.id) do
+      {:ok, before} ->
+        if MapSet.subset?(snapshot_ids(link), before),
+          do: socket,
+          else: update(socket, :snapshot_requests, &Map.delete(&1, link.id))
+
+      :error ->
+        socket
+    end
+  end
+
+  defp snapshot_ids(link), do: for(%{kind: :snapshot, id: id} <- link.images, into: MapSet.new(), do: id)
 
   defp insert_new(socket, link) do
     if matches?(socket.assigns.filter, link), do: stream_insert(socket, :links, link, at: 0), else: socket
@@ -1075,6 +1124,8 @@ defmodule AcervoWeb.ArchiveLive do
             collections={@collections}
             collection_filter={@collection_filter}
             upload={@uploads.screenshot}
+            snapshots={@snapshots?}
+            snapshot_busy={Map.has_key?(@snapshot_requests, @link.id)}
             note_saved={!!@note_saved}
             description_form={@description_form}
             description_saved={!!@description_saved}
@@ -1136,7 +1187,7 @@ defmodule AcervoWeb.ArchiveLive do
         </.column>
 
         <.column :if={@live_action == :guide} id="column-guide" title={gettext("Guide")}>
-          <.guide />
+          <.guide snapshots={@snapshots?} />
         </.column>
 
         <.column :if={@live_action == :import} id="column-import" title={gettext("Import bookmarks")}>

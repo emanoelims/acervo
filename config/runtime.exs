@@ -43,6 +43,12 @@ if config_env() != :test do
 
     config :acervo, :allowed_emails, emails
   end
+
+  # The screenshot service; without both the feature is off. Tests turn it
+  # on themselves, so a value set for development never reaches them.
+  config :acervo, Acervo.Library.Screenshots,
+    url: System.get_env("ACERVO_SHOTS_URL"),
+    token: System.get_env("ACERVO_SHOTS_TOKEN")
 end
 
 if config_env() == :dev do
