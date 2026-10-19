@@ -24,6 +24,13 @@ defmodule AcervoWeb.CoreComponents do
   Supply unique IDs and an accessible label; use the trigger slot for its icon.
   Set `menu` for navigation popups containing `dropdown_item/1` rows; these add
   arrow-key navigation, Home/End, activation, and focus restoration on Escape.
+
+  ## Examples
+
+      <.popover id="more" label="More" menu trigger_class="head-button" panel_class="dropdown-menu">
+        <:trigger><.icon name="lucide-ellipsis" class="size-4" /></:trigger>
+        <.dropdown_item icon="lucide-pen-line" label="Rename" phx-click="rename" />
+      </.popover>
   """
   attr :id, :string, required: true
   attr :label, :string, required: true
@@ -86,7 +93,16 @@ defmodule AcervoWeb.CoreComponents do
     """
   end
 
-  @doc "Renders an icon and label navigation item in a shared dropdown popup."
+  @doc """
+  Renders an icon and label row in a `popover/1` with `menu`. It navigates
+  with `navigate` or `href`; without either it is a button, for actions.
+
+  ## Examples
+
+      <.dropdown_item icon="lucide-keyboard" label="Shortcuts" navigate={~p"/guide"} />
+      <.dropdown_item id="rename" icon="lucide-pen-line" label="Rename" phx-click="rename" />
+      <.dropdown_item icon="lucide-trash-2" label="Delete" danger phx-click="delete" />
+  """
   attr :label, :string, required: true
   attr :icon, :string, required: true
   attr :navigate, :string, default: nil
@@ -95,6 +111,21 @@ defmodule AcervoWeb.CoreComponents do
   attr :current, :boolean, default: false
   attr :danger, :boolean, default: false
   attr :rest, :global
+
+  def dropdown_item(%{navigate: nil, href: nil} = assigns) do
+    ~H"""
+    <button
+      type="button"
+      role="menuitem"
+      tabindex="-1"
+      class={["dropdown-item", @danger && "dropdown-item-danger"]}
+      {@rest}
+    >
+      <.icon name={@icon} class="size-4" />
+      <span class="dropdown-item-label">{@label}</span>
+    </button>
+    """
+  end
 
   def dropdown_item(assigns) do
     ~H"""
