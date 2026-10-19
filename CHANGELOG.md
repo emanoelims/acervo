@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The home shows the Inbox and each collection side by side, with their newest links. A link opens in its collection; “See all” opens the whole collection.
+
 ## [0.13.1] - 2026-10-19
 
 Small fix.

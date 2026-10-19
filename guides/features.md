@@ -145,6 +145,14 @@ uses them. Their names start with a dot.
   from that collection.
 - **Column 1.** The collections are listed in column 1, and its **+**
   (`#new-collection`) creates one.
+- **Home.** `/` shows, next to column 1, the inbox (when it has links) and
+  one narrow column per collection with links, in column 1's order; empty
+  collections stay out. Each holds its 12 newest links as compact cards
+  (`card/1` with `compact`) and “See all (N)”, which opens the collection.
+  A card opens the link with its collection (or the inbox) as the list.
+  `Acervo.Library.home_columns/2` loads them in one ranked query, and
+  broadcasts reload only the columns they touch, so new links and images
+  show up on their own.
 - **Collection ··· menu.** The menu (`collection_menu/1` in
   `ArchiveComponents`) renames, describes or deletes the collection. Deleting
   keeps its links. Business rules live in `Acervo.Collections`.

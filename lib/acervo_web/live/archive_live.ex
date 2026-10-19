@@ -20,6 +20,11 @@ defmodule AcervoWeb.ArchiveLive do
   scopes it to one collection. Results open under `/search/l/:id`, keeping
   `q` and `in`. The dock's search pill drives it; `/` and ⌘K open the pill.
 
+  The home (`/`) shows, next to the root column, the inbox when it has links
+  and one narrow column per collection with links, each with its newest
+  links as compact cards (`Acervo.Library.home_columns/2`). Broadcasts reload
+  only the columns they touch.
+
   `/import` opens a column that imports bookmarks from a browser's export
   (`AcervoWeb.ImportComponent`), opened from the dock's settings. The
   import's progress arrives here as `{:import_updated, import}` and is sent
@@ -54,7 +59,7 @@ defmodule AcervoWeb.ArchiveLive do
 
     {:ok,
      socket
-     |> assign(filter: nil, collection: nil, link: nil, screenshot_link_id: nil)
+     |> assign(filter: nil, collection: nil, link: nil, screenshot_link_id: nil, home_columns: nil)
      |> assign(snapshots?: Screenshots.enabled?(), snapshot_requests: %{})
      |> assign(search_form: search_form, search_scope: nil, search_loading: false)
      |> assign(search_partial: false, search_count: nil)
@@ -93,6 +98,7 @@ defmodule AcervoWeb.ArchiveLive do
       {:noreply,
        socket
        |> select_link(link, reset?)
+       |> assign_home()
        |> assign(:reader_view?, params["view"] == "reader")
        |> assign_web()
        |> assign_page_title()}
@@ -101,6 +107,14 @@ defmodule AcervoWeb.ArchiveLive do
         {:noreply, socket |> put_flash(:error, gettext("Not found.")) |> push_patch(to: to)}
     end
   end
+
+  # The home's columns load when it opens and are dropped when it closes;
+  # broadcasts keep them current meanwhile (see `refresh_home/2`).
+  defp assign_home(%{assigns: %{live_action: :home, home_columns: nil}} = socket),
+    do: assign(socket, :home_columns, Library.home_columns(socket.assigns.current_scope))
+
+  defp assign_home(%{assigns: %{live_action: :home}} = socket), do: socket
+  defp assign_home(socket), do: assign(socket, :home_columns, nil)
 
   # A search's `in` names the collection it is scoped to; an unknown one
   # drops the scope.
@@ -766,20 +780,23 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   @impl true
-  def handle_info({:link_created, link}, socket), do: {:noreply, socket |> insert_new(link) |> refresh_counts()}
+  def handle_info({:link_created, link}, socket),
+    do: {:noreply, socket |> insert_new(link) |> refresh_counts() |> refresh_home([link])}
 
   # A paste of several links arrives at once, refreshing the counts once.
   def handle_info({:links_created, links}, socket),
-    do: {:noreply, links |> Enum.reduce(socket, &insert_new(&2, &1)) |> refresh_counts()}
+    do: {:noreply, links |> Enum.reduce(socket, &insert_new(&2, &1)) |> refresh_counts() |> refresh_home(links)}
 
   def handle_info({:link_updated, %{id: id}}, socket) do
-    socket =
-      case fetch_link(socket, %{"id" => id}) do
-        {:ok, link} -> socket |> restream(link) |> refresh_open(link) |> settle_snapshot(link)
-        {:error, :not_found, _to} -> socket
-      end
+    socket = refresh_counts(socket)
 
-    {:noreply, refresh_counts(socket)}
+    case fetch_link(socket, %{"id" => id}) do
+      {:ok, link} ->
+        {:noreply, socket |> restream(link) |> refresh_open(link) |> settle_snapshot(link) |> refresh_home([link])}
+
+      {:error, :not_found, _to} ->
+        {:noreply, socket}
+    end
   end
 
   # A requested snapshot that failed, from this page or another one showing
@@ -796,7 +813,7 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   def handle_info({:link_deleted, link}, socket) do
-    socket = socket |> stream_delete(:links, link) |> refresh_counts()
+    socket = socket |> stream_delete(:links, link) |> refresh_counts() |> refresh_home([link])
 
     if open?(socket, link) do
       {:noreply, push_patch(socket, to: list_path(socket.assigns))}
@@ -806,7 +823,7 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   def handle_info({:collections_changed}, socket) do
-    socket = refresh_counts(socket)
+    socket = socket |> refresh_counts() |> reload_home()
 
     case socket.assigns.collection do
       nil ->
@@ -874,6 +891,38 @@ defmodule AcervoWeb.ArchiveLive do
   end
 
   defp snapshot_ids(link), do: for(%{kind: :snapshot, id: id} <- link.images, into: MapSet.new(), do: id)
+
+  # The home reloads only the columns a link event touches: the inbox and the
+  # collections the links belong to now, and the columns that listed them
+  # before. Reloading every column would be cheap too, but capture alone
+  # broadcasts several updates per saved link. Columns keep the navigation's
+  # order; one left empty is dropped.
+  defp refresh_home(%{assigns: %{home_columns: nil}} = socket, _links), do: socket
+
+  defp refresh_home(socket, links) do
+    ids = MapSet.new(links, & &1.id)
+    columns = socket.assigns.home_columns
+    listed = for column <- columns, Enum.any?(column.links, &MapSet.member?(ids, &1.id)), do: home_key(column)
+    belongs = Enum.flat_map(links, &[if(is_nil(&1.triaged_at), do: :inbox) | Enum.map(&1.collections, fn c -> c.id end)])
+
+    case Enum.uniq(listed ++ belongs) -- [nil] do
+      [] ->
+        socket
+
+      keys ->
+        fresh = Library.home_columns(socket.assigns.current_scope, only: keys)
+        by_key = Map.new(Enum.reject(columns, &(home_key(&1) in keys)) ++ fresh, &{home_key(&1), &1})
+        order = [:inbox | Enum.map(socket.assigns.collections, & &1.id)]
+        assign(socket, :home_columns, for(key <- order, column = by_key[key], do: column))
+    end
+  end
+
+  # Renamed, deleted or new collections reload the whole home.
+  defp reload_home(%{assigns: %{home_columns: nil}} = socket), do: socket
+  defp reload_home(socket), do: assign(socket, :home_columns, Library.home_columns(socket.assigns.current_scope))
+
+  defp home_key(%{kind: :inbox}), do: :inbox
+  defp home_key(%{collection: %{id: id}}), do: id
 
   defp insert_new(socket, link) do
     if matches?(socket.assigns.filter, link), do: stream_insert(socket, :links, link, at: 0), else: socket
@@ -948,7 +997,7 @@ defmodule AcervoWeb.ArchiveLive do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div id="columns" class="columns" phx-hook=".Shortcuts">
-        <.column id="column-root" class="column-root">
+        <.column id="column-root" class="column-root" reveal={false}>
           <.column_head title="Acervo" level="h1" />
           <p class="lead" phx-no-format>
             {gettext("Good things I find on the internet.")}
@@ -1011,6 +1060,41 @@ defmodule AcervoWeb.ArchiveLive do
             </li>
           </ul>
         </.column>
+
+        <div
+          :if={@home_columns not in [nil, []]}
+          id="home-columns"
+          class="home-columns"
+          phx-hook=".HomeScroll"
+        >
+          <.column
+            :for={column <- @home_columns}
+            :key={home_column_id(column)}
+            id={home_column_id(column)}
+            title={home_column_title(column)}
+            narrow
+            reveal={false}
+          >
+            <:actions><span class="column-count">{column.count}</span></:actions>
+            <div class="cards cards-compact">
+              <.card
+                :for={link <- column.links}
+                :key={link.id}
+                id={"#{home_column_id(column)}-link-#{link.id}"}
+                link={link}
+                patch={home_link_path(column, link)}
+                compact
+              />
+              <.link
+                id={"#{home_column_id(column)}-all"}
+                class="see-all"
+                patch={home_list_path(column)}
+              >
+                {gettext("See all (%{count})", count: column.count)}
+              </.link>
+            </div>
+          </.column>
+        </div>
 
         <.column :if={@filter} id={list_column_id(@filter)} title={list_title(@filter, @collection)}>
           <:heading :if={@editing == :name}>
@@ -1196,6 +1280,14 @@ defmodule AcervoWeb.ArchiveLive do
         return_to={@return_to}
       />
     </Layouts.app>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".HomeScroll">
+      // The home opens at its start, the root column, wherever the row was
+      // scrolled before. Its columns don't scroll the row on their own
+      // (`reveal={false}`), so links arriving later don't move it either.
+      export default {
+        mounted() { this.el.closest('.columns')?.scrollTo({left: 0}) }
+      }
+    </script>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".Shortcuts">
       // Page-wide keys, ignored while typing in a field:
       // - pasting text with links saves every one of them. Only links that
@@ -1294,6 +1386,18 @@ defmodule AcervoWeb.ArchiveLive do
     <.link id={@id} patch={@patch}>{render_slot(@inner_block)}</.link>
     """
   end
+
+  defp home_column_id(%{kind: :inbox}), do: "home-inbox"
+  defp home_column_id(%{collection: collection}), do: "home-collection-#{collection.id}"
+
+  defp home_column_title(%{kind: :inbox}), do: gettext("Inbox")
+  defp home_column_title(%{collection: collection}), do: collection.name
+
+  defp home_link_path(%{kind: :inbox}, link), do: ~p"/inbox/l/#{link.id}"
+  defp home_link_path(%{collection: collection}, link), do: ~p"/c/#{collection.slug}/l/#{link.id}"
+
+  defp home_list_path(%{kind: :inbox}), do: ~p"/inbox"
+  defp home_list_path(%{collection: collection}), do: ~p"/c/#{collection.slug}"
 
   defp list_column_id(:all), do: "column-all"
   defp list_column_id(:inbox), do: "column-inbox"

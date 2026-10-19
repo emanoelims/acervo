@@ -100,6 +100,9 @@ defmodule AcervoWeb.GuideComponents do
         <:row icon="lucide-folder">
           {gettext("Collections live in the first column; + creates one.")}
         </:row>
+        <:row icon="lucide-house">
+          {gettext("The home shows the Inbox and each collection side by side, newest links first.")}
+        </:row>
         <:row icon="lucide-ellipsis">
           {gettext("Rename, describe or delete a collection. Its links stay.")}
         </:row>

@@ -21,16 +21,58 @@ defmodule AcervoWeb.LinkComponents do
 
   @ibar_chips 3
 
-  @doc """
+  @doc ~S"""
   Renders a link card that patches to the link. The kind follows the link:
   a skeleton while capturing, a thumbnail for YouTube, the image over a
   blurred copy of itself, or text. Images, thumbnails and the skeleton share
   one 16:10 shape.
+
+  `compact` is the home's smaller card: the image and the title, two lines
+  at most, without description, date or source mark; the host stands in for
+  a missing image.
+
+  ## Examples
+
+      <.card id={"link-#{link.id}"} link={link} patch={~p"/all/l/#{link.id}"} />
+      <.card id={"home-link-#{link.id}"} link={link} patch={~p"/inbox/l/#{link.id}"} compact />
   """
   attr :id, :string, required: true
   attr :link, :map, required: true
   attr :patch, :string, required: true
   attr :selected, :boolean, default: false
+  attr :compact, :boolean, default: false, doc: "the home's smaller card"
+
+  def card(%{compact: true} = assigns) do
+    assigns = assign(assigns, kind: kind(assigns.link), image: first_image(assigns.link))
+
+    ~H"""
+    <.link
+      id={@id}
+      patch={@patch}
+      class={["card", "card-compact", "card-#{@kind}", @selected && "is-selected"]}
+      aria-current={@selected && "true"}
+    >
+      <%= case @kind do %>
+        <% :pending -> %>
+          <div class="media skeleton" aria-hidden="true"></div>
+        <% :text -> %>
+        <% _image -> %>
+          <div class="thumb">
+            <img src={image_src(@image)} width={@image.width} height={@image.height} alt="" />
+            <div :if={@kind == :video} class="play" aria-hidden="true">
+              <i><.brand name={:youtube} /></i>
+            </div>
+          </div>
+      <% end %>
+      <div class="pad">
+        <div class="ttl">{if @kind == :pending, do: host(@link), else: display_title(@link)}</div>
+        <div :if={@kind == :text and display_title(@link) != host(@link)} class="host">
+          {host(@link)}
+        </div>
+      </div>
+    </.link>
+    """
+  end
 
   def card(assigns) do
     assigns = assign(assigns, kind: kind(assigns.link), image: first_image(assigns.link))
