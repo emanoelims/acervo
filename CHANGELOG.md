@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-19
+
+A calmer, more even layout.
+
 ### Changed
 
 - Smaller titles and body text, one header style for every column, and a tighter navigation list.
