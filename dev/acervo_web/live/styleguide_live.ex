@@ -39,6 +39,7 @@ defmodule AcervoWeb.StyleguideLive do
      |> assign(page_title: "Styleguide", links: Examples.links(), collections: Examples.collections())
      |> assign(appearance: %{"theme" => nil, "accent" => nil, "font" => nil})
      |> assign(add_form: nil, search_form: nil, collection_filter: to_form(%{"query" => ""}))
+     |> assign(relation_filter: to_form(%{"query" => "grid"}), related: Examples.related())
      |> assign(form: example_form())
      |> allow_upload(:screenshot, accept: ~w(.png .jpg .jpeg .webp), max_entries: 1)
      |> allow_upload(:example, accept: ~w(.png .jpg), max_entries: 1)}
@@ -54,7 +55,8 @@ defmodule AcervoWeb.StyleguideLive do
        open: key,
        link: link,
        note_form: to_form(Library.change_note(link), as: :link),
-       description_form: to_form(Library.change_image_description(link), as: :link)
+       description_form: to_form(Library.change_image_description(link), as: :link),
+       ai_notes_form: to_form(Library.change_ai_notes(link), as: :link)
      )}
   end
 
@@ -97,6 +99,9 @@ defmodule AcervoWeb.StyleguideLive do
   end
 
   defp link_patch(key), do: ~p"/dev/styleguide?#{[link: key]}"
+
+  # The example key of a related link, so its card opens it here.
+  defp related_key(link), do: Enum.find_value(Examples.links(), :image, fn {key, l} -> l.id == link.id && key end)
 
   @impl true
   def render(assigns) do
@@ -556,7 +561,7 @@ defmodule AcervoWeb.StyleguideLive do
             id="sg-app"
             title="Columns"
             usage={
-              ~S|<.card link={…} patch={…} /> · <.inbox_item … /> · <.link_detail … /> · <.web_view … />|
+              ~S|<.card link={…} patch={…} /> · <.inbox_item … /> · <.link_detail related={…} … /> · <.web_view … />|
             }
           >
             <div class="sg-columns sg-columns-app">
@@ -609,6 +614,12 @@ defmodule AcervoWeb.StyleguideLive do
                     collection_filter={@collection_filter}
                     upload={@uploads.screenshot}
                     description_form={@description_form}
+                    ai_notes_form={@ai_notes_form}
+                    related={@related}
+                    related_path={&link_patch(related_key(&1))}
+                    similar_path={link_patch(@open)}
+                    relation_filter={@relation_filter}
+                    relation_options={[@links.video, @links.generic_image]}
                     web_path={link_patch(@open)}
                     snapshots
                   />

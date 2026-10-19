@@ -16,13 +16,18 @@ defmodule AcervoWeb.ArchiveComponents do
   alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
 
-  @doc "Renders the floating glass dock with home, search, inbox, settings and add."
+  @doc """
+  Renders the floating glass dock with home, search, inbox, settings and add.
+  The settings hold the appearance, the automatic notes setting
+  (`auto_notes`), the guide, the import and log out.
+  """
   attr :active, :atom, values: [:home, :search, :inbox], required: true
   attr :inbox_count, :integer, default: 0
   attr :adding, :boolean, default: false
   attr :searching, :boolean, default: false
   attr :locale, :string, required: true
   attr :return_to, :string, required: true
+  attr :auto_notes, :atom, values: [:never, :long, :always], default: :never
 
   def dock(assigns) do
     ~H"""
@@ -69,6 +74,7 @@ defmodule AcervoWeb.ArchiveComponents do
       >
         <:trigger><.icon name="lucide-settings-2" class="size-[19px]" /></:trigger>
         <.appearance_panel locale={@locale} return_to={@return_to} />
+        <.auto_notes_setting value={@auto_notes} />
         <div class="dock-panel-divider"></div>
         <.link id="dock-guide" patch={~p"/guide"} class="dock-panel-row">
           <.icon name="lucide-keyboard" class="size-4" /><span>{gettext("Shortcuts and features")}</span>
@@ -321,6 +327,52 @@ defmodule AcervoWeb.ArchiveComponents do
         }
       }
     </script>
+    """
+  end
+
+  @doc """
+  Renders the automatic notes setting: when AI notes are written without
+  asking. Clicking pushes `set_auto_notes` with the value.
+
+  ## Examples
+
+      <.auto_notes_setting value={:never} />
+  """
+  attr :value, :atom, values: [:never, :long, :always], required: true
+
+  def auto_notes_setting(assigns) do
+    assigns =
+      assign(assigns, :options, [
+        {:never, gettext("Never"), gettext("Only when you ask")},
+        {:long, gettext("Long"), gettext("For articles over about 1,500 words")},
+        {:always, gettext("Always"), gettext("For every link")}
+      ])
+
+    ~H"""
+    <div
+      id="auto-notes"
+      class="appearance auto-notes"
+      role="group"
+      aria-label={gettext("Automatic notes")}
+    >
+      <div class="appearance-row">
+        <span class="auto-notes-glyph" title={gettext("Automatic notes")}>
+          <.icon name="lucide-sparkles" class="size-4" />
+        </span>
+        <button
+          :for={{value, label, hint} <- @options}
+          id={"auto-notes-#{value}"}
+          type="button"
+          class={["lang-chip", @value == value && "is-active"]}
+          title={hint}
+          aria-pressed={to_string(@value == value)}
+          phx-click="set_auto_notes"
+          phx-value-value={value}
+        >
+          {label}
+        </button>
+      </div>
+    </div>
     """
   end
 

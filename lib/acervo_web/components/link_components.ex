@@ -35,12 +35,14 @@ defmodule AcervoWeb.LinkComponents do
 
       <.card id={"link-#{link.id}"} link={link} patch={~p"/all/l/#{link.id}"} />
       <.card id={"home-link-#{link.id}"} link={link} patch={~p"/inbox/l/#{link.id}"} compact />
+      <.card id={"related-#{link.id}"} link={link} patch={~p"/all/l/#{link.id}"} compact mark="lucide-link" />
   """
   attr :id, :string, required: true
   attr :link, :map, required: true
   attr :patch, :string, required: true
   attr :selected, :boolean, default: false
   attr :compact, :boolean, default: false, doc: "the home's smaller card"
+  attr :mark, :string, default: nil, doc: "a compact card's icon before its title, such as a relation's link"
 
   def card(%{compact: true} = assigns) do
     assigns = assign(assigns, kind: kind(assigns.link), image: first_image(assigns.link))
@@ -65,7 +67,11 @@ defmodule AcervoWeb.LinkComponents do
           </div>
       <% end %>
       <div class="pad">
-        <div class="ttl">{if @kind == :pending, do: host(@link), else: display_title(@link)}</div>
+        <div class="ttl">
+          <.icon :if={@mark} name={@mark} class="ttl-mark size-3" />{if @kind == :pending,
+            do: host(@link),
+            else: display_title(@link)}
+        </div>
         <div :if={@kind == :text and display_title(@link) != host(@link)} class="host">
           {host(@link)}
         </div>
@@ -240,7 +246,7 @@ defmodule AcervoWeb.LinkComponents do
   Renders the open link: its visual (every image stacked, the first one in the
   glow treatment), meta line, collections and pending suggestions (each with
   its reason), the page description, the editable image description, the
-  note and actions.
+  note, the AI notes, actions and related links.
   The visual, or the globe action when there is no image, patches to
   `web_path`, which opens or closes the web view column. With `snapshots`,
   the camera action opens a menu that also generates a new image.
@@ -257,6 +263,18 @@ defmodule AcervoWeb.LinkComponents do
   attr :web_open, :boolean, default: false
   attr :snapshots, :boolean, default: false, doc: "the screenshot service is on: the camera opens the image menu"
   attr :snapshot_busy, :boolean, default: false, doc: "a requested snapshot of the link is running"
+  attr :ai_notes_form, Form, required: true, doc: "the AI notes form"
+  attr :ai_notes_saved, :boolean, default: false, doc: "the brief “Saved” status after an AI notes save"
+  attr :notes_busy, :boolean, default: false, doc: "requested AI notes are being written"
+
+  attr :related, :map,
+    default: nil,
+    doc: "`%{manual: links, similar: links, more?: boolean}`, or nil while it loads"
+
+  attr :related_path, :any, default: nil, doc: "a function from a related link to the path that opens it"
+  attr :similar_path, :string, default: nil, doc: "opens every similar link as a list"
+  attr :relation_filter, Form, required: true, doc: "the relation picker's query"
+  attr :relation_options, :list, default: nil, doc: "links matching the picker's query; nil before a query"
 
   def link_detail(assigns) do
     images = assigns.link.images
@@ -419,6 +437,46 @@ defmodule AcervoWeb.LinkComponents do
           </.form>
           <.edit_foot id="note" saved={@note_saved} />
         </div>
+        <div :if={@link.ai_notes} class="edit edit-image edit-ai">
+          <.form
+            for={@ai_notes_form}
+            id="ai-notes-form"
+            class="note"
+            phx-submit="save_ai_notes"
+          >
+            <.icon name="lucide-sparkles" class="edit-glyph size-3" />
+            <.input
+              type="textarea"
+              field={@ai_notes_form[:ai_notes]}
+              id="link-ai-notes"
+              class="note-input image-input"
+              rows="1"
+              maxlength="8000"
+              aria-label={gettext("AI notes")}
+              aria-describedby="ai-notes-hint"
+              aria-keyshortcuts="Meta+Enter Control+Enter"
+              phx-blur="save_ai_notes"
+              phx-hook=".SubmitShortcut"
+            />
+          </.form>
+          <.edit_foot id="ai-notes" saved={@ai_notes_saved} />
+        </div>
+        <button
+          id="ai-notes-generate"
+          type="button"
+          class="notes-gen"
+          disabled={@notes_busy}
+          aria-busy={to_string(@notes_busy)}
+          phx-click="generate_notes"
+        >
+          <.icon :if={not @notes_busy} name="lucide-sparkles" class="size-3.5" />
+          <.icon
+            :if={@notes_busy}
+            name="lucide-loader-circle"
+            class="size-3.5 motion-safe:animate-spin"
+          />
+          {notes_label(@notes_busy, @link.ai_notes)}
+        </button>
       </div>
 
       <div class="acts">
@@ -452,6 +510,7 @@ defmodule AcervoWeb.LinkComponents do
           collections={@collections}
           filter={@collection_filter}
         />
+        <.relation_picker filter={@relation_filter} options={@relation_options} />
         <.icon_button
           :if={is_nil(@link.triaged_at) and length(@link.suggestions) > 1}
           id="link-accept-all"
@@ -477,6 +536,13 @@ defmodule AcervoWeb.LinkComponents do
           data-confirm={gettext("Delete this link?")}
         />
       </div>
+
+      <.related_links
+        :if={@related && (@related.manual != [] or @related.similar != [])}
+        related={@related}
+        path={@related_path}
+        similar_path={@similar_path}
+      />
     </div>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".SubmitShortcut">
       // ⌘↩ (Ctrl+↩ off Apple devices) submits the field's form (the note or
@@ -780,6 +846,113 @@ defmodule AcervoWeb.LinkComponents do
   end
 
   defp close_picker(js), do: JS.remove_attribute(js, "open", to: "#link-collections")
+
+  defp notes_label(true = _busy, _notes), do: gettext("Writing notes…")
+  defp notes_label(false, nil), do: gettext("Generate notes")
+  defp notes_label(false, _notes), do: gettext("Generate again")
+
+  attr :related, :map, required: true
+  attr :path, :any, required: true
+  attr :similar_path, :string, required: true
+
+  # Links connected by hand (marked with the link glyph, removable), then the
+  # nearest by meaning, as compact cards; "See more similar" lists them all.
+  defp related_links(assigns) do
+    ~H"""
+    <section id="link-related" class="related" aria-labelledby="link-related-head">
+      <h3 id="link-related-head" class="related-head">{gettext("Related")}</h3>
+      <div class="related-grid">
+        <div :for={link <- @related.manual} id={"related-#{link.id}"} class="related-item">
+          <.card
+            id={"related-card-#{link.id}"}
+            link={link}
+            patch={@path.(link)}
+            compact
+            mark="lucide-link"
+          />
+          <button
+            id={"related-remove-#{link.id}"}
+            type="button"
+            class="related-x"
+            title={gettext("Remove")}
+            aria-label={gettext("Remove the relation with %{title}", title: display_title(link))}
+            phx-click="unrelate_link"
+            phx-value-id={link.id}
+          >
+            <.icon name="lucide-x" class="size-3.5" />
+          </button>
+        </div>
+        <.card
+          :for={link <- @related.similar}
+          id={"similar-#{link.id}"}
+          link={link}
+          patch={@path.(link)}
+          compact
+        />
+      </div>
+      <.link
+        :if={@related.more?}
+        id="link-more-similar"
+        class="see-all related-more"
+        patch={@similar_path}
+      >
+        {gettext("See more similar")}
+      </.link>
+    </section>
+    """
+  end
+
+  attr :filter, Form, required: true
+  attr :options, :list, default: nil
+
+  # The "relate a link" popover: the user's links matching a query, a click
+  # (or ↩ for the first) connects one.
+  defp relation_picker(assigns) do
+    ~H"""
+    <.popover
+      id="link-relations"
+      trigger_id="link-relate"
+      label={gettext("Relate a link")}
+      placement="bottom-start"
+      trigger_class="round"
+      panel_class="pick"
+    >
+      <:trigger><.icon name="lucide-link" class="size-4" /></:trigger>
+      <.form
+        for={@filter}
+        id="relation-filter-form"
+        phx-change="filter_relations"
+        phx-submit={JS.push("relate_first") |> close_relations()}
+      >
+        <.input
+          field={@filter[:query]}
+          id="relation-filter"
+          class="pick-filter"
+          placeholder={gettext("Find a link")}
+          aria-label={gettext("Find a link")}
+          autocomplete="off"
+          maxlength="200"
+          phx-debounce="150"
+          data-autofocus
+        />
+      </.form>
+      <div id="relation-options" class="pick-list">
+        <button
+          :for={link <- @options || []}
+          id={"relation-option-#{link.id}"}
+          type="button"
+          class="pick-row"
+          phx-click={JS.push("relate_link", value: %{id: link.id}) |> close_relations()}
+        >
+          <span class="pick-name">{display_title(link)}</span>
+        </button>
+        <p :if={@options == []} class="pick-empty">{gettext("Nothing found.")}</p>
+      </div>
+    </.popover>
+    """
+  end
+
+  defp close_relations(js), do: JS.remove_attribute(js, "open", to: "#link-relations")
 
   attr :upload, :map, required: true
   attr :busy, :boolean, required: true

@@ -67,6 +67,9 @@
 .font-inter { font-family: "Inter Variable", system-ui, sans-serif; } .font-schibsted { font-family: "Schibsted Grotesk", system-ui, sans-serif; }
 .font-atkinson { font-family: "Atkinson Hyperlegible Next", system-ui, sans-serif; } .font-newsreader { font-family: "Newsreader", Georgia, serif; }
 .appearance [aria-pressed=true], .lang-chip.is-active { box-shadow: 0 0 0 2px var(--ink); }
+/* Automatic notes: the sparkle, then never, long or always. */
+.auto-notes { margin-top: 4px; }
+.auto-notes-glyph { display: inline-grid; place-items: center; width: 30px; height: 30px; color: var(--faint); }
 .dot[aria-pressed=true] { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--ink); }
 
 /* The floating pill above the dock, where a link is pasted. */

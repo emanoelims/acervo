@@ -308,6 +308,46 @@ defmodule Acervo.Search do
     end
   end
 
+  @doc """
+  What the link column shows as related to `link`: the links connected by
+  hand (`Acervo.Library.list_related/2`, all of them), then the similar ones
+  (`similar_links/3`) up to `max` links in all. `more?` says whether more
+  similar links exist than fit.
+  """
+  @spec related_links(Scope.t(), Link.t(), pos_integer()) :: %{
+          manual: [Link.t()],
+          similar: [Link.t()],
+          more?: boolean()
+        }
+  def related_links(%Scope{} = scope, %Link{} = link, max \\ 5) do
+    manual = Library.list_related(scope, link)
+    room = max(max - length(manual), 0)
+    similar = similar_links(scope, link, limit: room + 1, exclude: Enum.map(manual, & &1.id))
+
+    %{manual: manual, similar: Enum.take(similar, room), more?: length(similar) > room}
+  end
+
+  @doc """
+  The scope's links that `link` could be related to, matching `query` by
+  their words (the full-text list of `search/3`, so the title counts most),
+  without the link itself and the ones already related. At most `:limit`
+  (8 by default); none for a query without a searchable word.
+  """
+  @spec relation_candidates(Scope.t(), Link.t(), String.t(), keyword()) :: [Link.t()]
+  def relation_candidates(%Scope{} = scope, %Link{id: id} = link, query, opts \\ []) when is_binary(query) do
+    opts = Keyword.validate!(opts, limit: 8)
+    exclude = MapSet.new([id | Enum.map(Library.list_related(scope, link), & &1.id)])
+
+    ids =
+      scope
+      |> text_ranks(normalize_query(query))
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.reject(&MapSet.member?(exclude, &1))
+      |> Enum.take(opts[:limit])
+
+    Library.list_links_by_ids(scope, ids)
+  end
+
   @doc false
   # The top 50 links (or `:limit`) by cosine distance to `vector`, nearest
   # first, among those embedded with the configured model and not in
