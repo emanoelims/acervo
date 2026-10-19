@@ -27,6 +27,14 @@ defmodule Acervo.Library.URL do
   @host_pattern ~r/\A[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\z/
   @scheme_without_slashes ~r/\A[a-z][a-z0-9+.\-]*:(?!\d)/i
 
+  @max_extracted 50
+  # A URL starts at `http(s)://` or `www.` that doesn't continue a word, a
+  # host, an email or another scheme, and runs until whitespace or a character
+  # URLs don't carry unescaped (`<url>` and `[text](url)` end there).
+  @candidate ~r/(?<![\w.@\/:\-])(?:https?:\/\/|www\.)[^\s<>"`\[\]{}|\\^]+/iu
+  # Two URLs joined by a comma, as in `a,b`.
+  @joined ~r/,(?=https?:\/\/|www\.)/i
+  @trailing_punctuation ~w(. , ; : ! ? ' " * ” ’ »)
   @doc """
   Returns the canonical form of `input`, or `{:error, :invalid_url}`.
   """
@@ -48,6 +56,51 @@ defmodule Acervo.Library.URL do
       %URI{host: @instagram_canonical_host} -> :instagram
       %URI{host: "x.com"} -> :x
       _ -> :generic
+    end
+  end
+
+  @doc """
+  Returns every URL in `text`, as written, in order of appearance: those
+  starting with `http://`, `https://` or `www.`, separated by whitespace,
+  commas or the markup around them (`<url>`, `[text](url)`, quotes).
+
+  Trailing punctuation is not part of a URL, except a closing parenthesis
+  that balances one inside it, as in Wikipedia's. URLs with the same
+  canonical form (see `normalize/1`) appear once; ones that don't normalize
+  are kept, so the caller can count them as invalid. At most #{@max_extracted}
+  are returned.
+  """
+  @spec extract_all(String.t()) :: [String.t()]
+  def extract_all(text) when is_binary(text) do
+    @candidate
+    |> Regex.scan(text)
+    |> Stream.flat_map(fn [match] -> Regex.split(@joined, match) end)
+    |> Stream.map(&trim_trailing/1)
+    |> Stream.reject(&bare_prefix?/1)
+    |> Stream.uniq_by(&dedupe_key/1)
+    |> Enum.take(@max_extracted)
+  end
+
+  defp trim_trailing(url) do
+    last = String.last(url)
+
+    if last in @trailing_punctuation or (last == ")" and unbalanced_parenthesis?(url)),
+      do: url |> drop_last() |> trim_trailing(),
+      else: url
+  end
+
+  defp unbalanced_parenthesis?(url), do: count(url, ")") > count(url, "(")
+
+  defp count(url, char), do: url |> :binary.matches(char) |> length()
+
+  defp drop_last(url), do: String.slice(url, 0..-2//1)
+
+  defp bare_prefix?(url), do: String.downcase(url) in ["http://", "https://", "www."]
+
+  defp dedupe_key(url) do
+    case normalize(url) do
+      {:ok, canonical} -> canonical
+      {:error, :invalid_url} -> url
     end
   end
 
