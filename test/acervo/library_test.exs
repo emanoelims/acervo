@@ -327,6 +327,26 @@ defmodule Acervo.LibraryTest do
     end
   end
 
+  describe "update_ai_notes/3" do
+    test "saves the edit trimmed, embeds again and broadcasts", %{scope: scope} do
+      link = link_fixture(scope)
+
+      assert {:ok, %Link{ai_notes: "Resumo\n\n- ponto"}} =
+               Library.update_ai_notes(scope, link, %{"ai_notes" => "  Resumo\n\n- ponto  "})
+
+      assert_receive {:link_updated, %Link{ai_notes: "Resumo\n\n- ponto"}}
+      assert_enqueued(worker: EmbedLink, args: %{"link_id" => link.id})
+    end
+
+    test "blank clears them; another user gets not_found", %{scope: scope} do
+      link = link_fixture(scope)
+      {:ok, _} = Library.update_ai_notes(scope, link, %{"ai_notes" => "x"})
+
+      assert {:ok, %Link{ai_notes: nil}} = Library.update_ai_notes(scope, link, %{"ai_notes" => "  "})
+      assert {:error, :not_found} = Library.update_ai_notes(user_scope_fixture(), link, %{"ai_notes" => "y"})
+    end
+  end
+
   describe "update_image_description/3" do
     test "saves the edit, stamps edited_at and broadcasts", %{scope: scope} do
       link = link_fixture(scope)

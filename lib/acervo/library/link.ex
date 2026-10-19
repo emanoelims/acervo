@@ -29,6 +29,10 @@ defmodule Acervo.Library.Link do
     field :content_source, Ecto.Enum, values: [:markdown, :html]
     field :content_extracted_at, :utc_datetime
     field :note, :string
+    # The model's summary and key points, as editable text, and when they were
+    # last generated (`Acervo.AI.GenerateNotes`).
+    field :ai_notes, :string
+    field :ai_notes_at, :utc_datetime
     field :triaged_at, :utc_datetime
     field :image_description, :string
     field :image_description_edited_at, :utc_datetime
@@ -116,6 +120,24 @@ defmodule Acervo.Library.Link do
     link
     |> cast(attrs, [:note])
     |> validate_length(:note, max: 4000)
+  end
+
+  @doc """
+  The owner's edit of the AI notes: trimmed, blank becomes nil, at most
+  8000 characters.
+  """
+  def ai_notes_changeset(link, attrs) do
+    link
+    |> cast(attrs, [:ai_notes], empty_values: [])
+    |> update_change(:ai_notes, &blank_to_nil/1)
+    |> validate_length(:ai_notes, max: 8000)
+  end
+
+  @doc "Freshly generated AI notes and their time; NUL bytes stripped, clipped to 8000 characters."
+  def generated_notes_changeset(link, attrs) do
+    link
+    |> cast(attrs, [:ai_notes, :ai_notes_at])
+    |> update_change(:ai_notes, &clip(&1, 8000))
   end
 
   @language ~r/\A[a-z]{2,3}(-[A-Za-z]{2,4})?\z/

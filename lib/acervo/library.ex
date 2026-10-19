@@ -22,6 +22,7 @@ defmodule Acervo.Library do
 
   alias Acervo.Accounts.Scope
   alias Acervo.AI.EnrichLink
+  alias Acervo.AI.GenerateNotes
   alias Acervo.Collections.Collection
   alias Acervo.Collections.CollectionLink
   alias Acervo.Collections.Suggestion
@@ -328,6 +329,31 @@ defmodule Acervo.Library do
   def change_note(%Link{} = link, attrs \\ %{}), do: Link.note_changeset(link, attrs)
 
   @doc """
+  Saves the owner's edit of the AI notes. Like the note, a change is
+  embedded again for search; generating notes again replaces it.
+  """
+  @spec update_ai_notes(Scope.t(), Link.t(), map()) :: {:ok, Link.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def update_ai_notes(%Scope{} = scope, %Link{} = link, attrs) do
+    scope |> update_embedded(link, :ai_notes, &Link.ai_notes_changeset(&1, attrs)) |> updated(scope)
+  end
+
+  @doc "Returns a changeset for tracking AI notes changes."
+  @spec change_ai_notes(Link.t(), map()) :: Ecto.Changeset.t()
+  def change_ai_notes(%Link{} = link, attrs \\ %{}), do: Link.ai_notes_changeset(link, attrs)
+
+  @doc """
+  Asks the model for the link's AI notes: enqueues
+  `Acervo.AI.GenerateNotes`, which replaces the link's AI notes and
+  broadcasts `{:link_updated, link}`. A job for the link already waiting is
+  returned as is. When it fails for good the scope's topic gets
+  `{:notes_failed, link}`.
+  """
+  @spec request_notes(Scope.t(), Link.t()) :: {:ok, Oban.Job.t()} | {:error, :not_found | term()}
+  def request_notes(%Scope{} = scope, %Link{} = link) do
+    with {:ok, link} <- owned(scope, link), do: GenerateNotes.enqueue(link)
+  end
+
+  @doc """
   Saves the owner's edit of the image description, stamping
   `image_description_edited_at` so enrichment never overwrites it.
   """
@@ -588,6 +614,18 @@ defmodule Acervo.Library do
   def broadcast_snapshot_failed(%Scope{user: user} = scope, link_id) do
     case Repo.get_by(Link, id: link_id, user_id: user.id) do
       %Link{} = link -> broadcast(scope, {:snapshot_failed, preload_link(link)})
+      nil -> :error
+    end
+  end
+
+  @doc false
+  # Broadcasts `{:notes_failed, link}` when notes the user asked for, or
+  # automatic ones, fail for good. Used by `Acervo.AI.GenerateNotes`;
+  # returns `:error` if the link is gone.
+  @spec broadcast_notes_failed(Scope.t(), Ecto.UUID.t()) :: :ok | :error
+  def broadcast_notes_failed(%Scope{user: user} = scope, link_id) do
+    case Repo.get_by(Link, id: link_id, user_id: user.id) do
+      %Link{} = link -> broadcast(scope, {:notes_failed, preload_link(link)})
       nil -> :error
     end
   end

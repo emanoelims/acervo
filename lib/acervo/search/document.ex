@@ -12,6 +12,7 @@ defmodule Acervo.Search.Document do
       Description: …
       Image: …         (image_description)
       Note: …
+      AI notes: …      (the model's summary and key points)
       Text: …          (the article text)
 
   The article text is capped at 6,000 characters and the whole document
@@ -41,7 +42,7 @@ defmodule Acervo.Search.Document do
 
   @doc """
   Builds the document for one of the scope's links, or `:skip` when its
-  title, description, image description, note and article text are all
+  title, description, image description, note, AI notes and article text are all
   blank: there is nothing worth embedding.
   """
   @spec build(Scope.t(), Link.t()) :: {:ok, String.t()} | :skip
@@ -51,8 +52,9 @@ defmodule Acervo.Search.Document do
     description = clean(link.description)
     image = clean(link.image_description)
     note = clean(link.note)
+    ai_notes = clean(link.ai_notes)
 
-    if Enum.all?([title, description, image, note, text], &(&1 == "")) do
+    if Enum.all?([title, description, image, note, ai_notes, text], &(&1 == "")) do
       :skip
     else
       document =
@@ -64,6 +66,7 @@ defmodule Acervo.Search.Document do
           {"Description", description},
           {"Image", image},
           {"Note", note},
+          {"AI notes", ai_notes},
           {"Text", text}
         ]
         |> Enum.reject(fn {_label, value} -> value == "" end)

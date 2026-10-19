@@ -7,6 +7,7 @@ defmodule Acervo.Accounts do
 
   ## Database getters
   alias Acervo.Accounts.Allowlist
+  alias Acervo.Accounts.Scope
   alias Acervo.Accounts.User
   alias Acervo.Accounts.UserNotifier
   alias Acervo.Accounts.UserToken
@@ -289,5 +290,16 @@ defmodule Acervo.Accounts do
         {:ok, {user, tokens_to_expire}}
       end
     end)
+  end
+
+  @doc """
+  Sets when the scope's user gets AI notes without asking: `:never`,
+  `:long` (articles over about 1,500 words) or `:always`.
+  """
+  @spec update_auto_notes(Scope.t(), atom() | String.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
+  def update_auto_notes(%Scope{user: %User{} = user}, value) do
+    user
+    |> User.auto_notes_changeset(%{auto_notes: value})
+    |> Repo.update()
   end
 end

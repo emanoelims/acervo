@@ -8,6 +8,7 @@ defmodule Acervo.AI.EnrichLinkTest do
 
   alias Acervo.AI.Call
   alias Acervo.AI.EnrichLink
+  alias Acervo.AI.GenerateNotes
   alias Acervo.Collections
   alias Acervo.Collections.Suggestion
   alias Acervo.FakeAIClient
@@ -354,6 +355,66 @@ defmodule Acervo.AI.EnrichLinkTest do
 
       assert {:snooze, _} = perform(link)
       refute_enqueued(worker: EmbedLink)
+    end
+  end
+
+  describe "automatic notes" do
+    defp auto_notes(scope, setting) do
+      {:ok, user} = Acervo.Accounts.update_auto_notes(scope, setting)
+      %{scope | user: user}
+    end
+
+    defp long_text, do: "<p>" <> String.duplicate("palavra ", 1600) <> "</p>"
+
+    test "never by default", %{scope: scope} do
+      link = ready_link(scope)
+      link |> Link.content_changeset(%{content_html: long_text()}) |> Repo.update!()
+      stub_ok()
+
+      assert :ok = perform(link)
+      refute_enqueued(worker: GenerateNotes)
+    end
+
+    test "always enqueues them at the enrichment's priority", %{scope: scope} do
+      scope = auto_notes(scope, :always)
+      link = ready_link(scope)
+      stub_ok()
+
+      assert :ok = perform(link, priority: 3)
+      assert_enqueued(worker: GenerateNotes, args: %{"link_id" => link.id}, priority: 3)
+    end
+
+    test "long only for reader text over 1,500 words", %{scope: scope} do
+      scope = auto_notes(scope, :long)
+      short = ready_link(scope)
+      long = ready_link(scope)
+      long |> Link.content_changeset(%{content_html: long_text()}) |> Repo.update!()
+      stub_ok()
+
+      assert :ok = perform(short)
+      refute_enqueued(worker: GenerateNotes)
+
+      assert :ok = perform(long)
+      assert_enqueued(worker: GenerateNotes, args: %{"link_id" => long.id})
+    end
+
+    test "not for a link that has notes already, nor after a failed enrichment", %{scope: scope} do
+      scope = auto_notes(scope, :always)
+      noted = ready_link(scope)
+
+      noted
+      |> Link.generated_notes_changeset(%{ai_notes: "Já tem", ai_notes_at: DateTime.utc_now(:second)})
+      |> Repo.update!()
+
+      stub_ok()
+
+      assert :ok = perform(noted)
+      refute_enqueued(worker: GenerateNotes)
+
+      failed = ready_link(scope)
+      stub_error(:unavailable)
+      assert {:cancel, _} = perform(failed)
+      refute_enqueued(worker: GenerateNotes)
     end
   end
 end
