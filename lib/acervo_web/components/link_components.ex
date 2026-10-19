@@ -9,15 +9,16 @@ defmodule AcervoWeb.LinkComponents do
   import AcervoWeb.ArchiveComponents, only: [mod_key: 1]
   import AcervoWeb.CoreComponents
 
-  alias Acervo.Collections
+  import AcervoWeb.LinkPresenter,
+    only: [kind: 1, first_image: 1, image_src: 1, meta: 1, suggestion_name: 1, paragraphs: 1, collection_choices: 2]
+
   alias Acervo.Library.Embed
+  alias AcervoWeb.Format
+  alias AcervoWeb.LinkPresenter
   alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
 
   @ibar_chips 3
-
-  @months_en ~w(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec)
-  @months_pt ~w(jan fev mar abr mai jun jul ago set out nov dez)
 
   @doc """
   Renders a link card that patches to the link. The kind follows the link:
@@ -210,9 +211,6 @@ defmodule AcervoWeb.LinkComponents do
     """
   end
 
-  defp suggestion_name(%{collection: %{name: name}}), do: name
-  defp suggestion_name(%{proposed_name: name}), do: name
-
   @doc """
   Renders the open link: its visual (every image stacked, the first one in the
   glow treatment), meta line, collections and pending suggestions (each with
@@ -275,7 +273,7 @@ defmodule AcervoWeb.LinkComponents do
               :for={image <- @more_images}
               id={"link-image-#{image.id}"}
               class="stack-img"
-              src={~p"/images/#{image.id}"}
+              src={image_src(image)}
               width={image.width}
               height={image.height}
               alt=""
@@ -704,33 +702,6 @@ defmodule AcervoWeb.LinkComponents do
   defp web_state(:unknown, _check, _id), do: :loading
   defp web_state(:blocked, _check, _id), do: :reader
 
-  @paragraph_chars 480
-
-  # Captured text is a single run, so it is cut into paragraphs between
-  # sentences, each about `@paragraph_chars` long. Line breaks, if any, win.
-  defp paragraphs(text) do
-    text
-    |> String.split(~r/\R+/u, trim: true)
-    |> Enum.flat_map(&group_sentences/1)
-  end
-
-  defp group_sentences(text) do
-    ~r/(?<=[.!?…])\s+(?=\S)/u
-    |> Regex.split(String.trim(text), trim: true)
-    |> Enum.chunk_while(
-      "",
-      fn
-        sentence, "" -> {:cont, sentence}
-        sentence, acc when byte_size(acc) < @paragraph_chars -> {:cont, acc <> " " <> sentence}
-        sentence, acc -> {:cont, acc, sentence}
-      end,
-      fn
-        "" -> {:cont, ""}
-        acc -> {:cont, acc, ""}
-      end
-    )
-  end
-
   defp upload_error(:not_accepted), do: gettext("That file isn't an image.")
   defp upload_error(:too_large), do: gettext("That image is too large.")
   defp upload_error(:too_many_files), do: gettext("Add one image at a time.")
@@ -743,21 +714,14 @@ defmodule AcervoWeb.LinkComponents do
   # The "add to collection" popover: a filter, the matching collections (the
   # link's own ones checked, a click toggles) and a row creating the query.
   defp collection_picker(assigns) do
-    query = assigns.filter[:query].value || ""
-    member_ids = MapSet.new(assigns.link.collections, & &1.id)
-
-    existing = Collections.find_by_name_or_slug(assigns.collections, query)
-    matches = Enum.filter(assigns.collections, &matches_query?(&1, query))
-    # "C++" matches nothing by name but would take the slug of "C": offer that one.
-    options = if existing && String.trim(query) != "" && existing not in matches, do: matches ++ [existing], else: matches
+    choices = collection_choices(assigns.collections, assigns.filter[:query].value)
 
     assigns =
-      assign(assigns,
-        query: String.trim(query),
-        options: options,
-        member_ids: member_ids,
-        errors: Enum.map(assigns.filter.errors, fn {_field, {message, _opts}} -> message end),
-        create?: String.trim(query) != "" and is_nil(existing)
+      assigns
+      |> assign(choices)
+      |> assign(
+        member_ids: MapSet.new(assigns.link.collections, & &1.id),
+        errors: Enum.map(assigns.filter.errors, fn {_field, {message, _opts}} -> message end)
       )
 
     ~H"""
@@ -883,26 +847,15 @@ defmodule AcervoWeb.LinkComponents do
 
   defp close_image_menu(js \\ %JS{}), do: JS.remove_attribute(js, "open", to: "#link-image-menu")
 
-  defp matches_query?(collection, query), do: String.contains?(fold(collection.name), fold(query))
-
-  defp fold(text) do
-    text
-    |> String.trim()
-    |> String.downcase()
-    |> :unicode.characters_to_nfd_binary()
-    |> String.replace(~r/\p{Mn}/u, "")
-  end
-
   attr :image, :map, required: true
   attr :alt, :string, default: nil
 
   defp glow(assigns) do
     ~H"""
     <div class="glow">
-      <div class="bg" style={"background-image:url(#{~p"/images/#{@image.id}"})"} aria-hidden="true">
-      </div>
+      <div class="bg" style={"background-image:url(#{image_src(@image)})"} aria-hidden="true"></div>
       <img
-        src={~p"/images/#{@image.id}"}
+        src={image_src(@image)}
         width={@image.width}
         height={@image.height}
         alt={@alt || ""}
@@ -916,7 +869,7 @@ defmodule AcervoWeb.LinkComponents do
   defp video_media(assigns) do
     ~H"""
     <div class="media">
-      <img src={~p"/images/#{@image.id}"} alt="" />
+      <img src={image_src(@image)} alt="" />
       <div class="play" aria-hidden="true"><i><.brand name={:youtube} /></i></div>
     </div>
     """
@@ -978,46 +931,9 @@ defmodule AcervoWeb.LinkComponents do
     """
   end
 
-  @doc "The link's title, falling back to its host while there is none."
-  def display_title(%{title: title}) when is_binary(title) and title != "", do: title
-  def display_title(link), do: host(link)
-
-  @doc "The link's site name, falling back to its title."
-  def site_title(%{site_name: name}) when is_binary(name) and name != "", do: name
-  def site_title(link), do: display_title(link)
-
-  @doc "The link's host without a leading `www.`."
-  def host(%{canonical_url: url}) do
-    case URI.parse(url) do
-      %URI{host: "www." <> host} -> host
-      %URI{host: host} when is_binary(host) -> host
-      _ -> url
-    end
-  end
-
-  @doc "When the link was published, or saved when that is unknown."
-  def link_date(%{published_at: nil, inserted_at: inserted_at}), do: inserted_at
-  def link_date(%{published_at: published_at}), do: published_at
-
-  @doc ~S'Formats a date for the current locale: "12 out 2026" or "Oct 12, 2026".'
-  def format_date(%{year: year, month: month, day: day}) do
-    case Gettext.get_locale(AcervoWeb.Gettext) do
-      "en" -> "#{Enum.at(@months_en, month - 1)} #{day}, #{year}"
-      _ -> "#{day} #{Enum.at(@months_pt, month - 1)} #{year}"
-    end
-  end
-
-  defp kind(%{status: status}) when status in [:pending, :processing], do: :pending
-  defp kind(%{images: []}), do: :text
-  defp kind(%{source: :youtube}), do: :video
-  defp kind(_link), do: :image
-
-  defp first_image(%{images: [image | _]}), do: image
-  defp first_image(_link), do: nil
-
-  defp meta(link) do
-    [link.author, link.site_name || host(link), format_date(link_date(link))]
-    |> Enum.reject(&(&1 in [nil, ""]))
-    |> Enum.join(" · ")
-  end
+  defdelegate display_title(link), to: LinkPresenter
+  defdelegate site_title(link), to: LinkPresenter
+  defdelegate host(link), to: LinkPresenter
+  defdelegate link_date(link), to: LinkPresenter
+  defdelegate format_date(date), to: Format, as: :date
 end
