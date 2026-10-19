@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-19
+
+Links that know each other.
+
 ### Added
 
 - Related links at the end of each link: the ones you connect by hand, then the most similar ones in your archive. “See more similar” lists them all.
