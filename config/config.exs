@@ -7,6 +7,10 @@
 # General application configuration
 import Config
 
+# The screenshot service (`infra/screenshots/`). Off unless ACERVO_SHOTS_URL
+# and ACERVO_SHOTS_TOKEN are set (see config/runtime.exs).
+config :acervo, Acervo.Library.Screenshots, url: nil, token: nil
+
 # Configure the mailer
 #
 # By default it uses the "Local" adapter which stores the emails
@@ -42,10 +46,6 @@ config :acervo, Oban,
     {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 5)},
     {Oban.Plugins.Cron, crontab: [{"*/10 * * * *", Acervo.Library.ReapStuckCaptures}]}
   ]
-
-# The screenshot service (`infra/screenshots/`). Off unless ACERVO_SHOTS_URL
-# and ACERVO_SHOTS_TOKEN are set (see config/runtime.exs).
-config :acervo, Acervo.Library.Screenshots, url: nil, token: nil
 
 # The model client; tests use `Acervo.FakeAIClient` (see config/test.exs).
 config :acervo, :ai_client, Acervo.AI.Claude

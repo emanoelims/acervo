@@ -20,7 +20,7 @@ defmodule Acervo.Library.Screenshots do
   """
 
   # The service navigates for up to 20 s, then settles and encodes.
-  @receive_timeout to_timeout(second: 60)
+  @receive_timeout to_timeout(minute: 1)
 
   @type reason ::
           :disabled | :busy | :rejected | :unauthorized | {:http, pos_integer()} | {:transport, term()}
@@ -41,8 +41,7 @@ defmodule Acervo.Library.Screenshots do
         decode_body: false,
         receive_timeout: @receive_timeout
       ]
-      |> Keyword.merge(Application.get_env(:acervo, :shots_req_options, []))
-      |> Req.post()
+      |> Req.post(Application.get_env(:acervo, :shots_req_options, []))
       |> handle_response()
     end
   end

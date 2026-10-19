@@ -4,6 +4,7 @@ defmodule Acervo.LibraryFixtures do
   """
 
   alias Acervo.Library
+  alias Acervo.Library.Screenshots
 
   @images_dir Path.expand("images", __DIR__)
 
@@ -16,4 +17,16 @@ defmodule Acervo.LibraryFixtures do
   end
 
   def image_fixture(name), do: File.read!(Path.join(@images_dir, name))
+
+  @doc """
+  Turns the screenshot service on for the test, restoring the config on
+  exit. The config is global: only `async: false` tests may use it. Requests
+  go to `Req.Test` stubs named `Acervo.Library.Screenshots`.
+  """
+  def enable_snapshots(_context \\ %{}) do
+    previous = Application.get_env(:acervo, Screenshots)
+    Application.put_env(:acervo, Screenshots, url: "https://shots.test", token: String.duplicate("t", 64))
+    ExUnit.Callbacks.on_exit(fn -> Application.put_env(:acervo, Screenshots, previous) end)
+    :ok
+  end
 end
