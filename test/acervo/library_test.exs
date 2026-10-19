@@ -73,6 +73,36 @@ defmodule Acervo.LibraryTest do
     end
   end
 
+  describe "save_links/2" do
+    test "saves each url and broadcasts the new links once", %{scope: scope} do
+      existing = link_fixture(scope, "https://example.com/old")
+      assert_receive {:link_created, _}
+
+      assert %{created: [a, b], existing: [old], invalid: ["https://nodot"]} =
+               Library.save_links(scope, [
+                 "https://example.com/a",
+                 "https://example.com/old?utm_source=x",
+                 "https://nodot",
+                 "https://example.com/b"
+               ])
+
+      assert {a.canonical_url, b.canonical_url} == {"https://example.com/a", "https://example.com/b"}
+      assert old.id == existing.id
+      assert length(all_enqueued(worker: CaptureLink)) == 3
+      assert_receive {:links_created, [%Link{id: a_id}, %Link{id: b_id}]}
+      assert {a_id, b_id} == {a.id, b.id}
+      refute_receive {:link_created, _}
+    end
+
+    test "broadcasts nothing when nothing is new", %{scope: scope} do
+      link_fixture(scope, "https://example.com/old")
+      assert_receive {:link_created, _}
+
+      assert %{created: [], existing: [_], invalid: []} = Library.save_links(scope, ["https://example.com/old"])
+      refute_receive {:links_created, _}
+    end
+  end
+
   describe "isolation" do
     test "get_link! raises for another user's link", %{scope: scope} do
       link = link_fixture(scope)
