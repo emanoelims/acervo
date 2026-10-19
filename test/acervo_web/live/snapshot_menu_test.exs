@@ -70,6 +70,11 @@ defmodule AcervoWeb.SnapshotMenuTest do
       refute has_element?(view, "#link-snapshot[disabled]")
     end
 
+    test "the guide mentions it", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/guide")
+      assert has_element?(view, "#guide-previews", "The camera makes a new one.")
+    end
+
     test "another user's failure is not shown", %{conn: conn, scope: scope} do
       link = ready_link(scope)
       other = Acervo.AccountsFixtures.user_scope_fixture()
@@ -90,5 +95,8 @@ defmodule AcervoWeb.SnapshotMenuTest do
     refute has_element?(view, "#link-image-menu")
     refute has_element?(view, "#link-snapshot")
     assert Library.request_snapshot(scope, link) == {:error, :disabled}
+
+    {:ok, guide, _html} = live(conn, ~p"/guide")
+    refute has_element?(guide, "#guide-previews", "The camera makes a new one.")
   end
 end

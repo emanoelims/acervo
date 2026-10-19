@@ -1187,7 +1187,7 @@ defmodule AcervoWeb.ArchiveLive do
         </.column>
 
         <.column :if={@live_action == :guide} id="column-guide" title={gettext("Guide")}>
-          <.guide />
+          <.guide snapshots={@snapshots?} />
         </.column>
 
         <.column :if={@live_action == :import} id="column-import" title={gettext("Import bookmarks")}>

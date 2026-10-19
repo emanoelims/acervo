@@ -129,6 +129,13 @@ deployment policy:
   `openrouter:voyageai/voyage-4-lite`. It must return 1024-dimension vectors,
   or the `links.embedding` column and its migration must change. See
   "Changing the embedding model" below.
+- `ACERVO_SHOTS_URL` and `ACERVO_SHOTS_TOKEN` (optional): the screenshot
+  service's URL and its bearer token, set up as in
+  [`infra/screenshots/README.md`](../infra/screenshots/README.md). With both,
+  links without a preview image get a screenshot of their first screen and
+  the link column can generate a new one; without them that feature is off.
+  Generate the token with `openssl rand -hex 32`, set the same value on the
+  Sprite, and stage it from stdin or a variable, never echoed.
 
 The GitHub encrypted secret `FLY_API_TOKEN` is a deploy token for `acervo-app`,
 valid for one year: `fly tokens create deploy --app acervo-app --expiry 8760h`.
@@ -241,6 +248,23 @@ gets its image description and language; only links still in the inbox get
 collection suggestions. Rerunning it enqueues only links that are still missing
 enrichment. Watch progress with
 `SELECT enrichment_status, count(*) FROM links GROUP BY 1`.
+
+### Snapshot backfill
+
+Once the screenshot service is set up (see Secrets above), enqueue one
+`Acervo.Library.CaptureSnapshot` job per ready web-page link with no card
+image (no preview, screenshot or snapshot), newest first, at the lowest
+priority:
+
+```sh
+fly ssh console -a acervo-app -C "/app/bin/acervo eval 'Acervo.Release.backfill_snapshots()'"
+```
+
+It prints how many links were enqueued, and does nothing while the service is
+off. The running app's `snapshot` queue takes one screenshot at a time; a busy
+service delays the job, and a page that fails is left without an image. A link
+never enriched is enriched once its snapshot ends; enriched links keep their
+enrichment. Rerunning it skips links that already have an image.
 
 ### Search reindex
 

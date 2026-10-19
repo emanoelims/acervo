@@ -15,3 +15,7 @@ OPENROUTER_API_KEY = ""
 # MAIL_FROM = "acervo@yourdomain.com"
 # Optional: the port of the Prometheus metrics endpoint (defaults to 9568)
 # METRICS_PORT = ""
+# Optional: the screenshot service (infra/screenshots/README.md); without both
+# links get no automatic screenshots
+# ACERVO_SHOTS_URL = ""
+# ACERVO_SHOTS_TOKEN = ""
