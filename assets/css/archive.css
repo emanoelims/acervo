@@ -9,7 +9,6 @@
 .column:last-child { border-right: 0; }
 /* The home's columns sit in the row through a wrapper that adds no box. */
 .home-columns { display: contents; }
-.column-head > .column-count { margin-block: 0; color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; line-height: 24px; }
 .column-scroll { height: 100%; overflow-y: auto; padding: 0 32px 140px; scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent; animation: column-in .55s var(--ease) both; }
 .column-root .column-scroll { animation: none; }
 @keyframes column-in { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
@@ -19,6 +18,8 @@
 .column-head :is(h1, h2) { display: flex; min-width: 0; margin: 0; font-size: 18px; font-weight: 600; line-height: 24px; }
 .column-head > :not(h1, h2, .title-form) { flex: none; margin-block: -4px; }
 .column-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A home column's count, on the title's line. */
+.column-head > .column-count { margin-block: 0; color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; line-height: 24px; }
 .head-button { display: grid; flex: none; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 12px; background: color-mix(in oklab, var(--card) 80%, transparent); color: var(--muted); cursor: pointer; box-shadow: 0 0 0 1px var(--separator); transition: color .2s, background-color .2s; }
 .head-button:hover, .popover[open] > .head-button { background: var(--card); color: var(--ink); }
 .head-button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
