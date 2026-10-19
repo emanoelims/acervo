@@ -5,6 +5,17 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Related links at the end of each link: the ones you connect by hand, then the most similar ones in your archive. “See more similar” lists them all.
+- Connect two links from the link icon in a link's actions; remove the connection from its card.
+- Generate notes: a short summary and key points of a link, in Portuguese, editable like your note and found by search.
+- Automatic notes in the settings: never, for long articles or for every link.
+
+### Migration
+
+- Three migrations: `link_relations`, `links.ai_notes`/`ai_notes_at` (rewrites `links` once to add the notes to `search_tsv`) and `users.auto_notes`.
+
 ## [0.14.1] - 2026-10-19
 
 Cleaner captures.

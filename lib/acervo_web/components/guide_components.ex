@@ -108,6 +108,15 @@ defmodule AcervoWeb.GuideComponents do
         </:row>
       </.guide_section>
 
+      <.guide_section id="guide-related" title={gettext("Related")}>
+        <:row icon="lucide-link">
+          {gettext("On a link: connect another one by hand. ✕ on its card disconnects them.")}
+        </:row>
+        <:row icon="lucide-search">
+          {gettext("Similar links show up below on their own. See more similar lists them all.")}
+        </:row>
+      </.guide_section>
+
       <.guide_section id="guide-inbox" title={gettext("Inbox")}>
         <:row icon="lucide-sparkle">
           {gettext("Suggested collections: tap one to add the link. + marks a new one.")}
@@ -132,6 +141,14 @@ defmodule AcervoWeb.GuideComponents do
               keys: "Ctrl+↩"
             )}
           </span>
+        </:row>
+        <:row icon="lucide-sparkle">
+          {gettext(
+            "Generate notes asks Claude for a summary and key points. Edit them like your note."
+          )}
+        </:row>
+        <:row icon="lucide-settings-2">
+          {gettext("Automatic notes, in the dock settings: never, for long articles or always.")}
         </:row>
       </.guide_section>
 
