@@ -78,9 +78,12 @@ export const Floating = {
           items[next]?.focus({preventScroll: true})
           return
         }
-        if (event.key === " " && event.target.closest('[role="menuitem"],[role="option"]')) {
+        // Enter activates buttons and links on its own, but not a label (a
+        // menu row that opens a file picker).
+        const item = event.target.closest('[role="menuitem"],[role="option"]')
+        if (item && (event.key === " " || (event.key === "Enter" && item.matches("label")))) {
           event.preventDefault()
-          event.target.closest('[role="menuitem"],[role="option"]').click()
+          item.click()
           return
         }
         if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {

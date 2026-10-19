@@ -237,6 +237,17 @@ defmodule Acervo.Library.CaptureSnapshotTest do
     end
   end
 
+  describe "Library.request_snapshot/2" do
+    test "enqueues a snapshot that replaces, for the owner only", %{scope: scope} do
+      link = ready_link(scope)
+
+      assert {:ok, %Oban.Job{}} = Library.request_snapshot(scope, link)
+      assert_enqueued(worker: CaptureSnapshot, args: %{"link_id" => link.id, "replace" => true})
+
+      assert Library.request_snapshot(user_scope_fixture(), link) == {:error, :not_found}
+    end
+  end
+
   describe "enqueue/2" do
     test "a requested snapshot does not collapse into an automatic one", %{scope: scope} do
       link = ready_link(scope)

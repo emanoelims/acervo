@@ -7,6 +7,6 @@ License: ISC (see LICENSE). Only the reader and header icons are included.
 The bundled Tailwind plugin also provides lucide-thin-* variants using 1.5px
 strokes for the quiet, consistently sized header controls.
 
-`ban`, `bookmark-plus`, `camera`, `chevron-right`, `circle-check`, `circle-stop`, `compass`, `external-link`, `file-up`, `flame`, `folder`, `folder-plus`, `globe`, `inbox`, `link`, `loader-circle`, `log-out`, `search`, `settings-2` and `zap-off` come from lucide-static 1.55.0
+`ban`, `bookmark-plus`, `camera`, `chevron-right`, `circle-check`, `circle-stop`, `compass`, `external-link`, `file-up`, `flame`, `folder`, `folder-plus`, `globe`, `image-up`, `inbox`, `link`, `loader-circle`, `log-out`, `refresh-cw`, `search`, `settings-2` and `zap-off` come from lucide-static 1.55.0
 (https://cdn.jsdelivr.net/npm/lucide-static@1.55.0/icons/), normalized to the
 same single-line format.

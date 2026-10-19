@@ -219,7 +219,8 @@ defmodule AcervoWeb.LinkComponents do
   its reason), the page description, the editable image description, the
   note and actions.
   The visual, or the globe action when there is no image, patches to
-  `web_path`, which opens or closes the web view column.
+  `web_path`, which opens or closes the web view column. With `snapshots`,
+  the camera action opens a menu that also generates a new image.
   """
   attr :link, :map, required: true
   attr :note_form, Form, required: true
@@ -231,6 +232,8 @@ defmodule AcervoWeb.LinkComponents do
   attr :description_saved, :boolean, default: false, doc: "the same status after an image description save"
   attr :web_path, :string, required: true, doc: "opens the web view column, or closes it when `web_open`"
   attr :web_open, :boolean, default: false
+  attr :snapshots, :boolean, default: false, doc: "the screenshot service is on: the camera opens the image menu"
+  attr :snapshot_busy, :boolean, default: false, doc: "a requested snapshot of the link is running"
 
   def link_detail(assigns) do
     images = assigns.link.images
@@ -441,6 +444,7 @@ defmodule AcervoWeb.LinkComponents do
           <.icon name="lucide-globe" class="size-4" />
         </.link>
         <label
+          :if={not @snapshots}
           id="link-screenshot"
           for={@upload.ref}
           class="round"
@@ -449,6 +453,7 @@ defmodule AcervoWeb.LinkComponents do
         >
           <.icon name="lucide-camera" class="size-4" />
         </label>
+        <.image_menu :if={@snapshots} upload={@upload} busy={@snapshot_busy} />
         <.collection_picker
           link={@link}
           collections={@collections}
@@ -827,6 +832,56 @@ defmodule AcervoWeb.LinkComponents do
   end
 
   defp close_picker(js), do: JS.remove_attribute(js, "open", to: "#link-collections")
+
+  attr :upload, :map, required: true
+  attr :busy, :boolean, required: true
+
+  # The camera's menu: a new image from the screenshot service, which shows
+  # progress while it runs, or one the user uploads.
+  defp image_menu(assigns) do
+    ~H"""
+    <.popover
+      id="link-image-menu"
+      trigger_id="link-image"
+      label={gettext("Image")}
+      menu
+      placement="bottom-start"
+      trigger_class="round"
+      panel_class="dropdown-menu"
+    >
+      <:trigger><.icon name="lucide-camera" class="size-4" /></:trigger>
+      <button
+        id="link-snapshot"
+        type="button"
+        role="menuitem"
+        tabindex="-1"
+        class="dropdown-item"
+        disabled={@busy}
+        aria-busy={to_string(@busy)}
+        phx-click={JS.push("generate_snapshot") |> close_image_menu()}
+      >
+        <.icon :if={not @busy} name="lucide-refresh-cw" class="size-4" />
+        <.icon :if={@busy} name="lucide-loader-circle" class="size-4 motion-safe:animate-spin" />
+        <span class="dropdown-item-label">
+          {if @busy, do: gettext("Generating the image…"), else: gettext("Generate a new image")}
+        </span>
+      </button>
+      <label
+        id="link-screenshot"
+        for={@upload.ref}
+        role="menuitem"
+        tabindex="-1"
+        class="dropdown-item"
+        phx-click={close_image_menu()}
+      >
+        <.icon name="lucide-image-up" class="size-4" />
+        <span class="dropdown-item-label">{gettext("Upload an image")}</span>
+      </label>
+    </.popover>
+    """
+  end
+
+  defp close_image_menu(js \\ %JS{}), do: JS.remove_attribute(js, "open", to: "#link-image-menu")
 
   defp matches_query?(collection, query), do: String.contains?(fold(collection.name), fold(query))
 
