@@ -3,7 +3,7 @@ defmodule Acervo.LibraryTest do
   use Oban.Testing, repo: Acervo.Repo
 
   import Acervo.AccountsFixtures
-  import Acervo.CollectionsFixtures, only: [collection_fixture: 1]
+  import Acervo.CollectionsFixtures, only: [collection_fixture: 1, collection_fixture: 2]
   import Acervo.LibraryFixtures
 
   alias Acervo.AI.EnrichLink
@@ -176,6 +176,81 @@ defmodule Acervo.LibraryTest do
 
       assert [%{images: [%LinkImage{position: 0}]}] = Library.list_links(scope, [])
       assert [_, _] = Library.get_link!(scope, link.id).images
+    end
+  end
+
+  describe "home_columns/2" do
+    test "the inbox first, then non-empty collections in navigation order", %{scope: scope} do
+      inbox = link_fixture(scope)
+      filed = link_fixture(scope)
+      {:ok, _} = Library.mark_triaged(scope, filed)
+      second = collection_fixture(scope, %{name: "B", position: 1})
+      first = collection_fixture(scope, %{name: "A", position: 1})
+      top = collection_fixture(scope, %{name: "Z", position: 0})
+      _empty = collection_fixture(scope, %{name: "Empty", position: 0})
+      for collection <- [second, first, top], do: :ok = Collections.add_link(scope, collection, filed)
+
+      assert [
+               %{kind: :inbox, collection: nil, links: [%{id: inbox_id}], count: 1},
+               %{kind: :collection, collection: %{id: c1}, links: [%{id: l1}], count: 1},
+               %{kind: :collection, collection: %{id: c2}, links: [%{id: l2}]},
+               %{kind: :collection, collection: %{id: c3}, links: [%{id: l3}]}
+             ] = Library.home_columns(scope)
+
+      assert inbox_id == inbox.id
+      assert [c1, c2, c3] == [top.id, first.id, second.id]
+      assert [l1, l2, l3] == [filed.id, filed.id, filed.id]
+    end
+
+    test "each column holds its newest links, with its total count and first image", %{scope: scope} do
+      collection = collection_fixture(scope)
+      [oldest, middle, newest] = links = for _ <- 1..3, do: link_fixture(scope)
+      insert_image(newest, 0, "a")
+      insert_image(newest, 1, "b")
+
+      for {link, day} <- Enum.zip(links, 1..3) do
+        :ok = Collections.add_link(scope, collection, link)
+        {:ok, at} = DateTime.new(Date.new!(2020, 1, day), ~T[00:00:00])
+        Repo.update_all(from(l in Link, where: l.id == ^link.id), set: [inserted_at: at])
+      end
+
+      Repo.update_all(Link, set: [triaged_at: DateTime.utc_now(:second)])
+
+      assert [%{links: [%{id: a, images: [%LinkImage{position: 0}]}, %{id: b}], count: 3}] =
+               Library.home_columns(scope, per_column: 2)
+
+      assert [a, b] == [newest.id, middle.id]
+      refute oldest.id in [a, b]
+    end
+
+    test "leaves the inbox out when nothing waits", %{scope: scope} do
+      link = link_fixture(scope)
+      {:ok, _} = Library.mark_triaged(scope, link)
+
+      assert Library.home_columns(scope) == []
+    end
+
+    test "is scoped to the user", %{scope: scope} do
+      other = user_scope_fixture()
+      theirs = link_fixture(other)
+      their_collection = collection_fixture(other)
+      :ok = Collections.add_link(other, their_collection, theirs)
+
+      assert Library.home_columns(scope) == []
+      assert [%{kind: :inbox}, %{kind: :collection}] = Library.home_columns(other)
+    end
+
+    test "`only` reloads just the given columns", %{scope: scope} do
+      link = link_fixture(scope)
+      a = collection_fixture(scope)
+      b = collection_fixture(scope)
+      :ok = Collections.add_link(scope, a, link)
+      :ok = Collections.add_link(scope, b, link)
+
+      assert [%{collection: %{id: id}}] = Library.home_columns(scope, only: [b.id])
+      assert id == b.id
+      assert [%{kind: :inbox}] = Library.home_columns(scope, only: [:inbox])
+      assert Library.home_columns(scope, only: []) == []
     end
   end
 

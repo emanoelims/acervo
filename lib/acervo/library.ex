@@ -20,6 +20,7 @@ defmodule Acervo.Library do
 
   alias Acervo.Accounts.Scope
   alias Acervo.AI.EnrichLink
+  alias Acervo.Collections.Collection
   alias Acervo.Collections.CollectionLink
   alias Acervo.Collections.Suggestion
   alias Acervo.Library.CaptureLink
@@ -38,6 +39,7 @@ defmodule Acervo.Library do
   alias Ecto.Multi
 
   @default_limit 60
+  @home_per_column 12
   # Owner edits wait this many seconds before embedding, so a burst of them
   # collapses into one job.
   @embed_delay 5
@@ -186,6 +188,100 @@ defmodule Acervo.Library do
 
     for id <- ids, link = by_id[id], do: link
   end
+
+  @type home_column :: %{
+          kind: :inbox | :collection,
+          collection: Collection.t() | nil,
+          links: [Link.t()],
+          count: pos_integer()
+        }
+
+  @doc """
+  The home's columns: the inbox when it has links, then each collection that
+  has links, ordered like `Acervo.Collections.list_collections/1`. Each column
+  carries its newest links (newest first, as `list_links/2` orders them) and
+  its total count. A link in two collections appears in both.
+
+  The collections' links come from one query, ranked per collection by a
+  window function, and carry only their first image, all the compact card
+  shows; the inbox's are `list_links/2`'s.
+
+  ## Options
+
+    * `:per_column` - links per column, defaults to #{@home_per_column}
+    * `:only` - reloads just these columns: `:inbox` and collection ids.
+      Columns left out, or empty, are not returned.
+  """
+  @spec home_columns(Scope.t(), keyword()) :: [home_column()]
+  def home_columns(%Scope{} = scope, opts \\ []) do
+    opts = Keyword.validate!(opts, per_column: @home_per_column, only: :all)
+    {inbox?, collection_ids} = home_targets(opts[:only])
+
+    inbox_column(scope, inbox?, opts[:per_column]) ++ collection_columns(scope, collection_ids, opts[:per_column])
+  end
+
+  defp home_targets(:all), do: {true, :all}
+  defp home_targets(only) when is_list(only), do: {:inbox in only, Enum.filter(only, &is_binary/1)}
+
+  defp inbox_column(_scope, false = _inbox?, _per_column), do: []
+
+  defp inbox_column(scope, true = _inbox?, per_column) do
+    case count_inbox(scope) do
+      0 ->
+        []
+
+      count ->
+        [%{kind: :inbox, collection: nil, links: list_links(scope, filter: :inbox, limit: per_column), count: count}]
+    end
+  end
+
+  defp collection_columns(_scope, [], _per_column), do: []
+
+  defp collection_columns(%Scope{user: user}, collection_ids, per_column) do
+    ranked =
+      only_collections(
+        from(cl in CollectionLink,
+          join: l in Link,
+          on: l.id == cl.link_id,
+          join: c in Collection,
+          on: c.id == cl.collection_id,
+          where: c.user_id == ^user.id and l.user_id == ^user.id,
+          windows: [newest: [partition_by: cl.collection_id, order_by: [desc: l.inserted_at, desc: l.id]]],
+          select: %{
+            collection_id: cl.collection_id,
+            link_id: cl.link_id,
+            rank: over(row_number(), :newest),
+            total: over(count(), partition_by: cl.collection_id)
+          }
+        ),
+        collection_ids
+      )
+
+    rows =
+      Repo.all(
+        from r in subquery(ranked),
+          join: c in Collection,
+          on: c.id == r.collection_id,
+          join: l in Link,
+          on: l.id == r.link_id,
+          where: r.rank <= ^per_column,
+          order_by: [asc: c.position, asc: c.name, asc: c.id, asc: r.rank],
+          select: {c, l, r.total}
+      )
+
+    first_image = from i in images_query(), where: i.position == 0
+    links = rows |> Enum.map(&elem(&1, 1)) |> Repo.preload(images: first_image)
+
+    rows
+    |> Enum.zip(links)
+    |> Enum.chunk_by(fn {{collection, _link, _total}, _preloaded} -> collection.id end)
+    |> Enum.map(fn [{{collection, _link, total}, _preloaded} | _rest] = chunk ->
+      %{kind: :collection, collection: collection, links: Enum.map(chunk, &elem(&1, 1)), count: total}
+    end)
+  end
+
+  defp only_collections(query, :all), do: query
+  defp only_collections(query, ids), do: where(query, [cl], cl.collection_id in ^ids)
 
   defp filter(query, :all), do: query
   defp filter(query, :inbox), do: where(query, [l], is_nil(l.triaged_at))
