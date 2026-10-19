@@ -281,30 +281,15 @@ defmodule AcervoWeb.LinkComponents do
         phx-hook=".ScreenshotPaste"
       >
         <.live_file_input upload={@upload} class="sr-only" tabindex="-1" />
-        <label
+        <.drop_zone
           :if={@drop?}
           id="screenshot-drop"
-          for={@upload.ref}
-          class={["shot-drop", @upload.entries != [] && "is-busy"]}
-          phx-drop-target={@upload.ref}
-        >
-          <.icon name="lucide-camera" class="size-[18px]" />
-          <span class="shot-hint">{gettext("Drop or paste a screenshot")}</span>
-          <span :for={entry <- @upload.entries} class="shot-bar" aria-hidden="true">
-            <i style={"width: #{entry.progress}%"}></i>
-          </span>
-          <span
-            :for={
-              error <-
-                upload_errors(@upload) ++ Enum.flat_map(@upload.entries, &upload_errors(@upload, &1))
-            }
-            id="screenshot-error"
-            class="shot-error"
-            role="alert"
-          >
-            {upload_error(error)}
-          </span>
-        </label>
+          upload={@upload}
+          icon="lucide-camera"
+          hint={gettext("Drop or paste a screenshot")}
+          error_id="screenshot-error"
+          error_message={&upload_error/1}
+        />
       </.form>
 
       <p class="meta">{@meta}</p>
@@ -393,79 +378,60 @@ defmodule AcervoWeb.LinkComponents do
       </div>
 
       <div class="acts">
-        <a
+        <.icon_button
           id="link-open"
+          icon="lucide-external-link"
+          label={gettext("Open original")}
           href={Embed.original_url(@link)}
           target="_blank"
           rel="noopener noreferrer"
-          class="round"
-          title={gettext("Open original")}
-          aria-label={gettext("Open original")}
-        >
-          <.icon name="lucide-external-link" class="size-4" />
-        </a>
-        <.link
+        />
+        <.icon_button
           :if={@kind in [:text, :pending]}
           id="link-web"
+          icon="lucide-globe"
+          label={web_label(@web_open)}
+          active={@web_open}
           patch={@web_path}
-          class={["round", @web_open && "is-active"]}
-          title={web_label(@web_open)}
-          aria-label={web_label(@web_open)}
           aria-expanded={to_string(@web_open)}
-        >
-          <.icon name="lucide-globe" class="size-4" />
-        </.link>
-        <label
+        />
+        <.icon_button
           :if={not @snapshots}
           id="link-screenshot"
+          icon="lucide-camera"
+          label={gettext("Add a screenshot")}
           for={@upload.ref}
-          class="round"
-          title={gettext("Add a screenshot")}
-          aria-label={gettext("Add a screenshot")}
-        >
-          <.icon name="lucide-camera" class="size-4" />
-        </label>
+        />
         <.image_menu :if={@snapshots} upload={@upload} busy={@snapshot_busy} />
         <.collection_picker
           link={@link}
           collections={@collections}
           filter={@collection_filter}
         />
-        <button
+        <.icon_button
           :if={is_nil(@link.triaged_at) and length(@link.suggestions) > 1}
           id="link-accept-all"
-          type="button"
-          class="round"
+          icon="lucide-check-check"
+          label={gettext("Accept all and finish")}
           phx-click="accept_all"
           phx-value-id={@link.id}
-          title={gettext("Accept all and finish")}
-          aria-label={gettext("Accept all and finish")}
-        >
-          <.icon name="lucide-check-check" class="size-4" />
-        </button>
-        <button
+        />
+        <.icon_button
           :if={is_nil(@link.triaged_at)}
           id="link-done"
-          type="button"
-          class="round"
+          icon="lucide-check"
+          label={gettext("Done")}
           phx-click="finish"
           phx-value-id={@link.id}
-          title={gettext("Done")}
-          aria-label={gettext("Done")}
-        >
-          <.icon name="lucide-check" class="size-4" />
-        </button>
-        <button
+        />
+        <.icon_button
           id="link-delete"
-          type="button"
-          class="round round-danger"
+          icon="lucide-trash-2"
+          label={gettext("Delete")}
+          danger
           phx-click="delete"
           data-confirm={gettext("Delete this link?")}
-          title={gettext("Delete")}
-          aria-label={gettext("Delete")}
-        >
-          <.icon name="lucide-trash-2" class="size-4" />
-        </button>
+        />
       </div>
     </div>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".SubmitShortcut">
