@@ -357,7 +357,7 @@ defmodule AcervoWeb.ArchiveComponents do
     >
       <div class="appearance-row">
         <span class="auto-notes-glyph" title={gettext("Automatic notes")}>
-          <.icon name="lucide-sparkles" class="size-4" />
+          <.icon name="lucide-sparkle" class="size-4" />
         </span>
         <button
           :for={{value, label, hint} <- @options}

@@ -444,7 +444,7 @@ defmodule AcervoWeb.LinkComponents do
             class="note"
             phx-submit="save_ai_notes"
           >
-            <.icon name="lucide-sparkles" class="edit-glyph size-3" />
+            <.icon name="lucide-sparkle" class="edit-glyph size-[11px]" />
             <.input
               type="textarea"
               field={@ai_notes_form[:ai_notes]}
@@ -469,7 +469,7 @@ defmodule AcervoWeb.LinkComponents do
           aria-busy={to_string(@notes_busy)}
           phx-click="generate_notes"
         >
-          <.icon :if={not @notes_busy} name="lucide-sparkles" class="size-3.5" />
+          <.icon :if={not @notes_busy} name="lucide-sparkle" class="size-3.5" />
           <.icon
             :if={@notes_busy}
             name="lucide-loader-circle"
