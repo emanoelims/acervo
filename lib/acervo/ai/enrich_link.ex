@@ -60,12 +60,14 @@ defmodule Acervo.AI.EnrichLink do
   can finish. When a job for the link is already waiting, Oban returns it
   with `conflict?: true` and the link is still `:pending`. Call it inside the
   transaction that changed what the model reads, if there is one.
+
+  `:priority` (0 by default) is the job's Oban priority.
   """
-  @spec enqueue(Link.t()) :: {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t() | term()}
-  def enqueue(%Link{id: link_id}) do
+  @spec enqueue(Link.t(), keyword()) :: {:ok, Oban.Job.t()} | {:error, Ecto.Changeset.t() | term()}
+  def enqueue(%Link{id: link_id}, opts \\ []) do
     Repo.transact(fn ->
       Repo.update_all(from(l in Link, where: l.id == ^link_id), set: [enrichment_status: :pending])
-      Oban.insert(new(%{"link_id" => link_id}))
+      Oban.insert(new(%{"link_id" => link_id}, priority: Keyword.get(opts, :priority, 0)))
     end)
   end
 

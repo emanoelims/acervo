@@ -62,12 +62,13 @@ defmodule Acervo.Library.CaptureLink do
   # No status check here: a link left `:processing` by a killed run is
   # captured again, like any retry.
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"link_id" => link_id}, attempt: attempt, max_attempts: max_attempts}) do
+  def perform(%Oban.Job{args: %{"link_id" => link_id}, attempt: attempt, max_attempts: max_attempts} = job) do
     deadline = System.monotonic_time(:millisecond) + @content_ms
+    run = %{final_attempt?: attempt >= max_attempts, deadline: deadline, priority: job.priority || 0}
 
     case load(link_id) do
       {:ok, scope, link} ->
-        result = capture(scope, link, %{final_attempt?: attempt >= max_attempts, deadline: deadline})
+        result = capture(scope, link, run)
         Library.broadcast_updated(scope, link.id)
         result
 
@@ -129,8 +130,10 @@ defmodule Acervo.Library.CaptureLink do
   defp apply_capture(scope, link, %Capture{} = capture, run) do
     store_images(scope, link, capture.image_urls)
 
+    # A page without a title keeps the one the link came with (an imported
+    # bookmark's).
     attrs = %{
-      title: capture.title,
+      title: capture.title || link.title,
       description: capture.description,
       author: capture.author,
       site_name: capture.site_name,
@@ -145,7 +148,7 @@ defmodule Acervo.Library.CaptureLink do
     |> Link.capture_changeset(Map.merge(attrs, resolved_url(capture)))
     |> save()
     |> tap(&store_content(scope, &1, capture, run))
-    |> tap(&enrich/1)
+    |> tap(&enrich(&1, run.priority))
     |> finish(:ok)
   end
 
@@ -153,15 +156,16 @@ defmodule Acervo.Library.CaptureLink do
 
   # Once per link: a re-capture, or a retry after the link was saved, does
   # not pay for the model again. A screenshot enqueues it on its own.
-  # Enrichment embeds the link when it finishes; without it, embed now.
-  defp enrich({:ok, %Link{enriched_at: nil} = link}) do
-    case EnrichLink.enqueue(link) do
+  # Enrichment embeds the link when it finishes; without it, embed now. It
+  # runs at the capture's priority, so imported links stay behind others.
+  defp enrich({:ok, %Link{enriched_at: nil} = link}, priority) do
+    case EnrichLink.enqueue(link, priority: priority) do
       {:ok, _job} -> :ok
       {:error, reason} -> Logger.error("could not enqueue enrichment of link #{link.id}: #{inspect(reason)}")
     end
   end
 
-  defp enrich(saved), do: embed(saved)
+  defp enrich(saved, _priority), do: embed(saved)
 
   # Nothing changed costs nothing: `EmbedLink` skips an unchanged document.
   defp embed({:ok, %Link{} = link}) do

@@ -94,6 +94,15 @@ defmodule Acervo.Library.CaptureLinkTest do
       assert_receive {:link_updated, %Link{status: :ready, images: [_, _]}}
     end
 
+    test "a page without a title keeps the link's own", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+      link = link |> Ecto.Changeset.change(title: "My bookmark") |> Repo.update!()
+      stub_site("<!doctype html><html><body><main><p>No title here.</p></main></body></html>", %{})
+
+      assert :ok = perform(link)
+      assert Repo.get!(Link, link.id).title == "My bookmark"
+    end
+
     test "stores whether the page allows framing", %{scope: scope} do
       open = link_fixture(scope, "https://example.com/posts/bees")
       stub_site(page_html([]), %{})
@@ -308,6 +317,15 @@ defmodule Acervo.Library.CaptureLinkTest do
 
       assert_enqueued(worker: EnrichLink, args: %{"link_id" => link.id})
       assert %Link{enrichment_status: :pending} = Repo.get!(Link, link.id)
+    end
+
+    test "it runs at the capture's priority, so imported links wait behind others", %{scope: scope} do
+      link = link_fixture(scope, "https://example.com/posts/bees")
+      stub_site(page_html([]), %{})
+
+      assert :ok = perform(link, priority: 2)
+
+      assert_enqueued(worker: EnrichLink, args: %{"link_id" => link.id}, priority: 2)
     end
 
     test "a blocked or failed capture does not", %{scope: scope} do

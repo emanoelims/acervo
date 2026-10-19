@@ -82,7 +82,7 @@ defmodule AcervoWeb.Metrics do
 
   @doc "Every metric exported at `/metrics`."
   @spec metrics() :: [Telemetry.Metrics.t()]
-  def metrics, do: ai() ++ search() ++ jobs() ++ web() ++ repo() ++ vm()
+  def metrics, do: ai() ++ search() ++ imports() ++ jobs() ++ web() ++ repo() ++ vm()
 
   defp ai do
     event = [:acervo, :ai, :call, :stop]
@@ -121,6 +121,17 @@ defmodule AcervoWeb.Metrics do
         unit: {:native, :second},
         reporter_options: [buckets: @search_buckets]
       )
+    ]
+  end
+
+  # One event per bookmarks import that ends: done, cancelled or failed.
+  defp imports do
+    event = [:acervo, :bookmark_import, :stop]
+
+    [
+      counter("acervo.bookmark_imports.total", event_name: event, tags: [:status]),
+      sum("acervo.bookmark_imports.created.total", event_name: event, measurement: :created),
+      sum("acervo.bookmark_imports.existing.total", event_name: event, measurement: :existing)
     ]
   end
 
