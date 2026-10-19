@@ -12,10 +12,6 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Generate notes: a short summary and key points of a link, in Portuguese, editable like your note and found by search.
 - Automatic notes in the settings: never, for long articles or for every link.
 
-### Migration
-
-- Three migrations: `link_relations`, `links.ai_notes`/`ai_notes_at` (rewrites `links` once to add the notes to `search_tsv`) and `users.auto_notes`.
-
 ## [0.14.1] - 2026-10-19
 
 Cleaner captures.
