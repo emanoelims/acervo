@@ -146,6 +146,7 @@ defmodule AcervoWeb.StyleguideLive do
       .sg-stage .float, .sg-stage .flash-stack { position: relative; inset: auto; z-index: auto; transform: none; animation: none; }
       .sg-stage .float { width: min(560px, 100%); }
       .sg-columns { height: 340px; overflow: hidden; border-radius: 20px; background: var(--paper); box-shadow: 0 0 0 1px var(--separator); }
+      .sg-columns-home { width: 320px; max-width: 100%; height: 860px; }
       .sg-columns-app { width: calc(100vw - 64px); height: 860px; margin-left: calc(50% - 50vw + 32px); }
       .sg-skeleton { width: 320px; border-radius: 16px; }
       .sg-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0 24px; }
@@ -614,6 +615,32 @@ defmodule AcervoWeb.StyleguideLive do
                 </.column>
                 <.column id="sg-column-web" class="column-web" title={site_title(@links.text)}>
                   <.web_view link={@links.text} />
+                </.column>
+              </div>
+            </div>
+          </.specimen>
+
+          <.specimen
+            id="sg-home"
+            title="Home column"
+            usage={
+              ~S|<.column id="…" title="…" narrow reveal={false}> · <.card link={…} patch={…} compact />|
+            }
+          >
+            <div class="sg-columns sg-columns-home">
+              <div class="columns">
+                <.column id="sg-home-design" title="Design" narrow reveal={false}>
+                  <:actions><span class="column-count">24</span></:actions>
+                  <div class="cards cards-compact">
+                    <.card
+                      :for={key <- [:image, :video, :text, :pending]}
+                      id={"sg-compact-#{key}"}
+                      link={@links[key]}
+                      patch={link_patch(key)}
+                      compact
+                    />
+                    <.link class="see-all" patch={link_patch(:image)}>See all (24)</.link>
+                  </div>
                 </.column>
               </div>
             </div>

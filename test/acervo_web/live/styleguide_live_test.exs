@@ -9,7 +9,7 @@ defmodule AcervoWeb.StyleguideLiveTest do
     assert html =~ "Styleguide"
 
     for id <-
-          ~w(sg-colors sg-type sg-icons sg-buttons sg-chips sg-nav sg-column sg-popover sg-inputs sg-float sg-drop sg-flash sg-empty sg-app) do
+          ~w(sg-colors sg-type sg-icons sg-buttons sg-chips sg-nav sg-column sg-popover sg-inputs sg-float sg-drop sg-flash sg-empty sg-app sg-home) do
       assert has_element?(view, "##{id}")
     end
 
@@ -23,6 +23,14 @@ defmodule AcervoWeb.StyleguideLiveTest do
     assert has_element?(view, "#sg-column-link #link-detail")
     assert has_element?(view, "#sg-column-web #web-reader")
     assert has_element?(view, "#dock")
+
+    # The home column: compact cards of every kind and "See all".
+    for kind <- ~w(pending video image text) do
+      assert has_element?(view, "#sg-home-design a.card-compact.card-#{kind}")
+    end
+
+    assert has_element?(view, "#sg-home-design .column-count", "24")
+    assert has_element?(view, "#sg-home-design .see-all")
   end
 
   test "images come from the examples, not from /images", %{conn: conn} do
