@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-19
+
+Every link gets a picture.
+
 ### Added
 
 - Pages without a preview image get a picture of their first screen, also when the site blocks the usual capture.
@@ -12,7 +16,7 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Every card image has the same shape, so the grid looks even.
+- Every card image has the same shape, so lists look even.
 
 ## [0.12.1] - 2026-10-19
 
