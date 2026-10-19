@@ -1,5 +1,6 @@
 defmodule AcervoWeb.AddLinkTest do
   use AcervoWeb.ConnCase, async: true
+  use Oban.Testing, repo: Acervo.Repo
 
   import Acervo.LibraryFixtures
   import Phoenix.LiveViewTest
@@ -123,6 +124,94 @@ defmodule AcervoWeb.AddLinkTest do
       render_hook(view, "add_link", %{"url" => %{"a" => "b"}})
 
       refute has_element?(view, "#add-pill")
+      assert Library.list_links(scope, filter: :all) == []
+    end
+  end
+
+  describe "pasting several links" do
+    @list """
+    Read later:
+    https://example.com/one
+    https://example.com/two,
+    and https://example.com/three.
+    """
+
+    defp paste(view, text), do: view |> element("#columns") |> render_hook("add_link", %{"url" => text})
+
+    test "saves every link, stays put and shows one summary", %{conn: conn, scope: scope} do
+      {:ok, view, _html} = live(conn, ~p"/inbox")
+
+      paste(view, @list)
+
+      links = Library.list_links(scope, filter: :all)
+
+      assert links |> Enum.map(& &1.canonical_url) |> Enum.sort() ==
+               ["https://example.com/one", "https://example.com/three", "https://example.com/two"]
+
+      assert length(all_enqueued(worker: Acervo.Library.CaptureLink)) == 3
+      html = render(view)
+      assert html =~ "3 links saved"
+      refute html =~ "already in your archive"
+      refute html =~ "Saved."
+      assert has_element?(view, "#nav-inbox .nav-count", "3")
+      for link <- links, do: assert(has_element?(view, "#column-inbox #links #link-#{link.id}"))
+      refute has_element?(view, "#column-link")
+      refute has_element?(view, "#add-pill")
+    end
+
+    test "counts the links already saved apart from the new ones", %{conn: conn, scope: scope} do
+      saved = link_fixture(scope, "https://example.com/two")
+      {:ok, _} = Library.mark_triaged(scope, saved)
+
+      {:ok, view, _html} = live(conn, ~p"/inbox")
+
+      paste(view, @list <> "https://nodot\n")
+
+      assert Library.count_links(scope) == 3
+      assert render(view) =~ "2 links saved · 1 already in your archive · 1 invalid"
+      assert has_element?(view, "#nav-inbox .nav-count", "2")
+      refute has_element?(view, "#column-inbox #links #link-#{saved.id}")
+    end
+
+    test "a list pasted in the + field is saved the same way", %{conn: conn, scope: scope} do
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      view
+      |> open_pill()
+      |> form("#add-link-form", %{"url" => "https://example.com/a https://example.com/b"})
+      |> render_submit()
+
+      assert Library.count_links(scope) == 2
+      assert render(view) =~ "2 links saved"
+      refute has_element?(view, "#add-pill")
+    end
+
+    test "text with a single link saves and opens it, as before", %{conn: conn, scope: scope} do
+      {:ok, view, _html} = live(conn, ~p"/all")
+
+      paste(view, "look at this: https://example.com/only-one, and twice <https://example.com/only-one>")
+
+      link = only_link(scope)
+      assert link.url == "https://example.com/only-one"
+      assert_patch(view, ~p"/inbox/l/#{link.id}")
+      assert render(view) =~ "Saved."
+    end
+
+    test "only invalid links show the error in the pill", %{conn: conn, scope: scope} do
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      paste(view, "https://nodot https://another-nodot")
+
+      assert has_element?(view, "#add-pill .field-error", "That doesn't look like a link.")
+      assert Library.list_links(scope, filter: :all) == []
+    end
+
+    test "too much text shows the error and saves nothing", %{conn: conn, scope: scope} do
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      paste(view, String.duplicate("https://example.com/x ", 3000))
+
+      assert has_element?(view, "#add-pill .field-error", "That doesn't look like a link.")
       assert Library.list_links(scope, filter: :all) == []
     end
   end

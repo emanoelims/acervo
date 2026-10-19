@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Paste several links at once; every link in the pasted text is saved.
+
 ## [0.10.0] - 2026-10-18
 
 See how Acervo is doing in Grafana.

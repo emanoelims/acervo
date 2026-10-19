@@ -13,10 +13,19 @@ uses them. Their names start with a dot.
 ## Save
 
 - **Paste anywhere.** Paste a link while no field has focus to save it. Only
-  text that starts with `http://`, `https://` or `www.` counts. The `.Shortcuts`
-  hook on `#columns` in `ArchiveLive` pushes `add_link`.
+  links that start with `http://`, `https://` or `www.` count. The `.Shortcuts`
+  hook on `#columns` in `ArchiveLive` pushes the pasted text (up to 20,000
+  characters) as `add_link`.
 - **Dock +.** The dock's **+** (`#dock-add`) opens the add pill (`add_pill/1`,
   `#add-link-form`). Press ↩ to save. The pill also accepts bare hosts.
+- **Several at once.** Every link in the pasted or submitted text is saved:
+  a list from notes, a chat message, markdown. `Acervo.Library.URL.extract_all/1`
+  finds them (separated by lines, spaces or commas, inside `<…>` or
+  `[text](…)`, without trailing punctuation), drops duplicates and keeps at
+  most 50. A single link opens as before; several stay where you are, show one
+  summary (“3 links saved · 1 already in your archive”) and stream into the
+  inbox. `Library.save_links/2` broadcasts them once, as `{:links_created,
+  links}`. A list pasted in the + field is saved the same way.
 - **Inbox first.** New links land in the inbox (`Acervo.Library.save_link/2`).
   `Acervo.Library.CaptureLink` (Oban) captures the preview in the background,
   through `Acervo.Library.Capture` and the extractors in
