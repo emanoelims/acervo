@@ -33,6 +33,45 @@ uses them. Their names start with a dot.
 - **Duplicates.** Saving a link you already have opens the existing one:
   `save_link/2` returns `:existing`.
 
+## Import bookmarks
+
+- **Where.** “Import bookmarks” in the dock settings (`#dock-import`) opens
+  `/import`, a column (`#column-import`) rendered by
+  `AcervoWeb.ImportComponent`. It shows short export steps for Chromium
+  browsers (Chrome, Edge, Brave, Arc: bookmark manager → ⋮ → Export
+  bookmarks), Safari (File → Export → Bookmarks…) and Firefox (Bookmarks →
+  Manage bookmarks → Import and Backup → Export Bookmarks to HTML…).
+- **Upload.** One `.html` file of at most 10 MB, by LiveView upload
+  (`#import-drop`). It is parsed in memory and never stored.
+  `Acervo.Library.Bookmarks.parse/2` reads the Netscape Bookmark File format
+  with `LazyHTML`: http(s) links only, normalized like saved links, each once,
+  at most 5,000 (the preview says when more were left out). Browser root
+  containers (bookmarks bar, Other bookmarks, Firefox's menu and toolbar,
+  Safari's Favorites) aren't folders: their own links are loose. Folder names
+  are cut to 80 characters with control characters removed.
+- **Preview.** Totals (links, already saved, new: one query over canonical
+  and resolved URLs), then each folder by path with its link count and a
+  three-way choice: collection (the default; named after the folder, filling
+  an existing collection with the same slug), inbox (the default for loose
+  links and Safari's Reading List) or skip. A line estimates the AI cost
+  (new links × the user's average enrichment cost over 30 days, or $0.02,
+  plus embeddings) and how long it takes. Nothing is saved before Import
+  (`#import-start`).
+- **Import.** `Acervo.Library.BookmarkImports.start/3` stores a
+  `bookmark_imports` row with the entries to save, and
+  `Acervo.Library.ImportBookmarks` (Oban, queue `import`) saves them 50 at a
+  time, each batch in one transaction with its progress. New links keep the
+  bookmark's title and date (their `inserted_at`); links going to a
+  collection skip the inbox. Saved links aren't duplicated but join their
+  folder's collection. Captures are spread out (3 s apart, 20 s per host,
+  `Bookmarks.schedule/2`) and run, with their enrichment, behind links saved
+  by hand. Enrichment uses the configured model.
+- **Progress.** `{:import_updated, import}` on the user's topic drives a
+  quiet bar (`#import-progress`) with done/total; the inbox and collections
+  update live. The import runs on when the page closes; reopening `/import`
+  shows the running or last import. Stop (`#import-stop`) drops the entries
+  not yet saved.
+
 ## Previews and screenshots
 
 - **Cards.** Web pages, YouTube, X and Instagram each get a card:
@@ -217,6 +256,7 @@ uses them. Their names start with a dot.
   - theme, accent and font, saved per browser by `assets/js/appearance.js`;
   - PT/EN, through `AcervoWeb.LocaleController`;
   - “Shortcuts and features” (`#dock-guide`), which opens the guide;
+  - “Import bookmarks” (`#dock-import`), which opens the import column;
   - log out.
 
 ## Keyboard shortcuts

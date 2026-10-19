@@ -167,6 +167,9 @@ defmodule AcervoWeb.ArchiveComponents do
         <.link id="dock-guide" patch={~p"/guide"} class="dock-panel-row">
           <.icon name="lucide-keyboard" class="size-4" /><span>{gettext("Shortcuts and features")}</span>
         </.link>
+        <.link id="dock-import" patch={~p"/import"} class="dock-panel-row">
+          <.icon name="lucide-bookmark-plus" class="size-4" /><span>{gettext("Import bookmarks")}</span>
+        </.link>
         <.link id="dock-log-out" href={~p"/users/log-out"} method="delete" class="dock-panel-row">
           <.icon name="lucide-log-out" class="size-4" /><span>{gettext("Log out")}</span>
         </.link>

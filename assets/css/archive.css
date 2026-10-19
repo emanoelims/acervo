@@ -128,6 +128,44 @@
 .guide-keys kbd { display: inline-block; min-width: 24px; padding: 0 6px; border-radius: 6px; color: var(--muted); font: 12px/22px var(--font-ui); text-align: center; box-shadow: 0 0 0 1px var(--line); }
 .guide-keys kbd + kbd { margin-left: 4px; }
 
+/* The import column: export help, the drop zone, the folder choices and the
+   progress of the running or last import. */
+.import-help { margin-bottom: 8px; }
+.import-help strong { font-weight: 500; color: var(--ink); }
+.import-path { display: block; color: var(--muted); font-size: 14px; line-height: 22px; }
+.import-drop { margin-top: 24px; }
+.import-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 20px; }
+.import-stats > div { padding: 12px 14px; border-radius: 14px; background: var(--soft); }
+.import-stats dt { color: var(--muted); font-size: 13px; line-height: 18px; }
+.import-stats dd { margin: 2px 0 0; color: var(--ink); font-size: 20px; font-weight: 600; line-height: 28px; font-variant-numeric: tabular-nums; }
+.import-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 16px; color: var(--muted); font-size: 14px; line-height: 22px; }
+.import-note .lucide-info { margin-top: 3px; }
+.import-folders { display: grid; margin: 0 -10px 20px; padding: 0; list-style: none; }
+.import-folder { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 10px; border-radius: 12px; transition: background-color .14s; }
+.import-folder:hover { background: color-mix(in oklab, var(--soft) 60%, transparent); }
+.import-folder-icon { color: var(--faint); }
+.import-folder-name { flex: 1; min-width: 0; overflow: hidden; color: var(--body); font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.import-folder-count { color: var(--faint); font-size: 13px; font-variant-numeric: tabular-nums; }
+.import-choice { display: flex; flex: none; gap: 2px; padding: 2px; border-radius: 10px; box-shadow: 0 0 0 1px var(--line); }
+.import-choice-button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--faint); cursor: pointer; transition: background-color .14s, color .14s; }
+.import-choice-button:hover:not(:disabled) { color: var(--body); }
+.import-choice-button[aria-pressed=true] { background: var(--soft); color: var(--ink); }
+.import-choice-button:disabled { opacity: .3; cursor: not-allowed; }
+.import-choice-button:focus-visible { outline: 1px solid var(--rule-strong); outline-offset: -1px; }
+.import-estimate { display: flex; align-items: center; gap: 8px; margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+.import-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.import-progress { margin-bottom: 32px; }
+.import-status { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; color: var(--ink); font-size: 16px; font-weight: 500; }
+.import-status-icon { color: var(--muted); }
+.is-running .import-status-icon { animation: import-spin 1.1s linear infinite; }
+@keyframes import-spin { to { transform: rotate(360deg); } }
+.is-done .import-status-icon { color: var(--ink); }
+.import-stop { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding: 4px 10px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 400; cursor: pointer; box-shadow: 0 0 0 1px var(--line); transition: color .14s, background-color .14s; }
+.import-stop:hover { background: var(--soft); color: var(--ink); }
+.import-bar { height: 4px; overflow: hidden; border-radius: 999px; background: var(--line); }
+.import-bar i { display: block; height: 100%; border-radius: inherit; background: var(--ink); transition: width .4s var(--ease); }
+.import-counts { margin: 10px 0 8px; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+
 /* Narrow screens: the fixed widths already show fewer columns; at phone width
    each column takes the whole viewport and the row snaps column by column. */
 @media (max-width: 640px) {
@@ -138,6 +176,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .column-scroll, .float, .float.is-leaving, .float-icon.is-loading { animation: none; }
+  .column-scroll, .float, .float.is-leaving, .float-icon.is-loading, .is-running .import-status-icon { animation: none; }
   .column-up, .dock-item, .swatch, .dot, .font-chip, .lang-chip, .nav-add, .nav-item, .head-button { transition: none; }
 }
