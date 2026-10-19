@@ -7,11 +7,16 @@ defmodule Acervo.Release do
 
   alias Acervo.AI
   alias Acervo.AI.EnrichLink
+  alias Acervo.Library.CaptureSnapshot
   alias Acervo.Library.ExtractContent
   alias Acervo.Library.Link
+  alias Acervo.Library.LinkImage
+  alias Acervo.Library.Screenshots
   alias Acervo.Search.EmbedLink
 
   @app :acervo
+  # Oban's lowest: links saved meanwhile get their snapshots first.
+  @backfill_priority 9
 
   @doc "Applies all pending migrations, raising if the repository cannot start or a migration fails."
   @spec migrate() :: :ok
@@ -131,6 +136,67 @@ defmodule Acervo.Release do
     repo.all(
       from l in Link,
         where: l.status == :ready and (is_nil(l.enrichment_status) or l.enrichment_status == :failed),
+        order_by: [desc: l.inserted_at],
+        select: l.id
+    )
+  end
+
+  @doc """
+  Enqueues `Acervo.Library.CaptureSnapshot` for every ready generic link
+  with no card image (no preview, screenshot or snapshot), newest first, at
+  the lowest priority, and returns how many were enqueued. The running app's
+  `snapshot` queue takes them one at a time. A link never enriched is
+  enriched once its snapshot ends; an enriched one keeps its enrichment.
+
+  Does nothing and returns 0 when the screenshot service is off
+  (`ACERVO_SHOTS_URL` and `ACERVO_SHOTS_TOKEN`). Starts only the repository
+  and an Oban instance that runs no queues:
+
+      bin/acervo eval 'Acervo.Release.backfill_snapshots()'
+  """
+  @spec backfill_snapshots() :: non_neg_integer()
+  def backfill_snapshots do
+    load_app()
+    count = if Screenshots.enabled?(), do: enqueue_snapshots(), else: 0
+    IO.puts("Enqueued snapshots for #{count} links.")
+    count
+  end
+
+  defp enqueue_snapshots do
+    {:ok, _started} = Application.ensure_all_started(:oban)
+    [repo] = repos()
+
+    {:ok, count, _apps} =
+      Ecto.Migrator.with_repo(repo, fn repo ->
+        name = Acervo.Release.Oban
+        config = Keyword.merge(Application.fetch_env!(@app, Oban), name: name, queues: false, plugins: false, peer: false)
+        {:ok, oban} = Oban.start_link(config)
+
+        try do
+          repo
+          |> missing_snapshots()
+          |> Enum.count(fn id ->
+            job = CaptureSnapshot.new(%{"link_id" => id, "replace" => false}, priority: @backfill_priority)
+            match?({:ok, %Oban.Job{conflict?: false}}, Oban.insert(name, job))
+          end)
+        after
+          Supervisor.stop(oban)
+        end
+      end)
+
+    count
+  end
+
+  @doc false
+  @spec missing_snapshots(module()) :: [Ecto.UUID.t()]
+  def missing_snapshots(repo) do
+    card_images = from i in LinkImage, where: i.link_id == parent_as(:link).id and i.kind in ^LinkImage.card_kinds()
+
+    repo.all(
+      from l in Link,
+        as: :link,
+        where: l.source == :generic and l.status == :ready,
+        where: not exists(card_images),
         order_by: [desc: l.inserted_at],
         select: l.id
     )

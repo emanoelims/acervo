@@ -3,10 +3,12 @@ defmodule Acervo.ReleaseTest do
   use Oban.Testing, repo: Acervo.Repo
 
   import Acervo.AccountsFixtures
+  import Acervo.CollectionsFixtures, only: [collection_link_image_fixture: 2]
   import Acervo.LibraryFixtures
   import ExUnit.CaptureIO
 
   alias Acervo.AI
+  alias Acervo.Library.CaptureSnapshot
   alias Acervo.Library.Link
   alias Acervo.Release
   alias Acervo.Search.EmbedLink
@@ -65,5 +67,45 @@ defmodule Acervo.ReleaseTest do
     refute_enqueued(worker: EmbedLink, args: %{"link_id" => current.id})
     assert Repo.get!(Link, stale.id).embedding_status == :pending
     assert Repo.get!(Link, current.id).embedding_status == :ready
+  end
+
+  describe "backfill_snapshots/0" do
+    test "does nothing while the screenshot service is off", %{scope: scope} do
+      link(scope, [])
+
+      {count, output} = with_io(fn -> Release.backfill_snapshots() end)
+
+      assert count == 0
+      assert output =~ "Enqueued snapshots for 0 links."
+      refute_enqueued(worker: CaptureSnapshot)
+    end
+
+    test "enqueues ready generic links with no card image at the lowest priority", %{scope: scope} do
+      enable_snapshots()
+      bare = link(scope, [])
+      failed_capture = link(scope, capture_error: "http_403")
+      with_preview = link(scope, [])
+      collection_link_image_fixture(with_preview, %{kind: :preview})
+      with_snapshot = link(scope, [])
+      collection_link_image_fixture(with_snapshot, %{kind: :snapshot})
+      only_content = link(scope, [])
+      collection_link_image_fixture(only_content, %{kind: :content})
+      capturing = link(scope, status: :pending)
+      video = link(scope, source: :youtube)
+
+      assert Enum.sort(Release.missing_snapshots(Repo)) == Enum.sort([bare.id, failed_capture.id, only_content.id])
+      refute Enum.any?([with_preview, with_snapshot, capturing, video], &(&1.id in Release.missing_snapshots(Repo)))
+
+      {count, output} = with_io(fn -> Release.backfill_snapshots() end)
+
+      assert count == 3
+      assert output =~ "Enqueued snapshots for 3 links."
+
+      for link <- [bare, failed_capture, only_content] do
+        assert_enqueued(worker: CaptureSnapshot, args: %{"link_id" => link.id, "replace" => false}, priority: 9)
+      end
+
+      assert {0, _output} = with_io(fn -> Release.backfill_snapshots() end)
+    end
   end
 end
