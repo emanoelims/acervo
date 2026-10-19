@@ -330,7 +330,7 @@ defmodule AcervoWeb.LinkComponents do
       </ul>
 
       <div class="link-notes">
-        <p :if={@kind != :text and is_binary(@link.description)} class="ai">{@link.description}</p>
+        <p :if={@kind != :text and is_binary(@link.description)} class="ai-desc">{@link.description}</p>
         <div :if={@link.images != []} class="edit edit-image">
           <.form
             for={@description_form}

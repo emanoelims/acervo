@@ -132,7 +132,7 @@ button.chip.ai:focus-visible, .chip.ai .chip-link:focus-visible { outline: 2px s
 .pick-empty { margin: 0; padding: 8px 10px; color: var(--faint); font-size: 13px; }
 .pick-error { margin: 0; padding: 8px 10px; color: var(--danger); font-size: 13px; }
 .link-notes { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
-.ai { margin: 0 0 12px; color: var(--body); font-size: 15px; line-height: 24px; }
+.ai-desc { margin: 0 0 12px; color: var(--body); font-size: 15px; line-height: 24px; }
 .note .form-field { margin: 0; }
 .note-input { display: block; width: calc(100% + 24px); min-height: 0; margin: 0 -12px; padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; color: var(--body); font: inherit; font-size: 15px; line-height: 24px; resize: none; field-sizing: content; transition: background-color .2s; }
 .note-input::placeholder { color: var(--faint); }
