@@ -80,7 +80,7 @@ defmodule Acervo.Library.BookmarkImportsTest do
       assert %{enrich_usd: 0.02, enrich_seconds: 20, ai_concurrency: 2} = BookmarkImports.rates(scope)
     end
 
-    test "rates average the scope's recent successful enrichments", %{scope: scope} do
+    test "rates take the 75th percentile cost and average duration of recent successful enrichments", %{scope: scope} do
       for {cost, ms} <- [{"0.01", 10_000}, {"0.03", 30_000}] do
         Repo.insert!(%Call{
           user_id: scope.user.id,
@@ -102,7 +102,8 @@ defmodule Acervo.Library.BookmarkImportsTest do
       })
 
       rates = BookmarkImports.rates(scope)
-      assert_in_delta rates.enrich_usd, 0.02, 1.0e-9
+      # percentile_cont(0.75) of 0.01 and 0.03 interpolates to 0.025.
+      assert_in_delta rates.enrich_usd, 0.025, 1.0e-9
       assert_in_delta rates.enrich_seconds, 20.0, 1.0e-9
       # Another user's calls don't count.
       assert BookmarkImports.rates(user_scope_fixture()).enrich_usd == 0.02

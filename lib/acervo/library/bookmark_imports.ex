@@ -95,8 +95,10 @@ defmodule Acervo.Library.BookmarkImports do
   end
 
   @doc """
-  What enriching one link costs this user: the average cost and duration of
-  their successful enrichments over the last #{@rate_days} days, falling back
+  What enriching one link costs this user: the 75th percentile cost (pages
+  vary a lot, and an estimate that runs low surprises more than one that runs
+  high) and the average duration of their successful enrichments over the
+  last #{@rate_days} days, falling back
   to $#{@enrich_usd} and #{@enrich_seconds} s, and the `ai` queue's
   concurrency.
   """
@@ -110,11 +112,11 @@ defmodule Acervo.Library.BookmarkImports do
           where:
             c.user_id == ^user.id and c.operation == "enrich_link" and c.status == :ok and
               c.inserted_at >= ^since and not is_nil(c.cost_usd),
-          select: {avg(c.cost_usd), avg(c.duration_ms)}
+          select: {fragment("percentile_cont(0.75) WITHIN GROUP (ORDER BY ?)", c.cost_usd), avg(c.duration_ms)}
       )
 
     %{
-      enrich_usd: if(cost, do: Decimal.to_float(cost), else: @enrich_usd),
+      enrich_usd: if(cost, do: cost, else: @enrich_usd),
       enrich_seconds: if(duration, do: Decimal.to_float(duration) / 1000, else: @enrich_seconds),
       ai_concurrency: queue_concurrency(:ai)
     }
