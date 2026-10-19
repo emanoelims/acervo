@@ -5,6 +5,10 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-19
+
+Cleaner captures.
+
 ### Fixed
 
 - Pages that redirect with a meta refresh are captured from the page they lead to, instead of the "Redirecting…" stub.
