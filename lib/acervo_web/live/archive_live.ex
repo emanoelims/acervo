@@ -19,6 +19,11 @@ defmodule AcervoWeb.ArchiveLive do
   with `start_async` so the current cards stay until the results arrive. `in`
   scopes it to one collection. Results open under `/search/l/:id`, keeping
   `q` and `in`. The dock's search pill drives it; `/` and ⌘K open the pill.
+
+  `/import` opens a column that imports bookmarks from a browser's export
+  (`AcervoWeb.ImportComponent`), opened from the dock's settings. The
+  import's progress arrives here as `{:import_updated, import}` and is sent
+  on to the column.
   """
   use AcervoWeb, :live_view
 
@@ -31,6 +36,7 @@ defmodule AcervoWeb.ArchiveLive do
   alias Acervo.Library.Embed
   alias Acervo.Library.URL
   alias Acervo.Search
+  alias AcervoWeb.ImportComponent
   alias Ecto.Query.CastError
 
   @max_screenshot_bytes 15_000_000
@@ -131,7 +137,7 @@ defmodule AcervoWeb.ArchiveLive do
   defp filter(action, collection, params) when action in @search_actions,
     do: {:search, search_query(params), collection && collection.id}
 
-  defp filter(action, _collection, _params) when action in [:home, :guide], do: nil
+  defp filter(action, _collection, _params) when action in [:home, :guide, :import], do: nil
 
   defp search_query(%{"q" => q}) when is_binary(q), do: q |> String.trim() |> String.slice(0, 200)
   defp search_query(_params), do: ""
@@ -782,6 +788,12 @@ defmodule AcervoWeb.ArchiveLive do
     end
   end
 
+  # Only the import column shows imports.
+  def handle_info({:import_updated, import}, socket) do
+    if socket.assigns.live_action == :import, do: send_update(ImportComponent, id: "import", import: import)
+    {:noreply, socket}
+  end
+
   def handle_info({:clear_saved, key, ref}, socket) when key in [:note_saved, :description_saved] do
     if socket.assigns[key] == ref, do: {:noreply, assign(socket, key, nil)}, else: {:noreply, socket}
   end
@@ -874,6 +886,9 @@ defmodule AcervoWeb.ArchiveLive do
   defp assign_page_title(%{assigns: %{link: %{} = link}} = socket), do: assign(socket, :page_title, display_title(link))
 
   defp assign_page_title(%{assigns: %{live_action: :guide}} = socket), do: assign(socket, :page_title, gettext("Guide"))
+
+  defp assign_page_title(%{assigns: %{live_action: :import}} = socket),
+    do: assign(socket, :page_title, gettext("Import bookmarks"))
 
   defp assign_page_title(socket) do
     assign(socket, :page_title, list_title(socket.assigns.filter, socket.assigns.collection) || "Acervo")
@@ -1120,6 +1135,10 @@ defmodule AcervoWeb.ArchiveLive do
 
         <.column :if={@live_action == :guide} id="column-guide" title={gettext("Guide")}>
           <.guide />
+        </.column>
+
+        <.column :if={@live_action == :import} id="column-import" title={gettext("Import bookmarks")}>
+          <.live_component module={ImportComponent} id="import" current_scope={@current_scope} />
         </.column>
       </div>
       <.add_pill :if={@add_form} form={@add_form} />

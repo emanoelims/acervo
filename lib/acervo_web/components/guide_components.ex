@@ -31,6 +31,23 @@ defmodule AcervoWeb.GuideComponents do
         </:row>
       </.guide_section>
 
+      <.guide_section id="guide-import" title={gettext("Import bookmarks")}>
+        <:row icon="lucide-bookmark-plus">
+          {gettext("In the dock settings: bring your browser's bookmarks, exported as HTML.")}
+        </:row>
+        <:row icon="lucide-folder">
+          {gettext(
+            "Each folder becomes a collection, goes to the Inbox or is skipped. You choose before importing."
+          )}
+        </:row>
+        <:row icon="lucide-sparkle">
+          {gettext("The estimated AI cost shows first. Links you already have aren't saved twice.")}
+        </:row>
+        <:row icon="lucide-circle-stop">
+          {gettext("It runs in the background, even with the page closed. Stop it anytime.")}
+        </:row>
+      </.guide_section>
+
       <.guide_section id="guide-search" title={gettext("Search")}>
         <:row icon="lucide-search">
           {gettext("Describe what you remember: words, what the image shows, your note.")}

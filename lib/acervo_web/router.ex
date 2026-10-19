@@ -115,6 +115,7 @@ defmodule AcervoWeb.Router do
       live "/search/l/:id", ArchiveLive, :search_link
       live "/search/l/:id/web", ArchiveLive, :search_link_web
       live "/guide", ArchiveLive, :guide
+      live "/import", ArchiveLive, :import
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
