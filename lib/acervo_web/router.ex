@@ -92,6 +92,16 @@ defmodule AcervoWeb.Router do
       live_dashboard "/dashboard", metrics: AcervoWeb.Telemetry
       forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
+
+    # Every component with example data, no user or database needed. The
+    # module lives in `dev/`, compiled only in dev and test.
+    scope "/dev", AcervoWeb do
+      pipe_through :dev_browser
+
+      live_session :styleguide, on_mount: [AcervoWeb.Locale] do
+        live "/styleguide", StyleguideLive
+      end
+    end
   end
 
   ## Authentication routes

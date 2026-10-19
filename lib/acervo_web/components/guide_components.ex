@@ -6,8 +6,8 @@ defmodule AcervoWeb.GuideComponents do
   use Phoenix.Component
   use Gettext, backend: AcervoWeb.Gettext
 
-  import AcervoWeb.ArchiveComponents, only: [mod_key: 1]
   import AcervoWeb.CoreComponents
+  import AcervoWeb.UIComponents, only: [mod_key: 1]
 
   @doc "Renders the guide's sections and its shortcuts table."
   attr :snapshots, :boolean, default: false, doc: "the screenshot service is on"

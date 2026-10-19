@@ -949,9 +949,7 @@ defmodule AcervoWeb.ArchiveLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div id="columns" class="columns" phx-hook=".Shortcuts">
         <.column id="column-root" class="column-root">
-          <header class="column-head">
-            <h1><span class="column-title">Acervo</span></h1>
-          </header>
+          <.column_head title="Acervo" level="h1" />
           <p class="lead" phx-no-format>
             {gettext("Good things I find on the internet.")}
             <.count_link id="lead-all" patch={~p"/all"} count={@total_count}>{links_count(@total_count)}</.count_link> · {collections_count(@collections_count)}<%= if @inbox_count > 0 do %> · <.count_link id="lead-inbox" patch={~p"/inbox"} count={@inbox_count}>{inbox_waiting(@inbox_count)}</.count_link><% end %>.
@@ -980,16 +978,13 @@ defmodule AcervoWeb.ArchiveLive do
               {collection.name}
             </.nav_item>
             <li :if={is_nil(@new_collection_form)}>
-              <button
+              <.icon_button
                 id="new-collection"
-                type="button"
-                class="nav-add"
+                variant="nav"
+                icon="lucide-plus"
+                label={gettext("New collection")}
                 phx-click="new_collection"
-                title={gettext("New collection")}
-                aria-label={gettext("New collection")}
-              >
-                <.icon name="lucide-plus" class="size-4" />
-              </button>
+              />
             </li>
             <li :if={@new_collection_form}>
               <.form
@@ -1143,39 +1138,30 @@ defmodule AcervoWeb.ArchiveLive do
         >
           <:actions>
             <div class="head-acts">
-              <.link
+              <.icon_button
                 :if={reader_toggle?(@link, @reader)}
                 id="web-reader-toggle"
+                variant="head"
+                icon={if @reader_view?, do: "lucide-globe", else: "lucide-book-open"}
+                label={reader_toggle_label(@reader_view?)}
                 patch={reader_toggle_path(assigns, @link)}
-                class="head-button"
-                title={reader_toggle_label(@reader_view?)}
-                aria-label={reader_toggle_label(@reader_view?)}
-              >
-                <.icon
-                  name={if @reader_view?, do: "lucide-globe", else: "lucide-book-open"}
-                  class="size-4"
-                />
-              </.link>
-              <a
+              />
+              <.icon_button
                 id="web-open"
+                variant="head"
+                icon="lucide-external-link"
+                label={gettext("Open original")}
                 href={Embed.original_url(@link)}
                 target="_blank"
                 rel="noopener noreferrer"
-                class="head-button"
-                title={gettext("Open original")}
-                aria-label={gettext("Open original")}
-              >
-                <.icon name="lucide-external-link" class="size-4" />
-              </a>
-              <.link
+              />
+              <.icon_button
                 id="web-close"
+                variant="head"
+                icon="lucide-x"
+                label={gettext("Close")}
                 patch={link_path(@filter, @collection, @link)}
-                class="head-button"
-                title={gettext("Close")}
-                aria-label={gettext("Close")}
-              >
-                <.icon name="lucide-x" class="size-4" />
-              </.link>
+              />
             </div>
           </:actions>
           <.web_view

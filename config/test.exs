@@ -59,6 +59,9 @@ config :acervo, :static_hosts, %{
   "www.instagram.com" => [{93, 184, 216, 44}]
 }
 
+# Route the development pages too, so the styleguide is tested.
+config :acervo, dev_routes: true
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

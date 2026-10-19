@@ -73,4 +73,15 @@ defmodule AcervoWeb.CoreComponentsTest do
     assert LazyHTML.attribute(summary, "title") == ["Abrir"]
     assert LazyHTML.attribute(summary, "aria-label") == ["Abrir"]
   end
+
+  test "dropdown_item is a link with a destination and a button without one" do
+    html = render_component(&CoreComponents.dropdown_item/1, icon: "lucide-keyboard", label: "Guide", navigate: "/guide")
+    doc = LazyHTML.from_fragment(html)
+    assert doc |> LazyHTML.query("a.dropdown-item[role=menuitem]") |> LazyHTML.attribute("href") == ["/guide"]
+
+    html = render_component(&CoreComponents.dropdown_item/1, icon: "lucide-trash-2", label: "Delete", danger: true)
+    doc = LazyHTML.from_fragment(html)
+    button = LazyHTML.query(doc, "button.dropdown-item.dropdown-item-danger[type=button][role=menuitem]")
+    assert button |> LazyHTML.query(".dropdown-item-label") |> LazyHTML.text() == "Delete"
+  end
 end

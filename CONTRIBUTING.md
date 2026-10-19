@@ -121,6 +121,15 @@ Follow `AGENTS.md`, the formatter configured in `.formatter.exs`, and official
 conventions: `CamelCase` modules, `snake_case` functions and variables, predicates
 ending in `?`, and functions ending in `!` for raising variants where applicable.
 Use Phoenix contexts for business logic and keep it separate from the web layer.
+
+Build UI from function components: generator foundations in
+`AcervoWeb.CoreComponents`, Acervo's primitives (buttons, chips, columns,
+pills) in `AcervoWeb.UIComponents`, and domain pieces in `ArchiveComponents`
+and `LinkComponents`. Keep presentation logic in plain modules such as
+`AcervoWeb.LinkPresenter` and `AcervoWeb.Format`, with unit tests. Use a
+LiveComponent only when a piece owns both state and events. In development,
+`/dev/styleguide` renders every component; add new ones there. Its code lives
+in `dev/`, which production never compiles.
 CI requires formatting (Styler and the HEEx formatter), compilation without
 warnings, strict Credo analysis, a locked and unused-free dependency lockfile,
 dependency auditing, asset builds, and passing tests.

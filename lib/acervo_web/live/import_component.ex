@@ -15,6 +15,7 @@ defmodule AcervoWeb.ImportComponent do
   alias Acervo.Collections.Collection
   alias Acervo.Library.BookmarkImports
   alias Acervo.Library.Bookmarks
+  alias AcervoWeb.Format
 
   @max_bytes 10_000_000
   @choices [:collection, :inbox, :skip]
@@ -241,30 +242,17 @@ defmodule AcervoWeb.ImportComponent do
       </ul>
       <.form for={%{}} id="import-form" phx-change="validate" phx-target={@target}>
         <.live_file_input upload={@upload} class="sr-only" tabindex="-1" />
-        <label
+        <.drop_zone
           id="import-drop"
-          for={@upload.ref}
-          class={["shot-drop import-drop", @upload.entries != [] && "is-busy"]}
-          phx-drop-target={@upload.ref}
+          upload={@upload}
+          icon="lucide-file-up"
+          hint={gettext("Drop or choose the .html file")}
+          error_id="import-upload-error"
+          error_message={&upload_error/1}
+          class="import-drop"
         >
-          <.icon name="lucide-file-up" class="size-[18px]" />
-          <span class="shot-hint">{gettext("Drop or choose the .html file")}</span>
-          <span :for={entry <- @upload.entries} class="shot-bar" aria-hidden="true">
-            <i style={"width: #{entry.progress}%"}></i>
-          </span>
-          <span
-            :for={
-              error <-
-                upload_errors(@upload) ++ Enum.flat_map(@upload.entries, &upload_errors(@upload, &1))
-            }
-            id="import-upload-error"
-            class="shot-error"
-            role="alert"
-          >
-            {upload_error(error)}
-          </span>
           <span :if={@error} id="import-error" class="shot-error" role="alert">{upload_error(@error)}</span>
-        </label>
+        </.drop_zone>
       </.form>
     </div>
     """
@@ -286,23 +274,23 @@ defmodule AcervoWeb.ImportComponent do
       <dl class="import-stats">
         <div>
           <dt>{gettext("links")}</dt>
-          <dd id="import-found">{number(@found)}</dd>
+          <dd id="import-found">{Format.number(@found)}</dd>
         </div>
         <div>
           <dt>{gettext("already saved")}</dt>
-          <dd id="import-existing">{number(@existing)}</dd>
+          <dd id="import-existing">{Format.number(@existing)}</dd>
         </div>
         <div>
           <dt>{gettext("new")}</dt>
-          <dd id="import-new">{number(@new)}</dd>
+          <dd id="import-new">{Format.number(@new)}</dd>
         </div>
       </dl>
       <p :if={@parsed.truncated > 0} id="import-truncated" class="import-note">
         <.icon name="lucide-info" class="size-4 flex-none" />
         <span>
           {gettext("Only the first %{max} links are imported; %{count} more were left out.",
-            max: number(Bookmarks.max_links()),
-            count: number(@parsed.truncated)
+            max: Format.number(Bookmarks.max_links()),
+            count: Format.number(@parsed.truncated)
           )}
         </span>
       </p>
@@ -310,7 +298,7 @@ defmodule AcervoWeb.ImportComponent do
         <li :for={row <- @rows} id={"import-folder-#{row.id}"} class="import-folder">
           <.icon name={row.icon} class="import-folder-icon size-4" />
           <span class="import-folder-name" title={row.full}>{row.label}</span>
-          <span class="import-folder-count">{number(row.count)}</span>
+          <span class="import-folder-count">{Format.number(row.count)}</span>
           <div class="import-choice" role="group" aria-label={row.full}>
             <button
               :for={{choice, icon, label} <- choice_options()}
@@ -337,20 +325,17 @@ defmodule AcervoWeb.ImportComponent do
         title={gettext("Claude describes each new link. Estimated from your recent links.")}
       >
         <.icon name="lucide-sparkle" class="size-4 flex-none" />
-        <span>{cost(@estimate.cost_usd)} · {duration(@estimate.seconds)}</span>
+        <span>{Format.usd(@estimate.cost_usd)} · {Format.duration(@estimate.seconds)}</span>
       </p>
       <div class="import-actions">
-        <button
+        <.icon_button
           id="import-reset"
-          type="button"
-          class="head-button"
+          variant="head"
+          icon="lucide-rotate-ccw"
+          label={gettext("Choose another file")}
           phx-click="reset"
           phx-target={@target}
-          title={gettext("Choose another file")}
-          aria-label={gettext("Choose another file")}
-        >
-          <.icon name="lucide-rotate-ccw" class="size-4" />
-        </button>
+        />
         <.button
           id="import-start"
           variant="primary"
@@ -397,7 +382,7 @@ defmodule AcervoWeb.ImportComponent do
         <i style={"width: #{percent(@import)}%"}></i>
       </div>
       <p class="import-counts">
-        <span id="import-processed">{number(@import.processed)} / {number(@import.total)}</span>
+        <span id="import-processed">{Format.number(@import.processed)} / {Format.number(@import.total)}</span>
         · <span id="import-created">{new_count(@import.created)}</span>
         <span :if={@import.existing > 0}>
           · {already_count(@import.existing)}
@@ -433,9 +418,10 @@ defmodule AcervoWeb.ImportComponent do
   defp status_text(:cancelled), do: gettext("Import stopped")
   defp status_text(:failed), do: gettext("Import failed")
 
-  defp new_count(count), do: ngettext("%{count} new", "%{count} new", count, count: number(count))
+  defp new_count(count), do: ngettext("%{count} new", "%{count} new", count, count: Format.number(count))
 
-  defp already_count(count), do: ngettext("%{count} already saved", "%{count} already saved", count, count: number(count))
+  defp already_count(count),
+    do: ngettext("%{count} already saved", "%{count} already saved", count, count: Format.number(count))
 
   defp upload_error(:not_accepted), do: gettext("Choose the .html file your browser exported.")
   defp upload_error(:too_large), do: gettext("That file is over 10 MB.")
@@ -443,25 +429,4 @@ defmodule AcervoWeb.ImportComponent do
   defp upload_error(:not_bookmarks), do: gettext("That isn't a bookmarks file.")
   defp upload_error(:no_links), do: gettext("No links found in that file.")
   defp upload_error(_error), do: gettext("That file couldn't be read.")
-
-  # Thousands separated as the locale writes them.
-  defp number(count) when is_integer(count) do
-    separator = if Gettext.get_locale(AcervoWeb.Gettext) == "pt_BR", do: ".", else: ","
-
-    count
-    |> Integer.to_string()
-    |> String.reverse()
-    |> String.replace(~r/(\d{3})(?=\d)/, "\\1#{separator}")
-    |> String.reverse()
-  end
-
-  defp cost(usd) do
-    amount = :erlang.float_to_binary(max(usd, 0.0) * 1.0, decimals: 2)
-    amount = if Gettext.get_locale(AcervoWeb.Gettext) == "pt_BR", do: String.replace(amount, ".", ","), else: amount
-    gettext("≈ $%{amount}", amount: amount)
-  end
-
-  defp duration(seconds) when seconds < 90, do: gettext("~1 min")
-  defp duration(seconds) when seconds < 5400, do: gettext("~%{count} min", count: round(seconds / 60))
-  defp duration(seconds), do: gettext("~%{count} h", count: round(seconds / 3600))
 end
