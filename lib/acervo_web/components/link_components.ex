@@ -21,8 +21,9 @@ defmodule AcervoWeb.LinkComponents do
 
   @doc """
   Renders a link card that patches to the link. The kind follows the link:
-  a skeleton while capturing, a 16:9 thumbnail for YouTube, the image over a
-  blurred copy of itself, or text.
+  a skeleton while capturing, a thumbnail for YouTube, the image over a
+  blurred copy of itself, or text. Images, thumbnails and the skeleton share
+  one 16:10 shape.
   """
   attr :id, :string, required: true
   attr :link, :map, required: true
