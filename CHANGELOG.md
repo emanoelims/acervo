@@ -5,6 +5,14 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-10-19
+
+Small fix.
+
+### Fixed
+
+- AI suggestion chips line up with the other chips.
+
 ## [0.13.0] - 2026-10-19
 
 Every link gets a picture.
