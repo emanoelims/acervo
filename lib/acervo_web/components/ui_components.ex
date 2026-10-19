@@ -22,7 +22,9 @@ defmodule AcervoWeb.UIComponents do
   Renders one Finder-style column. Titled columns get a `column_head/1` and
   the ↑ pill that appears once the column scrolls, returning it to the top. A
   changed `key` (the item the column shows) scrolls the column back to the
-  top. Columns sit in a `<div class="columns">` row.
+  top. Columns sit in a `<div class="columns">` row; a new column scrolls the
+  row to its end, bringing it into view, unless `reveal={false}`. `narrow`
+  columns are 320px wide, like the root column.
 
   ## Examples
 
@@ -35,13 +37,15 @@ defmodule AcervoWeb.UIComponents do
   attr :title, :string, default: nil
   attr :class, :any, default: nil
   attr :key, :string, default: nil, doc: "the item the column shows; a new one scrolls it to the top"
+  attr :narrow, :boolean, default: false, doc: "320px wide, like the root column"
+  attr :reveal, :boolean, default: true, doc: "scrolls the row to its end when the column appears"
   slot :heading, doc: "replaces the title in the heading, as an inline rename form does"
   slot :actions, doc: "buttons at the heading's end"
   slot :inner_block, required: true
 
   def column(assigns) do
     ~H"""
-    <section id={@id} class={["column", @class]}>
+    <section id={@id} class={["column", @narrow && "column-narrow", @class]}>
       <button
         :if={@title}
         id={"#{@id}-up"}
@@ -52,7 +56,13 @@ defmodule AcervoWeb.UIComponents do
       >
         <.icon name="lucide-arrow-up" class="size-3.5" /><span>{@title}</span>
       </button>
-      <div class="column-scroll" id={"#{@id}-scroll"} data-key={@key} phx-hook=".ColumnScroll">
+      <div
+        class="column-scroll"
+        id={"#{@id}-scroll"}
+        data-key={@key}
+        data-reveal={@reveal}
+        phx-hook=".ColumnScroll"
+      >
         <.column_head :if={@title} title={@title}>
           <:heading :if={@heading != []}>{render_slot(@heading)}</:heading>
           <:actions>{render_slot(@actions)}</:actions>
@@ -68,7 +78,7 @@ defmodule AcervoWeb.UIComponents do
           this.onPill = () => this.el.scrollTo({top: 0, behavior: 'smooth'})
           this.el.addEventListener('scroll', this.onScroll, {passive: true})
           this.pill?.addEventListener('click', this.onPill)
-          this.el.closest('.columns')?.scrollTo({left: 1e6, behavior: 'smooth'})
+          if ('reveal' in this.el.dataset) this.el.closest('.columns')?.scrollTo({left: 1e6, behavior: 'smooth'})
           this.key = this.el.dataset.key
         },
         updated() {

@@ -47,6 +47,21 @@ defmodule AcervoWeb.UIComponentsTest do
       assert count(html, ".column-head > h2") == 0
     end
 
+    test "a column reveals itself unless told not to, and can be narrow" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <UIComponents.column id="a">A</UIComponents.column>
+        <UIComponents.column id="b" narrow reveal={false}>B</UIComponents.column>
+        """)
+
+      assert count(html, "#a-scroll[data-reveal]") == 1
+      assert count(html, "#b-scroll[data-reveal]") == 0
+      assert count(html, "section#b.column.column-narrow") == 1
+      assert count(html, "section#a.column-narrow") == 0
+    end
+
     test "an untitled column has no header" do
       assigns = %{}
       html = rendered_to_string(~H|<UIComponents.column id="c">Body</UIComponents.column>|)
