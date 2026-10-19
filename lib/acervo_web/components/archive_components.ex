@@ -41,7 +41,6 @@ defmodule AcervoWeb.ArchiveComponents do
         <header :if={@title} class="column-head">
           <h2 :if={@heading == []}>
             <span class="column-title">{@title}</span>
-            <.icon name="lucide-chevron-right" class="chev" />
           </h2>
           {render_slot(@heading)}
           {render_slot(@actions)}

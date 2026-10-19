@@ -5,6 +5,15 @@ following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Smaller titles and body text, one header style for every column, and a tighter navigation list.
+- The web and reader view takes the rest of the screen.
+
+### Fixed
+
+- At phone width, the web view column no longer overflows the screen.
+
 ## [0.12.0] - 2026-10-18
 
 Bring your browser bookmarks in.
